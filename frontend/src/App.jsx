@@ -31,7 +31,7 @@ export default function App() {
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
-  const [strategy, setStrategy] = useState('ema_crossover')
+  const [strategy, setStrategy] = useState('gold_atr_trend')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -115,12 +115,12 @@ export default function App() {
             JM <span>Forex</span>
           </h1>
           <div className="mode-chip">
-            {status?.running ? 'Automation live' : 'Engine paused'} · paper
+            {status?.running ? 'Gold desk live' : 'Engine paused'} · XAUUSD paper
           </div>
         </div>
         <p>
-          Automated FX execution desk — strategy signals, hard risk gates, and
-          paper fills streaming in real time.
+          Gold vs USD automation — ATR trend-pullback signals, hard risk gates,
+          and paper fills built for XAUUSD volatility.
         </p>
         <div className="controls">
           <select
@@ -128,13 +128,14 @@ export default function App() {
             onChange={(e) => setStrategy(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length ? strategies : ['ema_crossover', 'rsi_mean_reversion']).map(
-              (name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ),
-            )}
+            {(strategies.length
+              ? strategies
+              : ['gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
+            ).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
           </select>
           <button
             className="btn-primary"
@@ -284,8 +285,9 @@ export default function App() {
       </div>
 
       <p className="footer-note">
-        Paper mode only. JM Forex automation never places live broker orders from
-        this build — connect a real broker adapter when you are ready to go live.
+        Recommended gold setup: <strong>gold_atr_trend</strong> · risk 0.5%/trade ·
+        1 position max · ATR stops (1.8× / 2.7×) · optional London/NY session filter
+        for live. Paper mode only — no live broker orders in this build.
       </p>
     </div>
   )

@@ -18,7 +18,11 @@ from app.models.domain import (
 class PaperBroker:
     """Simulated forex broker with instant market fills."""
 
-    CONTRACT_SIZE = 100_000  # standard lot
+    # Contract size per 1.0 lot
+    CONTRACT_SIZES = {
+        "XAUUSD": 100,  # 100 oz — $1 move ≈ $100 / lot
+    }
+    DEFAULT_CONTRACT_SIZE = 100_000  # FX standard lot
 
     def __init__(self, initial_balance: float = 10_000.0, currency: str = "USD") -> None:
         self.balance = initial_balance
@@ -124,7 +128,10 @@ class PaperBroker:
         open_positions = [p for p in self.positions if p.status == PositionStatus.OPEN]
         unrealized = sum(p.unrealized_pnl for p in open_positions)
         equity = self.balance + unrealized
-        margin_used = sum(p.lots * 1000 for p in open_positions)  # simplified
+        # Simplified margin: gold ~$500/lot notionally scaled; FX ~$1000/lot
+        margin_used = sum(
+            p.lots * (500 if p.symbol.upper() == "XAUUSD" else 1000) for p in open_positions
+        )
         daily_pnl = unrealized + sum(
             p.realized_pnl for p in self.positions if p.status == PositionStatus.CLOSED
         )
@@ -153,7 +160,10 @@ class PaperBroker:
         mark = tick.bid if position.side == Side.BUY else tick.ask
         position.unrealized_pnl = self._calc_pnl(position, mark)
 
+    def contract_size(self, symbol: str) -> float:
+        return self.CONTRACT_SIZES.get(symbol.upper(), self.DEFAULT_CONTRACT_SIZE)
+
     def _calc_pnl(self, position: Position, price: float) -> float:
         direction = 1 if position.side == Side.BUY else -1
         move = (price - position.entry_price) * direction
-        return round(move * position.lots * self.CONTRACT_SIZE, 2)
+        return round(move * position.lots * self.contract_size(position.symbol), 2)

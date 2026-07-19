@@ -76,9 +76,11 @@ class RiskManager:
             return RiskDecision(False, "Invalid stop loss distance")
 
         risk_amount = balance * (self.settings.max_risk_per_trade_pct / 100.0)
-        # Approximate: 1 standard lot = $10 per pip for majors (simplified)
+        # $ value of 1 pip on 1.0 lot
+        # FX majors ≈ $10/pip; XAUUSD pip=0.1 → $10/pip on 100oz lot
         pip_value_per_lot = 10.0
         max_lots = risk_amount / (stop_pips * pip_value_per_lot)
+        # Gold: allow micro sizing down to 0.01
         max_lots = max(0.01, round(min(max_lots, request.lots), 2))
 
         if max_lots < 0.01:

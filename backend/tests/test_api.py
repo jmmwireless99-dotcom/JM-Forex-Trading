@@ -27,11 +27,16 @@ async def test_health(client):
 @pytest.mark.asyncio
 async def test_strategies_and_status(client):
     res = await client.get("/api/strategies")
-    assert "ema_crossover" in res.json()["strategies"]
+    names = res.json()["strategies"]
+    assert "gold_atr_trend" in names
+    assert "ema_crossover" in names
 
     res = await client.get("/api/status")
     assert res.status_code == 200
-    assert res.json()["mode"] == "paper"
+    body = res.json()
+    assert body["mode"] == "paper"
+    assert body["active_strategy"] == "gold_atr_trend"
+    assert body["symbols"] == ["XAUUSD"]
 
 
 @pytest.mark.asyncio

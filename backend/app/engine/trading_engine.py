@@ -31,7 +31,7 @@ class TradingEngine:
         self.broker = PaperBroker(settings.initial_balance, settings.base_currency)
         self.risk = RiskManager(settings)
         self.market = MarketDataSimulator(settings.symbols)
-        self.strategy: Strategy = create_strategy("ema_crossover")
+        self.strategy: Strategy = create_strategy(settings.default_strategy)
         self.running = False
         self.mode = "paper"
         self.ticks_processed = 0
@@ -164,9 +164,21 @@ class TradingEngine:
             lots=0.10,
             strategy=signal.strategy,
             comment=signal.reason,
-            stop_loss=None,
-            take_profit=None,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
         )
+        # If strategy only provided pip distances, convert using risk helper
+        if request.stop_loss is None and signal.stop_loss_pips and tick:
+            pip = self.risk.pip_size(signal.symbol)
+            entry = tick.ask if signal.side.value == "BUY" else tick.bid
+            if signal.side.value == "BUY":
+                request.stop_loss = entry - signal.stop_loss_pips * pip
+                if signal.take_profit_pips:
+                    request.take_profit = entry + signal.take_profit_pips * pip
+            else:
+                request.stop_loss = entry + signal.stop_loss_pips * pip
+                if signal.take_profit_pips:
+                    request.take_profit = entry - signal.take_profit_pips * pip
         await self._execute(request, tick=tick)
 
     async def _execute(self, request: OrderRequest, tick: Tick | None = None) -> Order:

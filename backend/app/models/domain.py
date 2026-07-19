@@ -61,6 +61,8 @@ class Signal(BaseModel):
     side: Side
     strength: float = 1.0
     reason: str = ""
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
     stop_loss_pips: Optional[float] = None
     take_profit_pips: Optional[float] = None
     timestamp: datetime = Field(default_factory=utcnow)

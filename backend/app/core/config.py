@@ -14,16 +14,21 @@ class Settings(BaseSettings):
     initial_balance: float = 10_000.0
     base_currency: str = "USD"
 
-    # Risk defaults
-    max_risk_per_trade_pct: float = 1.0
-    max_open_positions: int = 5
-    max_daily_loss_pct: float = 3.0
-    default_stop_loss_pips: float = 20.0
-    default_take_profit_pips: float = 40.0
+    # Gold desk risk defaults — tighter than multi-pair FX
+    # Gold moves fast; risk less per trade and only one position at a time.
+    max_risk_per_trade_pct: float = 0.5
+    max_open_positions: int = 1
+    max_daily_loss_pct: float = 2.0
+    # Fallback stops if a strategy does not supply ATR levels (gold points)
+    default_stop_loss_pips: float = 35.0  # 3.5 USD when pip=0.1
+    default_take_profit_pips: float = 70.0
 
-    # Market simulation
+    # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
-    default_symbols: str = "EURUSD,GBPUSD,USDJPY,XAUUSD"
+    default_symbols: str = "XAUUSD"
+    default_strategy: str = "gold_atr_trend"
+    # Live gold: set JM_SESSION_FILTER=true (London/NY 07–20 UTC)
+    session_filter: bool = False
 
     @property
     def symbols(self) -> list[str]:

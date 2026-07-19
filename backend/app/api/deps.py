@@ -14,5 +14,6 @@ def get_engine() -> TradingEngine:
 
 def reset_engine(settings: Settings | None = None) -> TradingEngine:
     global _engine
+    get_settings.cache_clear()
     _engine = TradingEngine(settings or get_settings())
     return _engine

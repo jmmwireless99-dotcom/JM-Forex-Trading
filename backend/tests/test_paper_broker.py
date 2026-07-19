@@ -32,3 +32,21 @@ def test_stop_loss_triggers():
     assert len(closed) == 1
     assert closed[0].close_reason == "stop_loss"
     assert len(broker.open_positions()) == 0
+
+
+def test_gold_contract_pnl():
+    """1.0 lot XAUUSD: $1 mid-move on 100oz ≈ $100 (entry=ask, mark=bid)."""
+    broker = PaperBroker()
+    broker.update_tick(Tick(symbol="XAUUSD", bid=2350.0, ask=2350.0, mid=2350.0))
+    broker.place_order(
+        OrderRequest(
+            symbol="XAUUSD",
+            side=Side.BUY,
+            lots=1.0,
+            stop_loss=2340.0,
+            take_profit=2370.0,
+        )
+    )
+    broker.update_tick(Tick(symbol="XAUUSD", bid=2351.0, ask=2351.0, mid=2351.0))
+    pos = broker.open_positions()[0]
+    assert abs(pos.unrealized_pnl - 100.0) < 0.01
