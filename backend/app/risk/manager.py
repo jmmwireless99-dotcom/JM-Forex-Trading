@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.core.config import Settings
+from app.models.domain import OrderRequest, Position, PositionStatus, Side, Tick
+
+
+@dataclass
+class RiskDecision:
+    approved: bool
+    reason: str = ""
+    adjusted_lots: float | None = None
+
+
+class RiskManager:
+    """Hard risk gates before any order reaches the broker."""
+
+    PIP_SIZES = {
+        "USDJPY": 0.01,
+        "XAUUSD": 0.1,
+    }
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._daily_realized_pnl = 0.0
+        self._starting_balance = settings.initial_balance
+
+    def reset_daily(self, balance: float) -> None:
+        self._daily_realized_pnl = 0.0
+        self._starting_balance = balance
+
+    def record_realized_pnl(self, pnl: float) -> None:
+        self._daily_realized_pnl += pnl
+
+    def pip_size(self, symbol: str) -> float:
+        return self.PIP_SIZES.get(symbol.upper(), 0.0001)
+
+    def evaluate(
+        self,
+        request: OrderRequest,
+        *,
+        balance: float,
+        open_positions: list[Position],
+        tick: Tick | None,
+    ) -> RiskDecision:
+        opens = [p for p in open_positions if p.status == PositionStatus.OPEN]
+
+        if request.lots <= 0:
+            return RiskDecision(False, "Lot size must be positive")
+
+        if len(opens) >= self.settings.max_open_positions:
+            return RiskDecision(
+                False,
+                f"Max open positions reached ({self.settings.max_open_positions})",
+            )
+
+        same_symbol = [p for p in opens if p.symbol == request.symbol]
+        if same_symbol:
+            return RiskDecision(False, f"Already have an open position on {request.symbol}")
+
+        max_daily_loss = self._starting_balance * (self.settings.max_daily_loss_pct / 100.0)
+        if self._daily_realized_pnl <= -max_daily_loss:
+            return RiskDecision(
+                False,
+                f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
+            )
+
+        # Position sizing from risk % and stop distance
+        stop_pips = self.settings.default_stop_loss_pips
+        if request.stop_loss and tick:
+            entry = tick.ask if request.side == Side.BUY else tick.bid
+            stop_pips = abs(entry - request.stop_loss) / self.pip_size(request.symbol)
+
+        if stop_pips <= 0:
+            return RiskDecision(False, "Invalid stop loss distance")
+
+        risk_amount = balance * (self.settings.max_risk_per_trade_pct / 100.0)
+        # Approximate: 1 standard lot = $10 per pip for majors (simplified)
+        pip_value_per_lot = 10.0
+        max_lots = risk_amount / (stop_pips * pip_value_per_lot)
+        max_lots = max(0.01, round(min(max_lots, request.lots), 2))
+
+        if max_lots < 0.01:
+            return RiskDecision(False, "Calculated lot size below minimum 0.01")
+
+        return RiskDecision(True, "Approved", adjusted_lots=max_lots)
+
+    def apply_default_stops(
+        self, request: OrderRequest, tick: Tick
+    ) -> tuple[float | None, float | None]:
+        pip = self.pip_size(request.symbol)
+        entry = tick.ask if request.side == Side.BUY else tick.bid
+        sl_pips = self.settings.default_stop_loss_pips
+        tp_pips = self.settings.default_take_profit_pips
+
+        if request.side == Side.BUY:
+            sl = request.stop_loss or (entry - sl_pips * pip)
+            tp = request.take_profit or (entry + tp_pips * pip)
+        else:
+            sl = request.stop_loss or (entry + sl_pips * pip)
+            tp = request.take_profit or (entry - tp_pips * pip)
+        return sl, tp
