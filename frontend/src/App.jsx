@@ -26,12 +26,13 @@ function pnlClass(n) {
 
 export default function App() {
   const [status, setStatus] = useState(null)
+  const [desk, setDesk] = useState(null)
   const [account, setAccount] = useState(emptyAccount)
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
-  const [strategy, setStrategy] = useState('gold_atr_trend')
+  const [strategy, setStrategy] = useState('gold_confluence')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -39,13 +40,14 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const [st, acc, pos, sig, tk, strat] = await Promise.all([
+        const [st, acc, pos, sig, tk, strat, deskInfo] = await Promise.all([
           api.status(),
           api.account(),
           api.positions(),
           api.signals(),
           api.ticks(),
           api.strategies(),
+          api.desk(),
         ])
         if (!alive) return
         setStatus(st)
@@ -53,6 +55,7 @@ export default function App() {
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
         setStrategies(strat.strategies || [])
+        setDesk(deskInfo)
         if (st.active_strategy) setStrategy(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
@@ -78,9 +81,14 @@ export default function App() {
       }
     })
 
+    const deskTimer = setInterval(() => {
+      api.desk().then((d) => alive && setDesk(d)).catch(() => {})
+    }, 15000)
+
     return () => {
       alive = false
       disconnect()
+      clearInterval(deskTimer)
     }
   }, [])
 
@@ -90,6 +98,7 @@ export default function App() {
     try {
       const next = await action()
       if (next) setStatus(next)
+      setDesk(await api.desk())
     } catch (err) {
       setError(err.message || 'Action failed')
     } finally {
@@ -107,6 +116,9 @@ export default function App() {
     })
   }
 
+  const sessionTier = desk?.session?.tier || '—'
+  const newsBlocked = Boolean(desk?.news?.blocked)
+
   return (
     <div className="app">
       <header className="hero">
@@ -119,8 +131,8 @@ export default function App() {
           </div>
         </div>
         <p>
-          Gold vs USD automation — ATR trend-pullback signals, hard risk gates,
-          and paper fills built for XAUUSD volatility.
+          Recommended stack: session + news blackout + EMA/ADX/RSI confluence with
+          ATR risk — built for Gold vs USD.
         </p>
         <div className="controls">
           <select
@@ -130,7 +142,7 @@ export default function App() {
           >
             {(strategies.length
               ? strategies
-              : ['gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
+              : ['gold_confluence', 'gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
             ).map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -172,8 +184,9 @@ export default function App() {
         {error ? <div className="error-banner">{error}</div> : null}
         <div className="status-row">
           <span>Strategy: {status?.active_strategy || '—'}</span>
+          <span>Session: {sessionTier}</span>
+          <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>Ticks: {status?.ticks_processed ?? 0}</span>
-          <span>Uptime: {status?.uptime_seconds ?? 0}s</span>
         </div>
       </header>
 
@@ -200,10 +213,52 @@ export default function App() {
 
       <div className="layout">
         <section className="panel">
-          <h2>Live markets</h2>
+          <h2>Desk filters</h2>
+          {desk ? (
+            <div className="signal-list">
+              <div className="signal">
+                <span className={`side ${sessionTier === 'avoid' ? 'sell' : 'buy'}`}>
+                  {sessionTier}
+                </span>
+                <div>
+                  <div>
+                    <strong>{desk.session.label}</strong>
+                  </div>
+                  <div className="meta">{desk.session.reason}</div>
+                </div>
+              </div>
+              <div className="signal">
+                <span className={`side ${newsBlocked ? 'sell' : 'buy'}`}>
+                  {newsBlocked ? 'NEWS' : 'OK'}
+                </span>
+                <div>
+                  <div>
+                    <strong>{desk.news.event || 'No blackout'}</strong>
+                  </div>
+                  <div className="meta">{desk.news.reason}</div>
+                </div>
+              </div>
+              <div className="meta" style={{ marginTop: '0.75rem' }}>
+                {(desk.indicators || []).map((item) => (
+                  <div key={item}>· {item}</div>
+                ))}
+              </div>
+              {desk.last_block_reason ? (
+                <div className="meta" style={{ marginTop: '0.75rem', color: '#ffb4b4' }}>
+                  Last block: {desk.last_block_reason}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="empty">Loading desk filters…</div>
+          )}
+        </section>
+
+        <section className="panel">
+          <h2>Live gold</h2>
           <div className="tick-grid">
             {Object.values(ticks).length === 0 ? (
-              <div className="empty">Waiting for market ticks…</div>
+              <div className="empty">Waiting for XAUUSD ticks…</div>
             ) : (
               Object.values(ticks).map((t) => (
                 <div className="tick" key={t.symbol}>
@@ -222,7 +277,7 @@ export default function App() {
           <h2>Signals</h2>
           <div className="signal-list">
             {signals.length === 0 ? (
-              <div className="empty">No strategy signals yet.</div>
+              <div className="empty">No confluence signals yet.</div>
             ) : (
               signals.map((s, i) => (
                 <div className="signal" key={`${s.timestamp}-${i}`}>
@@ -285,9 +340,9 @@ export default function App() {
       </div>
 
       <p className="footer-note">
-        Recommended gold setup: <strong>gold_atr_trend</strong> · risk 0.5%/trade ·
-        1 position max · ATR stops (1.8× / 2.7×) · optional London/NY session filter
-        for live. Paper mode only — no live broker orders in this build.
+        Best stack: <strong>gold_confluence</strong> · London/NY session · news
+        blackout (NFP/CPI/FOMC) · EMA21/55 + ADX + RSI + ATR stops · risk 0.5% · 1
+        position. Paper mode only.
       </p>
     </div>
   )

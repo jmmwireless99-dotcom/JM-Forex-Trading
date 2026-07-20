@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     base_currency: str = "USD"
 
     # Gold desk risk defaults — tighter than multi-pair FX
-    # Gold moves fast; risk less per trade and only one position at a time.
     max_risk_per_trade_pct: float = 0.5
     max_open_positions: int = 1
     max_daily_loss_pct: float = 2.0
@@ -26,9 +25,13 @@ class Settings(BaseSettings):
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
-    default_strategy: str = "gold_atr_trend"
-    # Live gold: set JM_SESSION_FILTER=true (London/NY 07–20 UTC)
+    default_strategy: str = "gold_confluence"
+
+    # Live gold: enable session + keep news filter on
+    # JM_SESSION_FILTER=true  JM_NEWS_FILTER=true  JM_PRIME_SESSION_ONLY=false
     session_filter: bool = False
+    news_filter: bool = True
+    prime_session_only: bool = False
 
     @property
     def symbols(self) -> list[str]:

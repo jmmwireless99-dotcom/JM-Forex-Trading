@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from datetime import timezone
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_engine
-from app.models.domain import OrderRequest, Side
+from app.core.config import get_settings
+from app.models.domain import OrderRequest, Side, utcnow
 from app.strategies import STRATEGY_REGISTRY
+from app.strategies.news_calendar import check_news_blackout
+from app.strategies.session import classify_session
 
 router = APIRouter()
 
@@ -34,6 +39,49 @@ async def health() -> dict:
 async def status() -> dict:
     engine = get_engine()
     return engine.status().model_dump(mode="json")
+
+
+@router.get("/desk")
+async def desk() -> dict:
+    """Live session/news gates + recommended gold confluence stack."""
+    settings = get_settings()
+    engine = get_engine()
+    now = utcnow()
+    session = classify_session(now)
+    news = check_news_blackout(now)
+    strategy = engine.strategy
+    block = getattr(strategy, "last_block_reason", None)
+    return {
+        "symbol": "XAUUSD",
+        "recommended_strategy": "gold_confluence",
+        "active_strategy": engine.strategy.name,
+        "session": {
+            "tier": session.tier.value,
+            "label": session.label,
+            "reason": session.reason,
+            "filter_enabled": settings.session_filter,
+            "prime_only": settings.prime_session_only,
+        },
+        "news": {
+            "blocked": news.blocked,
+            "event": news.event,
+            "reason": news.reason,
+            "filter_enabled": settings.news_filter,
+        },
+        "indicators": [
+            "EMA 21 / 55 trend",
+            "ADX 14 trend strength (≥22)",
+            "RSI 14 pullback zone (buy 40–55 / sell 45–60)",
+            "ATR 14 stops (1.8× SL / 2.7× TP)",
+        ],
+        "risk": {
+            "max_risk_per_trade_pct": settings.max_risk_per_trade_pct,
+            "max_open_positions": settings.max_open_positions,
+            "max_daily_loss_pct": settings.max_daily_loss_pct,
+        },
+        "last_block_reason": block,
+        "server_time_utc": now.astimezone(timezone.utc).isoformat(),
+    }
 
 
 @router.post("/engine/start")
