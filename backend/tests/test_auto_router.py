@@ -36,3 +36,16 @@ def test_schedule_table_not_empty():
     router = AutoStrategyRouter()
     table = router.schedule_table()
     assert len(table) >= 4
+    london = next(r for r in table if r["slot"] == "London")
+    assert "RSI" not in london["strategies"]
+
+
+def test_range_stands_aside():
+    router = AutoStrategyRouter(news_filter=False)
+    ts = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)  # Mon London
+    # Flat / choppy series → RANGE regime
+    prices = [2300.0 + ((i % 3) - 1) * 0.05 for i in range(120)]
+    d = router.decide(ts, prices)
+    assert d.allow_trading is False
+    assert d.strategy is None
+    assert d.regime == Regime.RANGE or d.regime == Regime.BLOCKED

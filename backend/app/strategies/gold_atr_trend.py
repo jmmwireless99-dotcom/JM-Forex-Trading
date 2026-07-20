@@ -7,6 +7,10 @@ from app.strategies.base import Strategy
 from app.strategies.ema_crossover import ema
 
 
+# Seconds between signals (tick-based bar counts were ~1s and overtraded).
+SIGNAL_COOLDOWN_SECONDS = 120
+
+
 def atr(values: list[float], period: int = 14) -> float | None:
     """True-range proxy from mid closes (good enough for tick/sim feeds)."""
     if len(values) < period + 1:
@@ -37,11 +41,12 @@ class GoldAtrTrendStrategy(Strategy):
         fast: int = 21,
         slow: int = 55,
         atr_period: int = 14,
-        pullback_atr: float = 0.45,
-        sl_atr: float = 1.8,
-        tp_atr: float = 2.7,
-        min_atr: float = 0.35,
+        pullback_atr: float = 0.55,
+        sl_atr: float = 2.8,
+        tp_atr: float = 4.2,
+        min_atr: float = 0.55,
         session_filter: bool = False,
+        signal_cooldown_seconds: int = SIGNAL_COOLDOWN_SECONDS,
     ) -> None:
         super().__init__(lookback=slow + atr_period + 40)
         self.fast = fast
@@ -52,9 +57,9 @@ class GoldAtrTrendStrategy(Strategy):
         self.tp_atr = tp_atr
         self.min_atr = min_atr
         self.session_filter = session_filter
+        self.signal_cooldown_seconds = signal_cooldown_seconds
         self._armed: dict[str, Side | None] = {}
-        self._last_signal_bar: dict[str, int] = {}
-        self._bars: dict[str, int] = {}
+        self._last_signal_at: dict[str, float] = {}
 
     def _in_session(self, tick: Tick) -> bool:
         if not self.session_filter:
@@ -70,7 +75,6 @@ class GoldAtrTrendStrategy(Strategy):
             return None
 
         series = self.prices(tick.symbol)
-        self._bars[tick.symbol] = self._bars.get(tick.symbol, 0) + 1
         fast_ema = ema(series, self.fast)
         slow_ema = ema(series, self.slow)
         vol = atr(series, self.atr_period)
@@ -79,9 +83,8 @@ class GoldAtrTrendStrategy(Strategy):
         if vol < self.min_atr:
             return None  # chop / too quiet
 
-        # Cool-down so we don't spam the same impulse
-        last_bar = self._last_signal_bar.get(tick.symbol, -999)
-        if self._bars[tick.symbol] - last_bar < 8:
+        last_at = self._last_signal_at.get(tick.symbol, 0.0)
+        if tick.timestamp.timestamp() - last_at < self.signal_cooldown_seconds:
             return None
 
         bullish = fast_ema > slow_ema
@@ -110,7 +113,7 @@ class GoldAtrTrendStrategy(Strategy):
         self, tick: Tick, side: Side, vol: float, fast_ema: float, slow_ema: float
     ) -> Signal:
         self._armed[tick.symbol] = None
-        self._last_signal_bar[tick.symbol] = self._bars[tick.symbol]
+        self._last_signal_at[tick.symbol] = tick.timestamp.timestamp()
         sl_dist = self.sl_atr * vol
         tp_dist = self.tp_atr * vol
         if side == Side.BUY:

@@ -22,8 +22,9 @@ class Settings(BaseSettings):
     max_open_positions: int = 1
     max_daily_loss_pct: float = 2.0
     # Fallback stops if a strategy does not supply ATR levels (gold points)
-    default_stop_loss_pips: float = 35.0  # 3.5 USD when pip=0.1
-    default_take_profit_pips: float = 70.0
+    # pip=0.1 → 55 pips = $5.5 move on XAUUSD
+    default_stop_loss_pips: float = 55.0
+    default_take_profit_pips: float = 90.0
 
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
     # auto_gold = automatic day/session/regime strategy switching
     default_strategy: str = "auto_gold"
     auto_strategy: bool = True
+    # Avoid flip-flopping between strategies / overtrading paper noise
+    strategy_stick_seconds: int = 180
+    entry_cooldown_seconds: int = 90
     # Live chart candles (seconds). 15s feels live on paper; use 60 for M1.
     candle_period_seconds: int = 15
     candle_history: int = 240

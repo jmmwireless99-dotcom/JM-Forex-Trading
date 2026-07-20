@@ -23,8 +23,8 @@ class MarketDataSimulator:
         "EURUSD": (1.0850, 0.00012, 0.00008),
         "GBPUSD": (1.2650, 0.00016, 0.00010),
         "USDJPY": (156.20, 0.012, 0.015),
-        # Gold: wider spread + higher vol so ATR trend logic can fire in paper mode
-        "XAUUSD": (2350.0, 0.40, 0.85),
+        # Gold paper tape: moderate vol so ATR stops are not noise-stopped every few seconds
+        "XAUUSD": (2350.0, 0.30, 0.45),
     }
 
     def __init__(self, symbols: list[str]) -> None:

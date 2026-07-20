@@ -30,11 +30,10 @@ from app.strategies.auto_router import AutoStrategyRouter
 
 Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
+# Auto desk only rotates gold strategies — RSI/EMA stay manual-only.
 _AUTO_POOL = (
     "gold_confluence",
     "gold_atr_trend",
-    "rsi_mean_reversion",
-    "ema_crossover",
 )
 
 
@@ -81,6 +80,8 @@ class TradingEngine:
         self._lock = asyncio.Lock()
         self._mt_platform = detected
         self._last_auto_key: str | None = None
+        self._last_strategy_switch_at: float = 0.0
+        self._entry_cooldown_until: float = 0.0
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -134,12 +135,14 @@ class TradingEngine:
             self.auto_enabled = True
             self.active_name = "gold_confluence"
             self.strategy = self._strategies["gold_confluence"]
+            self._last_strategy_switch_at = time.time()
             return
         self.auto_enabled = False
         if name not in self._strategies:
             self._strategies[name] = create_strategy(name)
         self.active_name = name
         self.strategy = self._strategies[name]
+        self._last_strategy_switch_at = time.time()
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
@@ -181,25 +184,43 @@ class TradingEngine:
             "schedule": self.auto_router.schedule_table(),
         }
 
+    def _arm_entry_cooldown(self) -> None:
+        self._entry_cooldown_until = time.time() + float(
+            self.settings.entry_cooldown_seconds
+        )
+
     async def _apply_auto_router(self, tick: Tick) -> bool:
         """Return True if new entries are allowed this tick."""
         if not self.auto_enabled:
-            return True
+            return time.time() >= self._entry_cooldown_until
         prices = self._strategies["gold_confluence"].prices(tick.symbol)
         decision = self.auto_router.decide(tick.timestamp, prices)
+        now = time.time()
         key = f"{decision.strategy}:{decision.slot}:{decision.regime.value}:{decision.allow_trading}"
+
         if decision.allow_trading and decision.strategy:
-            if decision.strategy != self.active_name:
-                if decision.strategy not in self._strategies:
-                    self._strategies[decision.strategy] = create_strategy(
-                        decision.strategy, managed_by_auto=True
-                    )
-                self.active_name = decision.strategy
-                self.strategy = self._strategies[decision.strategy]
+            stick = float(self.settings.strategy_stick_seconds)
+            want = decision.strategy
+            # Hysteresis: keep current gold strategy briefly to avoid flip-flops.
+            if (
+                want != self.active_name
+                and self.active_name in self._strategies
+                and (now - self._last_strategy_switch_at) < stick
+                and self.active_name in _AUTO_POOL
+            ):
+                want = self.active_name
+            if want != self.active_name:
+                if want not in self._strategies:
+                    self._strategies[want] = create_strategy(want, managed_by_auto=True)
+                self.active_name = want
+                self.strategy = self._strategies[want]
+                self._last_strategy_switch_at = now
             if key != self._last_auto_key:
                 self._last_auto_key = key
                 await self._emit("auto", self.auto_status())
                 await self._emit("engine", self.status().model_dump(mode="json"))
+            if now < self._entry_cooldown_until:
+                return False
             return True
         if key != self._last_auto_key:
             self._last_auto_key = key
@@ -231,6 +252,7 @@ class TradingEngine:
     async def _journal_close(self, position: Position) -> None:
         row = self.journal.record_close(position)
         if row:
+            self._arm_entry_cooldown()
             await self._emit("trade", row.model_dump(mode="json"))
             await self._emit("trades", self._trades_payload())
 
@@ -242,6 +264,7 @@ class TradingEngine:
             return
         if position is not None:
             row = self.journal.record_open_position(position, mode=self.mode)
+            self._arm_entry_cooldown()
         else:
             row = self.journal.record_order(order, mode=self.mode)
         await self._emit("trade", row.model_dump(mode="json"))

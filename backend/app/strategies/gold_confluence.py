@@ -6,6 +6,8 @@ from app.strategies.indicators import adx, atr, ema, rsi
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import SessionTier, classify_session, session_allows_entry
 
+SIGNAL_COOLDOWN_SECONDS = 120
+
 
 class GoldConfluenceStrategy(Strategy):
     """Recommended JM Forex XAUUSD desk strategy.
@@ -29,20 +31,21 @@ class GoldConfluenceStrategy(Strategy):
         atr_period: int = 14,
         adx_period: int = 14,
         rsi_period: int = 14,
-        min_adx: float = 22.0,
+        min_adx: float = 24.0,
         rsi_buy_low: float = 40.0,
         rsi_buy_high: float = 55.0,
         rsi_sell_low: float = 45.0,
         rsi_sell_high: float = 60.0,
-        pullback_atr: float = 0.45,
-        sl_atr: float = 1.8,
-        tp_atr: float = 2.7,
-        min_atr: float = 0.35,
+        pullback_atr: float = 0.55,
+        sl_atr: float = 2.8,
+        tp_atr: float = 4.2,
+        min_atr: float = 0.55,
         session_filter: bool = False,
         prime_only: bool = False,
         news_filter: bool = True,
         news_before_minutes: int = 45,
         news_after_minutes: int = 30,
+        signal_cooldown_seconds: int = SIGNAL_COOLDOWN_SECONDS,
     ) -> None:
         super().__init__(lookback=max(slow, adx_period * 2) + 50)
         self.fast = fast
@@ -64,9 +67,9 @@ class GoldConfluenceStrategy(Strategy):
         self.news_filter = news_filter
         self.news_before_minutes = news_before_minutes
         self.news_after_minutes = news_after_minutes
+        self.signal_cooldown_seconds = signal_cooldown_seconds
         self._armed: dict[str, Side | None] = {}
-        self._last_signal_bar: dict[str, int] = {}
-        self._bars: dict[str, int] = {}
+        self._last_signal_at: dict[str, float] = {}
         self.last_block_reason: str | None = None
         self.last_session_label: str | None = None
 
@@ -94,7 +97,6 @@ class GoldConfluenceStrategy(Strategy):
                 return None
 
         series = self.prices(tick.symbol)
-        self._bars[tick.symbol] = self._bars.get(tick.symbol, 0) + 1
 
         fast_ema = ema(series, self.fast)
         slow_ema = ema(series, self.slow)
@@ -113,8 +115,8 @@ class GoldConfluenceStrategy(Strategy):
             self.last_block_reason = f"ADX {strength:.1f} < {self.min_adx} — no trend"
             return None
 
-        last_bar = self._last_signal_bar.get(tick.symbol, -999)
-        if self._bars[tick.symbol] - last_bar < 8:
+        last_at = self._last_signal_at.get(tick.symbol, 0.0)
+        if tick.timestamp.timestamp() - last_at < self.signal_cooldown_seconds:
             return None
 
         bullish = fast_ema > slow_ema
@@ -163,7 +165,7 @@ class GoldConfluenceStrategy(Strategy):
         tier: SessionTier,
     ) -> Signal:
         self._armed[tick.symbol] = None
-        self._last_signal_bar[tick.symbol] = self._bars[tick.symbol]
+        self._last_signal_at[tick.symbol] = tick.timestamp.timestamp()
         self.last_block_reason = None
 
         sl_dist = self.sl_atr * vol

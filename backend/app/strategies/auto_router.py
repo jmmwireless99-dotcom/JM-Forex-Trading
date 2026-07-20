@@ -44,12 +44,12 @@ class AutoStrategyRouter:
     """Pick gold strategy automatically from day + session + market regime.
 
     Schedule (UTC):
-      Mon–Fri 07–13  London     → confluence (or RSI if deep range)
+      Mon–Fri 07–13  London     → confluence / ATR trend (range = flat)
       Mon–Fri 13–16  Overlap    → confluence (ATR trend if strong trend)
       Mon–Fri 16–18  NY         → ATR trend / confluence
       Mon–Fri 18–20  NY late    → confluence only if trend; else flat
       Fri 18+ / weekend / Asia  → no new trades
-      News blackout             → no new trades
+      News blackout / chop      → no new trades
     """
 
     name = "auto_gold"
@@ -58,8 +58,8 @@ class AutoStrategyRouter:
         self,
         *,
         news_filter: bool = True,
-        min_trend_adx: float = 25.0,
-        min_trade_adx: float = 16.0,
+        min_trend_adx: float = 28.0,
+        min_trade_adx: float = 20.0,
         high_atr: float = 1.8,
     ) -> None:
         self.news_filter = news_filter
@@ -172,14 +172,9 @@ class AutoStrategyRouter:
         regime: Regime,
         hour: int,
     ) -> tuple[str | None, str]:
-        # Deep range → stand aside except mild London RSI fade
+        # Chop / range → never force RSI fades (they bled paper PnL).
         if regime == Regime.RANGE:
-            if slot == "london" and hour < 11:
-                return (
-                    "rsi_mean_reversion",
-                    "London range regime — RSI mean-reversion only",
-                )
-            return None, f"{slot}: range/chop — stand aside (no forced trades)"
+            return None, f"{slot}: range/chop — stand aside (no mean-reversion)"
 
         if tier == SessionTier.PRIME:
             if regime in {Regime.TREND, Regime.VOLATILE}:
@@ -215,7 +210,7 @@ class AutoStrategyRouter:
                 "days": "Mon–Fri",
                 "utc": "07:00–13:00",
                 "slot": "London",
-                "strategies": "gold_confluence · gold_atr_trend (if trend) · RSI (if range)",
+                "strategies": "gold_atr_trend (trend) · gold_confluence (pullback) · flat if chop",
             },
             {
                 "days": "Mon–Fri",
