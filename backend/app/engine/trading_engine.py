@@ -93,6 +93,8 @@ class TradingEngine:
         self._last_auto_key: str | None = None
         self._last_strategy_switch_at: float = 0.0
         self._entry_cooldown_until: float = 0.0
+        self._last_session_slot: str | None = None
+        self._last_transfer_note: str | None = None
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -205,6 +207,8 @@ class TradingEngine:
             self.strategy = self._strategies[self.active_name]
             self._last_strategy_switch_at = time.time()
             self._last_auto_key = None
+            self._last_session_slot = None  # force re-park on next tick
+            self._last_transfer_note = "Auto session-follow enabled"
             return
 
         from app.strategies import STRATEGY_REGISTRY, list_strategy_names
@@ -279,14 +283,33 @@ class TradingEngine:
         rec = self.recommended_now()
         return {
             "enabled": self.auto_enabled,
+            "session_follow": self.auto_enabled,
             "active_strategy": self.active_name,
             "display": (
                 f"auto_gold→{self.active_name}" if self.auto_enabled else self.active_name
             ),
+            "session_slot": self._last_session_slot,
+            "last_transfer": self._last_transfer_note,
             "decision": decision.as_dict() if decision else None,
             "recommended": rec,
             "schedule": self.auto_router.schedule_table(),
         }
+
+    def _park_strategy(self, name: str, *, note: str) -> bool:
+        """Switch active strategy while keeping auto_enabled. Returns True if changed."""
+        if not name:
+            return False
+        if name not in self._strategies:
+            if name not in STRATEGY_REGISTRY:
+                return False
+            self._strategies[name] = create_strategy(name, managed_by_auto=True)
+        if name == self.active_name:
+            return False
+        self.active_name = name
+        self.strategy = self._strategies[name]
+        self._last_strategy_switch_at = time.time()
+        self._last_transfer_note = note
+        return True
 
     async def auto_transfer(self, *, start_engine: bool = True) -> dict:
         """Enable auto_gold and immediately transfer to session-recommended strategy."""
@@ -324,36 +347,72 @@ class TradingEngine:
         )
 
     async def _apply_auto_router(self, tick: Tick) -> bool:
-        """Return True if new entries are allowed this tick."""
+        """Follow session clock: transfer strategy when session changes.
+
+        Return True if new entries are allowed this tick.
+        """
         if not self.auto_enabled:
             return time.time() >= self._entry_cooldown_until
-        prices = self._strategies["gold_confluence"].prices(tick.symbol)
+
+        prices = self._signal_prices(tick.symbol)
+        if not prices and "gold_confluence" in self._strategies:
+            prices = self._strategies["gold_confluence"].prices(tick.symbol)
         decision = self.auto_router.decide(tick.timestamp, prices)
+        session_default = self.auto_router.session_default(tick.timestamp)
         now = time.time()
         key = f"{decision.strategy}:{decision.slot}:{decision.regime.value}:{decision.allow_trading}"
+
+        # Always park on the strategy that belongs to this session slot.
+        # Even when standing aside (chop/news), keep the session strategy loaded
+        # so the next allowed bar uses the right tool immediately.
+        park = decision.strategy or session_default.get("strategy")
+        slot_changed = (
+            self._last_session_slot is not None and decision.slot != self._last_session_slot
+        )
+        if self._last_session_slot is None or slot_changed:
+            prev = self._last_session_slot or "boot"
+            self._last_session_slot = decision.slot
+            if park:
+                changed = self._park_strategy(
+                    park,
+                    note=(
+                        f"Session transfer {prev} → {decision.slot}: {park}"
+                        if slot_changed
+                        else f"Session park {decision.slot}: {park}"
+                    ),
+                )
+                if changed or slot_changed:
+                    self._last_auto_key = None
+                    await self._emit("auto", self.auto_status())
+                    await self._emit("engine", self.status().model_dump(mode="json"))
+                    await self._emit(
+                        "transfer",
+                        {
+                            "from_slot": prev,
+                            "to_slot": decision.slot,
+                            "strategy": self.active_name,
+                            "allow_trading": decision.allow_trading,
+                            "reason": decision.reason,
+                        },
+                    )
 
         if decision.allow_trading and decision.strategy:
             stick = float(self.settings.strategy_stick_seconds)
             want = decision.strategy
-            # Hysteresis within same family only (don't keep London strat into Asia).
-            asia_swap = (
-                "asia_range_scalp" in {want, self.active_name}
-                and want != self.active_name
-            )
+            # Within the SAME session only — never block a session-boundary swap.
             if (
                 want != self.active_name
-                and not asia_swap
+                and not slot_changed
                 and self.active_name in self._strategies
                 and (now - self._last_strategy_switch_at) < stick
                 and self.active_name in _AUTO_POOL
             ):
                 want = self.active_name
             if want != self.active_name:
-                if want not in self._strategies:
-                    self._strategies[want] = create_strategy(want, managed_by_auto=True)
-                self.active_name = want
-                self.strategy = self._strategies[want]
-                self._last_strategy_switch_at = now
+                self._park_strategy(
+                    want,
+                    note=f"Regime transfer on {decision.slot}: {want} ({decision.regime.value})",
+                )
             if key != self._last_auto_key:
                 self._last_auto_key = key
                 await self._emit("auto", self.auto_status())
@@ -361,6 +420,8 @@ class TradingEngine:
             if now < self._entry_cooldown_until:
                 return False
             return True
+
+        # Stand aside this tick, but session strategy stays parked above.
         if key != self._last_auto_key:
             self._last_auto_key = key
             await self._emit("auto", self.auto_status())

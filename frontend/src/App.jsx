@@ -176,6 +176,13 @@ export default function App() {
         setAutoInfo(msg.data)
         // Do not overwrite the strategy <select> here — Apply/engine status owns that.
       }
+      if (msg.event === 'transfer') {
+        setAutoInfo((prev) => ({
+          ...(prev || {}),
+          last_transfer: `${msg.data.from_slot} → ${msg.data.to_slot}: ${msg.data.strategy}`,
+          session_slot: msg.data.to_slot,
+        }))
+      }
     })
 
     const deskTimer = setInterval(() => {
@@ -309,7 +316,7 @@ export default function App() {
             className="btn-primary"
             disabled={busy}
             onClick={() => autoTransfer()}
-            title="Enable auto_gold and transfer to the strategy recommended for this session"
+            title="ON = kusang lilipat ng strategy kada session (Asia↔London↔NY)"
           >
             Auto transfer
           </button>
@@ -357,7 +364,7 @@ export default function App() {
         ) : null}
         {(desk?.recommended_now || autoInfo?.recommended) && (
           <div className="recommend-box">
-            <strong>Recommended now</strong>
+            <strong>Session follow</strong>
             <span>
               {(desk?.recommended_now || autoInfo?.recommended)?.session || '—'} ·{' '}
               <code>
@@ -369,6 +376,13 @@ export default function App() {
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
             </span>
+            {autoInfo?.last_transfer ? (
+              <span className="meta">Last transfer: {autoInfo.last_transfer}</span>
+            ) : null}
+            <span className="meta">
+              Kapag ON: Asia → asia_range_scalp · London/NY → confluence/ATR ·
+              kusang lilipat pag bumago ang session.
+            </span>
             {!autoInfo?.enabled ? (
               <button
                 type="button"
@@ -376,10 +390,10 @@ export default function App() {
                 disabled={busy}
                 onClick={() => autoTransfer()}
               >
-                Transfer to auto / recommended
+                I-ON ang Auto transfer (session follow)
               </button>
             ) : (
-              <span className="mode-chip">Auto transfer ON</span>
+              <span className="mode-chip">Auto transfer ON · session follow</span>
             )}
           </div>
         )}
