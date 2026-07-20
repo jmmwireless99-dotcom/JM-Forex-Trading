@@ -142,12 +142,23 @@ async def desk() -> dict:
             "reason": news.reason,
             "filter_enabled": settings.news_filter,
         },
-        "indicators": [
-            "EMA 21 / 55 trend",
-            "ADX 14 trend strength (≥22)",
-            "RSI 14 pullback zone (buy 40–55 / sell 45–60)",
-            "ATR 14 stops (1.8× SL / 2.7× TP)",
+        "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
+        "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
+        "entry_rules": [
+            "Decide only on closed M5 candle (not tick noise)",
+            "London / NY session only — skip Asia & news blackout",
+            "EMA21/55 trend + ADX strength must agree",
+            "Need impulse stretch → pullback to EMA21 → confirmation close",
+            "RSI in value zone (no late chase)",
+            "SL beyond swing low/high + ATR pad · TP ≥ 1.8R",
         ],
+        "indicators": [
+            "M5 EMA 21 / 55 trend",
+            "M5 ADX 14 (≥25 confluence / ≥28 ATR trend)",
+            "M5 RSI 14 pullback zone",
+            "True ATR structure SL + R-multiple TP",
+        ],
+        "entry_checklist": getattr(strategy, "last_checklist", []),
         "risk": {
             "max_risk_per_trade_pct": settings.max_risk_per_trade_pct,
             "max_open_positions": settings.max_open_positions,

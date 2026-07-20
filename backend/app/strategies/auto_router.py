@@ -44,6 +44,7 @@ class AutoStrategyRouter:
     """Pick gold strategy automatically from day + session + market regime.
 
     Schedule (UTC):
+      Entries evaluate on closed M5 bars only (not ticks).
       Mon–Fri 07–13  London     → confluence / ATR trend (range = flat)
       Mon–Fri 13–16  Overlap    → confluence (ATR trend if strong trend)
       Mon–Fri 16–18  NY         → ATR trend / confluence

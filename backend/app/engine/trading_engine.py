@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import math
+import random
 import time
 from collections import deque
+from datetime import timedelta
 from typing import Any, Awaitable, Callable
 
 from app.brokers.market_data import MarketDataSimulator
@@ -13,6 +16,7 @@ from app.engine.candles import CandleAggregator
 from app.engine.trade_journal import TradeJournal
 from app.models.domain import (
     AccountSnapshot,
+    Candle,
     EngineStatus,
     Order,
     OrderRequest,
@@ -22,6 +26,7 @@ from app.models.domain import (
     Side,
     Signal,
     Tick,
+    utcnow,
 )
 from app.risk.manager import RiskManager
 from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
@@ -62,9 +67,14 @@ class TradingEngine:
             self._strategies[seed] = create_strategy(seed)
         self.active_name = seed
         self.strategy: Strategy = self._strategies[seed]
+        # Chart TF (M1) vs decision TF (M5) — entries only on signal bar close.
         self.candles = CandleAggregator(
             period_seconds=settings.candle_period_seconds,
             maxlen=settings.candle_history,
+        )
+        self.signal_candles = CandleAggregator(
+            period_seconds=settings.signal_period_seconds,
+            maxlen=max(settings.candle_history, 120),
         )
         self.journal = TradeJournal(maxlen=500)
         self.mt, detected = resolve_mt_bridge(settings)
@@ -111,9 +121,52 @@ class TradingEngine:
     def using_mt(self) -> bool:
         return self.mode in {"mt4", "mt5"} and self.mt_online()
 
+    def _seed_candle_history(self) -> None:
+        """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
+        if self.signal_candles.closed_history(self.settings.symbols[0], 10):
+            return
+        symbol = self.settings.symbols[0]
+        mid = self.market.last_mids().get(symbol, 2350.0)
+        now = utcnow()
+        for period, agg, count in (
+            (self.settings.signal_period_seconds, self.signal_candles, 90),
+            (self.settings.candle_period_seconds, self.candles, 120),
+        ):
+            bars: list[Candle] = []
+            price = mid - 8.0
+            for i in range(count):
+                drift = math.sin(i / 9.0) * 0.55 + 0.08
+                noise = random.uniform(-0.25, 0.25)
+                o = price
+                c = price + drift + noise
+                h = max(o, c) + abs(noise) * 0.6
+                l = min(o, c) - abs(noise) * 0.6
+                open_time = now - timedelta(seconds=period * (count - i))
+                bars.append(
+                    Candle(
+                        symbol=symbol,
+                        open=round(o, 2),
+                        high=round(h, 2),
+                        low=round(l, 2),
+                        close=round(c, 2),
+                        volume=float(20 + i % 7),
+                        period_seconds=period,
+                        open_time=open_time,
+                        timestamp=open_time + timedelta(seconds=period - 1),
+                        is_closed=True,
+                    )
+                )
+                price = c
+            agg.seed_history(symbol, bars)
+            for strat in self._strategies.values():
+                if getattr(strat, "candle_driven", False) and period == self.settings.signal_period_seconds:
+                    for bar in bars:
+                        strat.feed_bar(bar)
+
     async def start(self) -> None:
         if self.running:
             return
+        self._seed_candle_history()
         self.running = True
         self._started_at = time.time()
         self._task = asyncio.create_task(self._loop())
@@ -170,6 +223,8 @@ class TradingEngine:
             "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
             "using_live_feed": self.using_mt(),
             "candle_period_seconds": self.candles.period_seconds,
+            "signal_period_seconds": self.signal_candles.period_seconds,
+            "signal_timeframe": f"M{max(1, self.signal_candles.period_seconds // 60)}",
         }
 
     def auto_status(self) -> dict:
@@ -354,12 +409,31 @@ class TradingEngine:
                     await self._emit("candle_closed", closed_candle.model_dump(mode="json"))
                 await self._emit("candle", forming.model_dump(mode="json"))
 
-                # Warm all strategy histories for seamless auto-switching.
-                for strat in self._strategies.values():
-                    strat.feed(tick)
-
-                allow_entries = await self._apply_auto_router(tick)
-                signal = self.strategy.evaluate(tick) if allow_entries else None
+                closed_signal, _forming_signal = self.signal_candles.update(tick)
+                signal = None
+                if closed_signal is not None:
+                    # Feed M5 closes into strategies — not every noisy tick.
+                    for strat in self._strategies.values():
+                        if getattr(strat, "candle_driven", False):
+                            strat.feed_bar(closed_signal)
+                        else:
+                            strat.feed(tick)
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries:
+                        bars = self.signal_candles.closed_history(tick.symbol, 200)
+                        if getattr(self.strategy, "candle_driven", False):
+                            signal = self.strategy.on_bar(bars, tick)
+                        else:
+                            signal = self.strategy.evaluate(tick)
+                elif not getattr(self.strategy, "candle_driven", False):
+                    # Manual tick strategies (RSI/EMA) still evaluate every tick.
+                    self.strategy.feed(tick)
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries:
+                        signal = self.strategy.evaluate(tick)
+                else:
+                    # Keep auto status fresh even between M5 closes.
+                    await self._apply_auto_router(tick)
 
                 if signal:
                     self._recent_signals.appendleft(signal)

@@ -203,8 +203,8 @@ export default function App() {
           </div>
         </div>
         <p>
-          XAUUSD auto desk — switches strategy by day, session, and market
-          regime. MT4/MT5 bridge + live candles.
+          XAUUSD auto desk — M5 candle entries only after full checklist
+          (trend, pullback, confirm) with structure SL and R-multiple TP.
         </p>
         <div className="controls">
           <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
@@ -301,7 +301,7 @@ export default function App() {
 
       <div className="layout">
         <section className="panel">
-          <h2>Auto schedule</h2>
+          <h2>Auto schedule · {desk?.signal_timeframe || 'M5'} entries</h2>
           <div className="auto-box">
             <div className="auto-head">
               <strong>
@@ -321,6 +321,23 @@ export default function App() {
                 ? ` · ADX ${Number(autoInfo.decision.adx).toFixed(1)}`
                 : ''}
             </div>
+            <div className="entry-rules">
+              <strong>Kailan papasok</strong>
+              <ul>
+                {(desk?.entry_rules || []).map((rule) => (
+                  <li key={rule}>{rule}</li>
+                ))}
+              </ul>
+            </div>
+            {(desk?.entry_checklist || []).length > 0 ? (
+              <ul className="entry-checklist">
+                {desk.entry_checklist.map((c) => (
+                  <li key={c.name} className={c.ok ? 'ok' : 'fail'}>
+                    <span>{c.ok ? '✓' : '✗'}</span> {c.name}: {c.detail}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <ul className="auto-schedule">
               {(autoInfo?.schedule || []).map((row) => (
                 <li key={`${row.slot}-${row.utc}`}>

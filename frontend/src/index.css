@@ -407,6 +407,56 @@ select {
   line-height: 1.45;
 }
 
+.entry-rules {
+  margin: 0.75rem 0 0.5rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.entry-rules strong {
+  display: block;
+  color: var(--gold, #c9a227);
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.entry-rules ul,
+.entry-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.entry-rules li {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.entry-checklist {
+  margin: 0.55rem 0 0.35rem;
+}
+
+.entry-checklist li {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.entry-checklist li.ok {
+  color: var(--gain, #7dffb3);
+}
+
+.entry-checklist li.fail {
+  color: #ffb4b4;
+}
+
+.entry-checklist li span {
+  display: inline-block;
+  width: 1rem;
+}
+
 .auto-schedule {
   list-style: none;
   margin: 0.75rem 0 0;

@@ -70,3 +70,6 @@ class CandleAggregator:
         self._history[symbol].clear()
         for candle in candles[-self.maxlen :]:
             self._history[symbol].append(candle)
+
+    def closed_history(self, symbol: str, limit: int = 200) -> list[Candle]:
+        return [c for c in list(self._history.get(symbol, [])) if c.is_closed][-limit:]

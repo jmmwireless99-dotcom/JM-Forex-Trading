@@ -33,10 +33,11 @@ class Settings(BaseSettings):
     default_strategy: str = "auto_gold"
     auto_strategy: bool = True
     # Avoid flip-flopping between strategies / overtrading paper noise
-    strategy_stick_seconds: int = 180
-    entry_cooldown_seconds: int = 90
-    # Live chart candles (seconds). 15s feels live on paper; use 60 for M1.
-    candle_period_seconds: int = 15
+    strategy_stick_seconds: int = 900
+    entry_cooldown_seconds: int = 300
+    # Chart candles (M1) vs signal timeframe for entries (M5)
+    candle_period_seconds: int = 60
+    signal_period_seconds: int = 300
     candle_history: int = 240
 
     # Live gold: enable session + keep news filter on
