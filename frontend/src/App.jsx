@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, connectFeed } from './api'
 import CandleChart from './CandleChart'
 import './App.css'
@@ -25,6 +25,13 @@ function pnlClass(n) {
   return ''
 }
 
+/** Map engine label like "auto_gold→gold_atr_trend" back to select value. */
+function normalizeStrategy(label) {
+  if (!label) return 'auto_gold'
+  if (label === 'auto' || label.startsWith('auto_gold')) return 'auto_gold'
+  return label
+}
+
 export default function App() {
   const [status, setStatus] = useState(null)
   const [desk, setDesk] = useState(null)
@@ -35,8 +42,33 @@ export default function App() {
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
   const [strategy, setStrategy] = useState('auto_gold')
+  const [appliedStrategy, setAppliedStrategy] = useState('auto_gold')
+  const [strategyDirty, setStrategyDirty] = useState(false)
+  const strategyDirtyRef = useRef(false)
   const [mode, setMode] = useState('paper')
   const [autoInfo, setAutoInfo] = useState(null)
+
+  function markStrategyChoice(name) {
+    setStrategy(name)
+    setStrategyDirty(true)
+    strategyDirtyRef.current = true
+  }
+
+  function syncStrategyFromServer(label) {
+    const live = normalizeStrategy(label)
+    setAppliedStrategy(live)
+    if (!strategyDirtyRef.current) {
+      setStrategy(live)
+    }
+  }
+
+  function clearStrategyDirty(label) {
+    const live = normalizeStrategy(label)
+    setStrategy(live)
+    setAppliedStrategy(live)
+    setStrategyDirty(false)
+    strategyDirtyRef.current = false
+  }
   const [candles, setCandles] = useState([])
   const [liveCandle, setLiveCandle] = useState(null)
   const [trades, setTrades] = useState([])
@@ -75,8 +107,7 @@ export default function App() {
         setCandles(candleInfo.candles || [])
         setTrades(tradeInfo.trades || [])
         setTradeSummary(tradeInfo.summary || null)
-        if (st.active_strategy?.startsWith('auto_gold')) setStrategy('auto_gold')
-        else if (st.active_strategy) setStrategy(st.active_strategy)
+        clearStrategyDirty(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
         setTicks(map)
@@ -90,6 +121,7 @@ export default function App() {
       if (msg.event === 'engine') {
         setStatus(msg.data)
         if (msg.data?.mode) setMode(msg.data.mode)
+        if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
       }
       if (msg.event === 'account') setAccount(msg.data)
       if (msg.event === 'positions') setPositions(msg.data || [])
@@ -142,8 +174,7 @@ export default function App() {
       }
       if (msg.event === 'auto') {
         setAutoInfo(msg.data)
-        if (msg.data?.enabled) setStrategy('auto_gold')
-        else if (msg.data?.active_strategy) setStrategy(msg.data.active_strategy)
+        // Do not overwrite the strategy <select> here — Apply/engine status owns that.
       }
     })
 
@@ -164,8 +195,18 @@ export default function App() {
     setError('')
     try {
       const next = await action()
-      if (next?.running !== undefined || next?.mode) setStatus(next)
+      if (next?.running !== undefined || next?.mode || next?.active_strategy) setStatus(next)
       if (next?.status) setStatus(next.status)
+      if (next?.auto) setAutoInfo(next.auto)
+      else {
+        try {
+          setAutoInfo(await api.auto())
+        } catch {
+          /* ignore */
+        }
+      }
+      if (next?.active_strategy) clearStrategyDirty(next.active_strategy)
+      else if (next?.selected) clearStrategyDirty(next.selected)
       setDesk(await api.desk())
       setMt(await api.mtStatus())
     } catch (err) {
@@ -173,6 +214,10 @@ export default function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function applyStrategy() {
+    await run(async () => api.setStrategy(strategy))
   }
 
   async function onClose(id) {
@@ -221,7 +266,7 @@ export default function App() {
           </button>
           <select
             value={strategy}
-            onChange={(e) => setStrategy(e.target.value)}
+            onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
             {(strategies.length
@@ -245,6 +290,14 @@ export default function App() {
             ))}
           </select>
           <button
+            className="btn-ghost"
+            disabled={busy}
+            onClick={() => applyStrategy()}
+            title="Apply selected strategy without restarting"
+          >
+            Apply strategy
+          </button>
+          <button
             className="btn-primary"
             disabled={busy}
             onClick={() =>
@@ -266,7 +319,10 @@ export default function App() {
         </div>
         {error ? <div className="error-banner">{error}</div> : null}
         <div className="status-row">
-          <span>Strategy: {status?.active_strategy || autoInfo?.display || '—'}</span>
+          <span>
+            Strategy: {status?.active_strategy || autoInfo?.display || '—'}
+            {strategyDirty ? ` · selected ${strategy} (not applied)` : ''}
+          </span>
           <span>
             Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
             {autoInfo?.decision?.regime || sessionTier}

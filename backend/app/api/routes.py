@@ -211,7 +211,15 @@ async def set_strategy(body: StrategyRequest) -> dict:
         engine.set_strategy(body.name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return engine.status().model_dump(mode="json")
+    status = engine.status().model_dump(mode="json")
+    await engine._emit("engine", status)
+    await engine._emit("auto", engine.auto_status())
+    return {
+        **status,
+        "ok": True,
+        "selected": body.name,
+        "auto": engine.auto_status(),
+    }
 
 
 @router.get("/account")

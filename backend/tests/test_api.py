@@ -79,3 +79,19 @@ async def test_account_endpoint(client):
     data = res.json()
     assert data["balance"] == 10000.0
     assert data["currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_apply_strategy_switches_and_disables_auto(client):
+    res = await client.post("/api/strategies/active", json={"name": "asia_range_scalp"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["active_strategy"] == "asia_range_scalp"
+    assert body["auto"]["enabled"] is False
+
+    res = await client.post("/api/strategies/active", json={"name": "auto_gold"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["active_strategy"].startswith("auto_gold")
+    assert body["auto"]["enabled"] is True

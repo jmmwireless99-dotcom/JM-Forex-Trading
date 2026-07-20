@@ -185,18 +185,41 @@ class TradingEngine:
         await self._emit("engine", self.status().model_dump(mode="json"))
 
     def set_strategy(self, name: str) -> None:
+        name = (name or "").strip()
+        if name.startswith("auto_gold→"):
+            # UI may send display label; treat as auto mode.
+            name = AutoStrategyRouter.name
         if name == AutoStrategyRouter.name or name == "auto":
             self.auto_enabled = True
+            if "gold_confluence" not in self._strategies:
+                self._strategies["gold_confluence"] = create_strategy(
+                    "gold_confluence", managed_by_auto=True
+                )
             self.active_name = "gold_confluence"
             self.strategy = self._strategies["gold_confluence"]
+            # Rebuild auto pool under managed flags.
+            for pool_name in _AUTO_POOL:
+                self._strategies[pool_name] = create_strategy(
+                    pool_name, managed_by_auto=True
+                )
+            self.strategy = self._strategies[self.active_name]
             self._last_strategy_switch_at = time.time()
+            self._last_auto_key = None
             return
+
+        from app.strategies import STRATEGY_REGISTRY, list_strategy_names
+
+        if name not in STRATEGY_REGISTRY:
+            raise ValueError(
+                f"Unknown strategy: {name}. Available: {list_strategy_names()}"
+            )
         self.auto_enabled = False
-        if name not in self._strategies:
-            self._strategies[name] = create_strategy(name)
+        # Manual select — fresh instance (not auto-managed session gates).
+        self._strategies[name] = create_strategy(name, managed_by_auto=False)
         self.active_name = name
         self.strategy = self._strategies[name]
         self._last_strategy_switch_at = time.time()
+        self._last_auto_key = None
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
