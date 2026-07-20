@@ -26,6 +26,7 @@ export const api = {
   account: () => request('/account'),
   positions: () => request('/positions'),
   orders: () => request('/orders'),
+  trades: (limit = 100) => request(`/trades?limit=${limit}`),
   signals: () => request('/signals'),
   ticks: () => request('/ticks'),
   strategies: () => request('/strategies'),

@@ -10,6 +10,7 @@ from app.brokers.mt_bridge import resolve_mt_bridge
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
+from app.engine.trade_journal import TradeJournal
 from app.models.domain import (
     AccountSnapshot,
     EngineStatus,
@@ -43,6 +44,7 @@ class TradingEngine:
             period_seconds=settings.candle_period_seconds,
             maxlen=settings.candle_history,
         )
+        self.journal = TradeJournal(maxlen=500)
         self.mt, detected = resolve_mt_bridge(settings)
         self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
         self.running = False
@@ -139,6 +141,41 @@ class TradingEngine:
         symbol = (symbol or self.settings.symbols[0]).upper()
         return [c.model_dump(mode="json") for c in self.candles.history(symbol, limit)]
 
+    def trade_logs(self, limit: int = 100, *, include_rejected: bool = True) -> list:
+        return [
+            t.model_dump(mode="json")
+            for t in self.journal.list(limit, include_rejected=include_rejected)
+        ]
+
+    def trade_summary(self) -> dict:
+        return self.journal.summary()
+
+    def _trades_payload(self) -> dict:
+        return {"summary": self.trade_summary(), "trades": self.trade_logs(100)}
+
+    async def _journal_close(self, position: Position) -> None:
+        row = self.journal.record_close(position)
+        if row:
+            await self._emit("trade", row.model_dump(mode="json"))
+            await self._emit("trades", self._trades_payload())
+
+    async def _journal_fill(self, order: Order, position: Position | None = None) -> None:
+        if order.status == OrderStatus.REJECTED:
+            row = self.journal.record_order(order, mode=self.mode)
+            await self._emit("trade", row.model_dump(mode="json"))
+            await self._emit("trades", self._trades_payload())
+            return
+        if position is not None:
+            row = self.journal.record_open_position(position, mode=self.mode)
+        else:
+            row = self.journal.record_order(order, mode=self.mode)
+        await self._emit("trade", row.model_dump(mode="json"))
+        await self._emit("trades", self._trades_payload())
+
+    def _latest_open(self, symbol: str, side: Side) -> Position | None:
+        opens = [p for p in self.open_positions() if p.symbol == symbol and p.side == side]
+        return opens[-1] if opens else None
+
     def account_snapshot(self) -> AccountSnapshot:
         if self.using_mt():
             return self.mt.snapshot()
@@ -179,6 +216,7 @@ class TradingEngine:
             closed = self.paper.close_position(position_id, reason="manual")
             if closed:
                 self.risk.record_realized_pnl(closed.realized_pnl)
+                await self._journal_close(closed)
                 await self._emit("position_closed", closed.model_dump(mode="json"))
                 await self._emit("account", self.paper.snapshot().model_dump(mode="json"))
             return closed
@@ -209,7 +247,9 @@ class TradingEngine:
                     closed = self.paper.update_tick(tick)
                     for position in closed:
                         self.risk.record_realized_pnl(position.realized_pnl)
+                        await self._journal_close(position)
                         await self._emit("position_closed", position.model_dump(mode="json"))
+                    self.journal.update_open_pnl(self.paper.open_positions())
 
                 closed_candle, forming = self.candles.update(tick)
                 if closed_candle is not None:
@@ -240,6 +280,7 @@ class TradingEngine:
                     closed = self.paper.close_position(position.id, reason="signal_reverse")
                     if closed:
                         self.risk.record_realized_pnl(closed.realized_pnl)
+                        await self._journal_close(closed)
                         await self._emit("position_closed", closed.model_dump(mode="json"))
 
         for position in self.open_positions():
@@ -285,7 +326,10 @@ class TradingEngine:
                 comment=request.comment,
                 status=OrderStatus.REJECTED,
                 reject_reason=decision.reason,
+                stop_loss=request.stop_loss,
+                take_profit=request.take_profit,
             )
+            await self._journal_fill(rejected)
             await self._emit("order", rejected.model_dump(mode="json"))
             return rejected
 
@@ -298,6 +342,8 @@ class TradingEngine:
 
         if self.using_mt():
             order = self.mt.place_order(request)
+            pos = self._latest_open(request.symbol, request.side) if order.status == OrderStatus.FILLED else None
+            await self._journal_fill(order, pos)
         else:
             if self.mode in {"mt4", "mt5"} and not self.mt_online():
                 rejected = Order(
@@ -308,10 +354,25 @@ class TradingEngine:
                     comment=request.comment,
                     status=OrderStatus.REJECTED,
                     reject_reason=f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA",
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
                 )
+                await self._journal_fill(rejected)
                 await self._emit("order", rejected.model_dump(mode="json"))
                 return rejected
             order = self.paper.place_order(request)
+            pos = None
+            if order.status == OrderStatus.FILLED:
+                # Match freshly opened paper position
+                for p in reversed(self.paper.positions):
+                    if (
+                        p.status == PositionStatus.OPEN
+                        and p.symbol == request.symbol
+                        and p.side == request.side
+                    ):
+                        pos = p
+                        break
+            await self._journal_fill(order, pos)
 
         await self._emit("order", order.model_dump(mode="json"))
         await self._emit("account", self.account_snapshot().model_dump(mode="json"))

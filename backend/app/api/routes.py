@@ -213,6 +213,16 @@ async def orders() -> dict:
     }
 
 
+@router.get("/trades")
+async def trades(limit: int = 100, include_rejected: bool = True) -> dict:
+    engine = get_engine()
+    limit = max(1, min(limit, 500))
+    return {
+        "summary": engine.trade_summary(),
+        "trades": engine.trade_logs(limit, include_rejected=include_rejected),
+    }
+
+
 @router.get("/signals")
 async def signals() -> dict:
     return {
@@ -278,6 +288,15 @@ async def websocket_feed(ws: WebSocket) -> None:
                 "data": {
                     "period_seconds": engine.candles.period_seconds,
                     "candles": engine.candle_history(limit=200),
+                },
+            }
+        )
+        await ws.send_json(
+            {
+                "event": "trades",
+                "data": {
+                    "summary": engine.trade_summary(),
+                    "trades": engine.trade_logs(100),
                 },
             }
         )

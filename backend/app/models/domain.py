@@ -137,3 +137,33 @@ class EngineStatus(BaseModel):
     ticks_processed: int = 0
     last_tick_at: Optional[datetime] = None
     uptime_seconds: float = 0.0
+
+
+class TradeStatus(str, Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    REJECTED = "REJECTED"
+
+
+class TradeLog(BaseModel):
+    """Journal row for every trade attempt / fill / close."""
+
+    id: str = Field(default_factory=new_id)
+    ticket: Optional[str] = None  # position id / MT ticket
+    symbol: str
+    side: Side
+    lots: float
+    entry: Optional[float] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    exit: Optional[float] = None
+    status: TradeStatus = TradeStatus.OPEN
+    strategy: Optional[str] = None
+    comment: str = ""
+    close_reason: Optional[str] = None
+    unrealized_pnl: float = 0.0
+    realized_pnl: float = 0.0
+    mode: str = "paper"
+    opened_at: datetime = Field(default_factory=utcnow)
+    closed_at: Optional[datetime] = None
+    reject_reason: Optional[str] = None

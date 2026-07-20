@@ -38,6 +38,8 @@ export default function App() {
   const [mode, setMode] = useState('paper')
   const [candles, setCandles] = useState([])
   const [liveCandle, setLiveCandle] = useState(null)
+  const [trades, setTrades] = useState([])
+  const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -45,7 +47,7 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo] =
+        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo] =
           await Promise.all([
             api.status(),
             api.account(),
@@ -56,6 +58,7 @@ export default function App() {
             api.desk(),
             api.mtStatus(),
             api.candles('XAUUSD', 200),
+            api.trades(100),
           ])
         if (!alive) return
         setStatus(st)
@@ -67,6 +70,8 @@ export default function App() {
         setMt(mtInfo)
         setMode(st.mode || st.connection?.mode || 'paper')
         setCandles(candleInfo.candles || [])
+        setTrades(tradeInfo.trades || [])
+        setTradeSummary(tradeInfo.summary || null)
         if (st.active_strategy) setStrategy(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
@@ -119,6 +124,16 @@ export default function App() {
           )
           next.push(msg.data)
           return next.slice(-240)
+        })
+      }
+      if (msg.event === 'trades') {
+        setTrades(msg.data.trades || [])
+        setTradeSummary(msg.data.summary || null)
+      }
+      if (msg.event === 'trade') {
+        setTrades((prev) => {
+          const rest = prev.filter((t) => t.id !== msg.data.id && t.ticket !== msg.data.ticket)
+          return [msg.data, ...rest].slice(0, 100)
         })
       }
     })
@@ -327,7 +342,8 @@ export default function App() {
                   <th>Side</th>
                   <th>Lots</th>
                   <th>Entry</th>
-                  <th>SL / TP</th>
+                  <th>Stop Loss</th>
+                  <th>Take Profit</th>
                   <th>uP&amp;L</th>
                   <th></th>
                 </tr>
@@ -341,9 +357,8 @@ export default function App() {
                     </td>
                     <td>{p.lots}</td>
                     <td>{p.entry_price}</td>
-                    <td>
-                      {p.stop_loss ?? '—'} / {p.take_profit ?? '—'}
-                    </td>
+                    <td>{p.stop_loss ?? '—'}</td>
+                    <td>{p.take_profit ?? '—'}</td>
                     <td className={pnlClass(p.unrealized_pnl)}>
                       ${money(p.unrealized_pnl)}
                     </td>
@@ -356,6 +371,86 @@ export default function App() {
                 ))}
               </tbody>
             </table>
+          )}
+        </section>
+
+        <section className="panel" style={{ gridColumn: '1 / -1' }}>
+          <div className="chart-head">
+            <h2>Trade log</h2>
+            <span className="meta">
+              {tradeSummary
+                ? `${tradeSummary.closed} closed · ${tradeSummary.wins}W/${tradeSummary.losses}L · net $${money(tradeSummary.net_pnl)}`
+                : 'entry · SL · TP · exit'}
+            </span>
+          </div>
+          {trades.length === 0 ? (
+            <div className="empty">No trades yet — waiting for signals/fills.</div>
+          ) : (
+            <div className="trade-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Side</th>
+                    <th>Lots</th>
+                    <th>Entry</th>
+                    <th>Stop Loss</th>
+                    <th>Take Profit</th>
+                    <th>Exit</th>
+                    <th>P&amp;L</th>
+                    <th>Reason</th>
+                    <th>Strategy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.map((t) => (
+                    <tr key={t.id || t.ticket}>
+                      <td className="meta">
+                        {t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}
+                      </td>
+                      <td>
+                        <span
+                          className={`side ${
+                            t.status === 'CLOSED'
+                              ? t.realized_pnl >= 0
+                                ? 'buy'
+                                : 'sell'
+                              : t.status === 'OPEN'
+                                ? 'buy'
+                                : 'sell'
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`side ${(t.side || '').toLowerCase()}`}>{t.side}</span>
+                      </td>
+                      <td>{t.lots}</td>
+                      <td>{t.entry ?? '—'}</td>
+                      <td>{t.stop_loss ?? '—'}</td>
+                      <td>{t.take_profit ?? '—'}</td>
+                      <td>{t.exit ?? '—'}</td>
+                      <td
+                        className={pnlClass(
+                          t.status === 'OPEN' ? t.unrealized_pnl : t.realized_pnl,
+                        )}
+                      >
+                        $
+                        {money(
+                          t.status === 'OPEN' ? t.unrealized_pnl : t.realized_pnl,
+                        )}
+                      </td>
+                      <td className="meta">
+                        {t.close_reason || t.reject_reason || t.comment || '—'}
+                      </td>
+                      <td className="meta">{t.strategy || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       </div>

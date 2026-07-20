@@ -246,6 +246,17 @@ select {
   min-height: 300px;
 }
 
+.trade-scroll {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.trade-scroll .table td,
+.trade-scroll .table th {
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
