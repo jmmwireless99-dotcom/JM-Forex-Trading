@@ -46,10 +46,10 @@ class AutoStrategyRouter:
     Schedule (UTC):
       Entries evaluate on closed M5 bars only (not ticks).
       Mon–Fri 00–07  Asia       → asia_range_scalp if ranging; flat if trending
-      Mon–Fri 07–13  London     → confluence / ATR trend (range = flat)
-      Mon–Fri 13–16  Overlap    → confluence (ATR trend if strong trend)
-      Mon–Fri 16–18  NY         → ATR trend / confluence
-      Mon–Fri 18–20  NY late    → confluence only if trend; else flat
+      Mon–Fri 07–13  London     → ATR trend / confluence; range/pullback → gold_sr_scalp
+      Mon–Fri 13–16  Overlap    → ATR trend if strong; pullback/range → gold_sr_scalp
+      Mon–Fri 16–18  NY         → ATR trend / gold_sr_scalp (range/pullback)
+      Mon–Fri 18–20  NY late    → confluence if trend; gold_sr_scalp if pullback; else flat
       Fri 18+ / weekend / off   → no new trades
       News blackout             → no new trades
     """
@@ -209,9 +209,12 @@ class AutoStrategyRouter:
         regime: Regime,
         hour: int,
     ) -> tuple[str | None, str]:
-        # London/NY chop → stand aside (Asia has its own range scalp path).
+        # London/NY chop → S/R supply-demand scalp (Asia has its own range path).
         if regime == Regime.RANGE:
-            return None, f"{slot}: range/chop — stand aside (Asia scalp only overnight)"
+            return (
+                "gold_sr_scalp",
+                f"{slot}: range/chop — S/R supply-demand scalp",
+            )
 
         if tier == SessionTier.PRIME:
             if regime in {Regime.TREND, Regime.VOLATILE}:
@@ -219,25 +222,30 @@ class AutoStrategyRouter:
                     "gold_atr_trend",
                     "Overlap + strong trend — ATR trend strategy",
                 )
+            # PULLBACK → S/R scalp
             return (
-                "gold_confluence",
-                "Overlap pullback regime — confluence entries",
+                "gold_sr_scalp",
+                "Overlap pullback — S/R supply-demand scalp",
             )
 
         if slot == "london":
             if regime == Regime.TREND:
                 return "gold_atr_trend", "London trend day — ATR trend"
-            return "gold_confluence", "London session — confluence pullback"
+            return "gold_sr_scalp", "London pullback — S/R supply-demand scalp"
 
         if slot == "new_york":
             if hour >= 18:
                 if regime in {Regime.TREND, Regime.VOLATILE}:
                     return "gold_confluence", "Late NY — confluence only if trend continues"
+                if regime == Regime.PULLBACK:
+                    return "gold_sr_scalp", "Late NY pullback — S/R supply-demand scalp"
                 return None, "Late NY without trend — stand aside"
             if regime in {Regime.TREND, Regime.VOLATILE}:
                 return "gold_atr_trend", "NY continuation — ATR trend"
-            return "gold_confluence", "NY session — confluence"
+            return "gold_sr_scalp", "NY pullback — S/R supply-demand scalp"
 
+        if regime == Regime.PULLBACK:
+            return "gold_sr_scalp", "Default pullback — S/R supply-demand scalp"
         return "gold_confluence", "Default gold confluence"
 
     def session_default(self, ts: datetime) -> dict:
@@ -277,7 +285,10 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "gold_atr_trend",
                 "mode": "auto_transfer",
-                "reason": "London/NY overlap — prefer gold_atr_trend (regime may switch to confluence)",
+                "reason": (
+                    "London/NY overlap — prefer gold_atr_trend "
+                    "(fallback gold_sr_scalp on range/pullback)"
+                ),
             }
         if session.label == "london":
             return {
@@ -287,7 +298,10 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "gold_confluence",
                 "mode": "auto_transfer",
-                "reason": "London session — gold_confluence (ATR if strong trend)",
+                "reason": (
+                    "London session — gold_confluence / ATR if trend "
+                    "(fallback gold_sr_scalp on range/pullback)"
+                ),
             }
         if session.label == "new_york":
             return {
@@ -337,19 +351,26 @@ class AutoStrategyRouter:
                 "days": "Mon–Fri",
                 "utc": "07:00–13:00",
                 "slot": "London",
-                "strategies": "gold_atr_trend (trend) · gold_confluence (pullback) · flat if chop",
+                "strategies": (
+                    "gold_atr_trend (trend) · gold_sr_scalp (range/pullback S/R)"
+                ),
             },
             {
                 "days": "Mon–Fri",
                 "utc": "13:00–16:00",
                 "slot": "London/NY overlap (PRIME)",
-                "strategies": "gold_atr_trend (strong trend) · gold_confluence (pullback)",
+                "strategies": (
+                    "gold_atr_trend (strong trend) · gold_sr_scalp (range/pullback)"
+                ),
             },
             {
                 "days": "Mon–Thu",
                 "utc": "16:00–20:00",
                 "slot": "New York",
-                "strategies": "gold_atr_trend / gold_confluence · flat if chop after 18:00",
+                "strategies": (
+                    "gold_atr_trend / gold_sr_scalp · confluence if late trend · "
+                    "flat only if dead after 18:00"
+                ),
             },
             {
                 "days": "Fri",

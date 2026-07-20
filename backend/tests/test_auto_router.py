@@ -40,12 +40,12 @@ def test_schedule_table_not_empty():
     assert "RSI" not in london["strategies"]
 
 
-def test_range_stands_aside():
+def test_range_picks_sr_scalp():
     router = AutoStrategyRouter(news_filter=False)
     ts = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)  # Mon London
-    # Flat / choppy series → RANGE regime
+    # Flat / choppy series → RANGE regime → gold_sr_scalp
     prices = [2300.0 + ((i % 3) - 1) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
-    assert d.allow_trading is False
-    assert d.strategy is None
-    assert d.regime == Regime.RANGE or d.regime == Regime.BLOCKED
+    assert d.allow_trading is True
+    assert d.strategy == "gold_sr_scalp"
+    assert d.regime == Regime.RANGE

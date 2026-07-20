@@ -39,6 +39,7 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 _AUTO_POOL = (
     "gold_confluence",
     "gold_atr_trend",
+    "gold_sr_scalp",
     "asia_range_scalp",
 )
 

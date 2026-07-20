@@ -305,6 +305,7 @@ export default function App() {
                   'auto_gold',
                   'gold_confluence',
                   'gold_atr_trend',
+                  'gold_sr_scalp',
                   'asia_range_scalp',
                   'ema_crossover',
                   'rsi_mean_reversion',
@@ -315,7 +316,9 @@ export default function App() {
                   ? 'auto_gold (recommended)'
                   : name === 'asia_range_scalp'
                     ? 'asia_range_scalp (Asia ranging)'
-                    : name}
+                    : name === 'gold_sr_scalp'
+                      ? 'gold_sr_scalp (S/R supply-demand)'
+                      : name}
               </option>
             ))}
           </select>

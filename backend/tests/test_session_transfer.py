@@ -51,7 +51,7 @@ async def test_session_change_transfers_strategy():
     await engine._apply_auto_router(london)
     assert engine._last_session_slot == "london"
     assert engine.active_name != "asia_range_scalp"
-    assert engine.active_name in {"gold_confluence", "gold_atr_trend"}
+    assert engine.active_name in {"gold_confluence", "gold_atr_trend", "gold_sr_scalp"}
     assert engine._last_transfer_note is not None
     assert "london" in (engine._last_transfer_note or "")
 
