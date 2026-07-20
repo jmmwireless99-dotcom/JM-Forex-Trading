@@ -52,6 +52,15 @@ async def test_desk_endpoint(client):
 
 
 @pytest.mark.asyncio
+async def test_mt4_status_unconfigured(client):
+    res = await client.get("/api/mt4/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["configured"] is False
+    assert data["online"] is False
+
+
+@pytest.mark.asyncio
 async def test_account_endpoint(client):
     res = await client.get("/api/account")
     assert res.status_code == 200

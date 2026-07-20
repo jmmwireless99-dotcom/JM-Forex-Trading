@@ -27,6 +27,7 @@ function pnlClass(n) {
 export default function App() {
   const [status, setStatus] = useState(null)
   const [desk, setDesk] = useState(null)
+  const [mt4, setMt4] = useState(null)
   const [account, setAccount] = useState(emptyAccount)
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
@@ -40,7 +41,7 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const [st, acc, pos, sig, tk, strat, deskInfo] = await Promise.all([
+        const [st, acc, pos, sig, tk, strat, deskInfo, mt4Info] = await Promise.all([
           api.status(),
           api.account(),
           api.positions(),
@@ -48,6 +49,7 @@ export default function App() {
           api.ticks(),
           api.strategies(),
           api.desk(),
+          api.mt4Status(),
         ])
         if (!alive) return
         setStatus(st)
@@ -56,6 +58,7 @@ export default function App() {
         setSignals(sig.signals || [])
         setStrategies(strat.strategies || [])
         setDesk(deskInfo)
+        setMt4(mt4Info)
         if (st.active_strategy) setStrategy(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
@@ -83,6 +86,7 @@ export default function App() {
 
     const deskTimer = setInterval(() => {
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
+      api.mt4Status().then((m) => alive && setMt4(m)).catch(() => {})
     }, 15000)
 
     return () => {
@@ -186,7 +190,10 @@ export default function App() {
           <span>Strategy: {status?.active_strategy || '—'}</span>
           <span>Session: {sessionTier}</span>
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
-          <span>Ticks: {status?.ticks_processed ?? 0}</span>
+          <span>
+            MT4:{' '}
+            {mt4?.online ? 'online' : mt4?.configured ? 'offline' : 'not configured'}
+          </span>
         </div>
       </header>
 
@@ -340,9 +347,9 @@ export default function App() {
       </div>
 
       <p className="footer-note">
-        Best stack: <strong>gold_confluence</strong> · London/NY session · news
-        blackout (NFP/CPI/FOMC) · EMA21/55 + ADX + RSI + ATR stops · risk 0.5% · 1
-        position. Paper mode only.
+        Best stack: <strong>gold_confluence</strong> · London/NY · news blackout ·
+        EMA/ADX/RSI/ATR. MT4 connect: install <strong>JM_Forex_Bridge.mq4</strong> then
+        set <strong>JM_MT4_BRIDGE_DIR</strong> — see docs/MT4_SETUP.md.
       </p>
     </div>
   )

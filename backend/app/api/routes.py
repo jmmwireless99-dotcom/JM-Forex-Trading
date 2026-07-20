@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_engine
+from app.brokers.mt4_bridge import resolve_bridge
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
 from app.strategies import STRATEGY_REGISTRY
@@ -39,6 +40,44 @@ async def health() -> dict:
 async def status() -> dict:
     engine = get_engine()
     return engine.status().model_dump(mode="json")
+
+
+@router.get("/mt4/status")
+async def mt4_status() -> dict:
+    """Check whether the MT4 file bridge folder is connected/alive."""
+    settings = get_settings()
+    bridge = resolve_bridge(settings)
+    if bridge is None:
+        return {
+            "configured": False,
+            "online": False,
+            "execution_mode": settings.execution_mode,
+            "bridge_dir": "",
+            "hint": "Set JM_MT4_BRIDGE_DIR to MT4 Common\\Files path. See docs/MT4_SETUP.md",
+        }
+    online = bridge.is_online()
+    tick = bridge.read_tick() if online else None
+    snap = bridge.snapshot() if online else None
+    return {
+        "configured": True,
+        "online": online,
+        "execution_mode": settings.execution_mode,
+        "bridge_dir": str(bridge.bridge_dir),
+        "symbol": bridge.symbol,
+        "tick": tick.model_dump(mode="json") if tick else None,
+        "account": snap.model_dump(mode="json") if snap else None,
+        "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+    }
+
+
+@router.post("/mt4/ping")
+async def mt4_ping() -> dict:
+    settings = get_settings()
+    bridge = resolve_bridge(settings)
+    if bridge is None:
+        raise HTTPException(status_code=400, detail="JM_MT4_BRIDGE_DIR not configured")
+    ack = bridge.ping()
+    return {"ok": ack.ok, "command_id": ack.command_id, "detail": ack.detail}
 
 
 @router.get("/desk")

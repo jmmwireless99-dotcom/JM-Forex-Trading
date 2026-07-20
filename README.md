@@ -70,4 +70,20 @@ backend/app/strategies/
   gold_atr_trend.py    # simpler ATR fallback
 ```
 
-> Paper mode only — no live broker orders in this build.
+## Connect MT4 (real demo execution)
+
+MT4 has no native Python API — we use a **file bridge**:
+
+1. Install `mt4/Experts/JM_Forex_Bridge.mq4` on your MT4 terminal  
+2. Attach it to XAUUSD chart (AutoTrading ON)  
+3. Point Python at the shared folder:
+
+```bash
+export JM_EXECUTION_MODE=mt4
+export JM_MT4_BRIDGE_DIR="C:\\Users\\YOU\\AppData\\Roaming\\MetaQuotes\\Terminal\\Common\\Files"
+```
+
+Full guide: **[docs/MT4_SETUP.md](docs/MT4_SETUP.md)**  
+Status: `GET /api/mt4/status` · Ping: `POST /api/mt4/ping`
+
+> Default remains **paper mode** until `JM_MT4_BRIDGE_DIR` is set.

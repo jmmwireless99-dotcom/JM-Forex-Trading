@@ -16,6 +16,7 @@ export const api = {
   health: () => request('/health'),
   status: () => request('/status'),
   desk: () => request('/desk'),
+  mt4Status: () => request('/mt4/status'),
   account: () => request('/account'),
   positions: () => request('/positions'),
   orders: () => request('/orders'),

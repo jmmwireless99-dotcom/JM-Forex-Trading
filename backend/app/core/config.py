@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     news_filter: bool = True
     prime_session_only: bool = False
 
+    # MT4 file bridge (empty = paper only)
+    # Windows example:
+    # JM_MT4_BRIDGE_DIR=C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files
+    # JM_EXECUTION_MODE=mt4
+    execution_mode: str = "paper"  # paper | mt4
+    mt4_bridge_dir: str = ""
+    mt4_symbol: str = "XAUUSD"
+
     @property
     def symbols(self) -> list[str]:
         return [s.strip().upper() for s in self.default_symbols.split(",") if s.strip()]
