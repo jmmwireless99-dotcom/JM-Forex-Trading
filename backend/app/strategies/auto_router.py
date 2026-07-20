@@ -45,12 +45,13 @@ class AutoStrategyRouter:
 
     Schedule (UTC):
       Entries evaluate on closed M5 bars only (not ticks).
+      Mon–Fri 00–07  Asia       → asia_range_scalp if ranging; flat if trending
       Mon–Fri 07–13  London     → confluence / ATR trend (range = flat)
       Mon–Fri 13–16  Overlap    → confluence (ATR trend if strong trend)
       Mon–Fri 16–18  NY         → ATR trend / confluence
       Mon–Fri 18–20  NY late    → confluence only if trend; else flat
-      Fri 18+ / weekend / Asia  → no new trades
-      News blackout / chop      → no new trades
+      Fri 18+ / weekend / off   → no new trades
+      News blackout             → no new trades
     """
 
     name = "auto_gold"
@@ -92,7 +93,7 @@ class AutoStrategyRouter:
         hour = utc.hour
         regime, adx_v, atr_v = self.detect_regime(prices)
 
-        # Weekend / Asia hard block
+        # Weekend / off-hours hard block (Asia is handled below as scalp window)
         if session.tier == SessionTier.AVOID:
             decision = AutoDecision(
                 False,
@@ -107,6 +108,41 @@ class AutoStrategyRouter:
                 adx_v,
                 atr_v,
             )
+            self.last_decision = decision
+            return decision
+
+        # Asia ranging scalp — only when tape is quiet (not breaking out)
+        if session.tier == SessionTier.ASIA:
+            if regime in {Regime.RANGE, Regime.PULLBACK} and (
+                adx_v is None or adx_v <= self.min_trade_adx
+            ):
+                decision = AutoDecision(
+                    True,
+                    "asia_range_scalp",
+                    Regime.RANGE,
+                    session.label,
+                    day,
+                    utc.weekday(),
+                    hour,
+                    session.tier.value,
+                    "Asia ranging candles — Donchian/RSI fade scalp",
+                    adx_v,
+                    atr_v,
+                )
+            else:
+                decision = AutoDecision(
+                    False,
+                    None,
+                    Regime.BLOCKED,
+                    session.label,
+                    day,
+                    utc.weekday(),
+                    hour,
+                    session.tier.value,
+                    "Asia but not ranging — stand aside (breakout risk)",
+                    adx_v,
+                    atr_v,
+                )
             self.last_decision = decision
             return decision
 
@@ -173,9 +209,9 @@ class AutoStrategyRouter:
         regime: Regime,
         hour: int,
     ) -> tuple[str | None, str]:
-        # Chop / range → never force RSI fades (they bled paper PnL).
+        # London/NY chop → stand aside (Asia has its own range scalp path).
         if regime == Regime.RANGE:
-            return None, f"{slot}: range/chop — stand aside (no mean-reversion)"
+            return None, f"{slot}: range/chop — stand aside (Asia scalp only overnight)"
 
         if tier == SessionTier.PRIME:
             if regime in {Regime.TREND, Regime.VOLATILE}:
@@ -232,8 +268,14 @@ class AutoStrategyRouter:
                 "strategies": "NO new trades",
             },
             {
-                "days": "Sat–Sun / Asia",
-                "utc": "outside sessions",
+                "days": "Mon–Fri",
+                "utc": "00:00–07:00",
+                "slot": "Asia / Tokyo",
+                "strategies": "asia_range_scalp (ranging) · FLAT if ADX/trend wakes up",
+            },
+            {
+                "days": "Sat–Sun / 20–24 UTC",
+                "utc": "weekend / off-hours",
                 "slot": "Avoid",
                 "strategies": "NO new trades",
             },

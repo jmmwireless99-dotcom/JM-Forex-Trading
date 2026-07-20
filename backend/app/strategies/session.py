@@ -8,7 +8,8 @@ from enum import Enum
 class SessionTier(str, Enum):
     PRIME = "prime"  # London/NY overlap — best gold liquidity
     ALLOWED = "allowed"  # London morning or NY afternoon
-    AVOID = "avoid"  # Asia / dead zones / weekend
+    ASIA = "asia"  # Tokyo/Asia range — scalp only when ranging
+    AVOID = "avoid"  # weekend / dead zones
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,8 @@ def classify_session(ts: datetime) -> SessionWindow:
 
     - PRIME: 13:00–16:00 overlap (highest quality)
     - ALLOWED: 07:00–13:00 London, 16:00–20:00 NY continuation
-    - AVOID: everything else + weekend
+    - ASIA: 00:00–07:00 ranging scalp window (Tokyo)
+    - AVOID: weekend
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:  # Saturday=5, Sunday=6
@@ -48,10 +50,17 @@ def classify_session(ts: datetime) -> SessionWindow:
             "new_york",
             "New York session — USD-driven gold continuation",
         )
+    if 0 <= hour < 7:
+        return SessionWindow(
+            SessionTier.ASIA,
+            "asia",
+            "Asia/Tokyo — range scalp only when ADX is quiet",
+        )
+    # 20:00–24:00 soft dead zone before Asia open
     return SessionWindow(
         SessionTier.AVOID,
-        "asia_off",
-        "Asia/off-hours — spreads widen, fake breaks common",
+        "off_hours",
+        "Off-hours — spreads widen, skip new entries",
     )
 
 
@@ -60,3 +69,7 @@ def session_allows_entry(ts: datetime, *, prime_only: bool = False) -> bool:
     if prime_only:
         return tier == SessionTier.PRIME
     return tier in {SessionTier.PRIME, SessionTier.ALLOWED}
+
+
+def session_allows_asia_scalp(ts: datetime) -> bool:
+    return classify_session(ts).tier == SessionTier.ASIA

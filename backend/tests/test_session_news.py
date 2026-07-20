@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
 
 from app.strategies.news_calendar import check_news_blackout
-from app.strategies.session import SessionTier, classify_session, session_allows_entry
+from app.strategies.session import (
+    SessionTier,
+    classify_session,
+    session_allows_asia_scalp,
+    session_allows_entry,
+)
 
 
 def test_prime_overlap_session():
@@ -12,10 +17,11 @@ def test_prime_overlap_session():
     assert session_allows_entry(ts, prime_only=True) is True
 
 
-def test_asia_session_avoided():
+def test_asia_session_is_scalp_window():
     ts = datetime(2026, 7, 20, 2, 0, tzinfo=timezone.utc)
-    assert classify_session(ts).tier == SessionTier.AVOID
-    assert session_allows_entry(ts) is False
+    assert classify_session(ts).tier == SessionTier.ASIA
+    assert session_allows_entry(ts) is False  # trend tools stay off
+    assert session_allows_asia_scalp(ts) is True
 
 
 def test_weekend_avoided():

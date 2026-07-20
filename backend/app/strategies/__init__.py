@@ -1,3 +1,4 @@
+from app.strategies.asia_range_scalp import AsiaRangeScalpStrategy
 from app.strategies.auto_router import AutoStrategyRouter
 from app.strategies.base import Strategy
 from app.strategies.ema_crossover import EmaCrossoverStrategy
@@ -8,6 +9,7 @@ from app.strategies.rsi_mean_reversion import RsiMeanReversionStrategy
 STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     GoldConfluenceStrategy.name: GoldConfluenceStrategy,
     GoldAtrTrendStrategy.name: GoldAtrTrendStrategy,
+    AsiaRangeScalpStrategy.name: AsiaRangeScalpStrategy,
     EmaCrossoverStrategy.name: EmaCrossoverStrategy,
     RsiMeanReversionStrategy.name: RsiMeanReversionStrategy,
 }
@@ -50,12 +52,16 @@ def create_strategy(name: str, **kwargs) -> Strategy:
             if name == GoldConfluenceStrategy.name:
                 kwargs.setdefault("news_filter", settings.news_filter)
                 kwargs.setdefault("prime_only", settings.prime_session_only)
+    if name == AsiaRangeScalpStrategy.name and managed_by_auto:
+        # Router already gated Asia + news; strategy keeps asia_only for safety.
+        kwargs.setdefault("news_filter", False)
     return cls(**kwargs)
 
 
 __all__ = [
     "STRATEGY_REGISTRY",
     "META_STRATEGIES",
+    "AsiaRangeScalpStrategy",
     "AutoStrategyRouter",
     "EmaCrossoverStrategy",
     "GoldAtrTrendStrategy",

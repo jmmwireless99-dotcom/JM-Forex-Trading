@@ -226,10 +226,21 @@ export default function App() {
           >
             {(strategies.length
               ? strategies
-              : ['auto_gold', 'gold_confluence', 'gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
+              : [
+                  'auto_gold',
+                  'gold_confluence',
+                  'gold_atr_trend',
+                  'asia_range_scalp',
+                  'ema_crossover',
+                  'rsi_mean_reversion',
+                ]
             ).map((name) => (
               <option key={name} value={name}>
-                {name === 'auto_gold' ? 'auto_gold (recommended)' : name}
+                {name === 'auto_gold'
+                  ? 'auto_gold (recommended)'
+                  : name === 'asia_range_scalp'
+                    ? 'asia_range_scalp (Asia ranging)'
+                    : name}
               </option>
             ))}
           </select>
@@ -329,6 +340,12 @@ export default function App() {
                 ))}
               </ul>
             </div>
+            {desk?.asia_range ? (
+              <div className="meta" style={{ marginTop: '0.55rem' }}>
+                Asia range: {desk.asia_range.low} – {desk.asia_range.high} · mid{' '}
+                {desk.asia_range.mid} · ADX {desk.asia_range.adx}
+              </div>
+            ) : null}
             {(desk?.entry_checklist || []).length > 0 ? (
               <ul className="entry-checklist">
                 {desk.entry_checklist.map((c) => (

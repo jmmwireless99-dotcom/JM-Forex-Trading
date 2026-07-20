@@ -31,6 +31,7 @@ async def test_strategies_and_status(client):
     assert "auto_gold" in names
     assert "gold_confluence" in names
     assert "gold_atr_trend" in names
+    assert "asia_range_scalp" in names
     assert "ema_crossover" in names
 
     res = await client.get("/api/status")

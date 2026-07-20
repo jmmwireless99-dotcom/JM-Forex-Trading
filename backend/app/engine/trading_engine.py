@@ -35,10 +35,11 @@ from app.strategies.auto_router import AutoStrategyRouter
 
 Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
-# Auto desk only rotates gold strategies — RSI/EMA stay manual-only.
+# Auto desk rotates gold trend + Asia range scalp — RSI/EMA stay manual-only.
 _AUTO_POOL = (
     "gold_confluence",
     "gold_atr_trend",
+    "asia_range_scalp",
 )
 
 
@@ -256,9 +257,14 @@ class TradingEngine:
         if decision.allow_trading and decision.strategy:
             stick = float(self.settings.strategy_stick_seconds)
             want = decision.strategy
-            # Hysteresis: keep current gold strategy briefly to avoid flip-flops.
+            # Hysteresis within same family only (don't keep London strat into Asia).
+            asia_swap = (
+                "asia_range_scalp" in {want, self.active_name}
+                and want != self.active_name
+            )
             if (
                 want != self.active_name
+                and not asia_swap
                 and self.active_name in self._strategies
                 and (now - self._last_strategy_switch_at) < stick
                 and self.active_name in _AUTO_POOL
