@@ -380,6 +380,61 @@ select {
   font-size: 0.8rem;
 }
 
+.auto-box {
+  border: 1px solid rgba(201, 162, 39, 0.28);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.auto-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.auto-head strong {
+  color: var(--gold, #c9a227);
+  font-size: 1.05rem;
+}
+
+.auto-reason {
+  margin: 0 0 0.65rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.auto-schedule {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.auto-schedule li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 0.65rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.auto-schedule strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .auto-schedule li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
 .footer-note {
   margin-top: 1.5rem;
   color: var(--muted);

@@ -34,8 +34,9 @@ export default function App() {
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
-  const [strategy, setStrategy] = useState('gold_confluence')
+  const [strategy, setStrategy] = useState('auto_gold')
   const [mode, setMode] = useState('paper')
+  const [autoInfo, setAutoInfo] = useState(null)
   const [candles, setCandles] = useState([])
   const [liveCandle, setLiveCandle] = useState(null)
   const [trades, setTrades] = useState([])
@@ -47,7 +48,7 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo] =
+        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto] =
           await Promise.all([
             api.status(),
             api.account(),
@@ -59,6 +60,7 @@ export default function App() {
             api.mtStatus(),
             api.candles('XAUUSD', 200),
             api.trades(100),
+            api.auto(),
           ])
         if (!alive) return
         setStatus(st)
@@ -68,11 +70,13 @@ export default function App() {
         setStrategies(strat.strategies || [])
         setDesk(deskInfo)
         setMt(mtInfo)
+        setAutoInfo(auto)
         setMode(st.mode || st.connection?.mode || 'paper')
         setCandles(candleInfo.candles || [])
         setTrades(tradeInfo.trades || [])
         setTradeSummary(tradeInfo.summary || null)
-        if (st.active_strategy) setStrategy(st.active_strategy)
+        if (st.active_strategy?.startsWith('auto_gold')) setStrategy('auto_gold')
+        else if (st.active_strategy) setStrategy(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
         setTicks(map)
@@ -136,6 +140,11 @@ export default function App() {
           return [msg.data, ...rest].slice(0, 100)
         })
       }
+      if (msg.event === 'auto') {
+        setAutoInfo(msg.data)
+        if (msg.data?.enabled) setStrategy('auto_gold')
+        else if (msg.data?.active_strategy) setStrategy(msg.data.active_strategy)
+      }
     })
 
     const deskTimer = setInterval(() => {
@@ -194,8 +203,8 @@ export default function App() {
           </div>
         </div>
         <p>
-          XAUUSD automation with MT4/MT5 bridge, confluence strategy, and live
-          candle view.
+          XAUUSD auto desk — switches strategy by day, session, and market
+          regime. MT4/MT5 bridge + live candles.
         </p>
         <div className="controls">
           <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
@@ -217,10 +226,10 @@ export default function App() {
           >
             {(strategies.length
               ? strategies
-              : ['gold_confluence', 'gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
+              : ['auto_gold', 'gold_confluence', 'gold_atr_trend', 'ema_crossover', 'rsi_mean_reversion']
             ).map((name) => (
               <option key={name} value={name}>
-                {name}
+                {name === 'auto_gold' ? 'auto_gold (recommended)' : name}
               </option>
             ))}
           </select>
@@ -246,14 +255,23 @@ export default function App() {
         </div>
         {error ? <div className="error-banner">{error}</div> : null}
         <div className="status-row">
-          <span>Strategy: {status?.active_strategy || '—'}</span>
-          <span>Session: {sessionTier}</span>
+          <span>Strategy: {status?.active_strategy || autoInfo?.display || '—'}</span>
+          <span>
+            Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
+            {autoInfo?.decision?.regime || sessionTier}
+          </span>
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>
             MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
           </span>
           {gold ? <span>XAUUSD {gold.mid}</span> : null}
         </div>
+        {autoInfo?.decision ? (
+          <div className="meta" style={{ marginTop: '0.55rem' }}>
+            Auto: {autoInfo.decision.allow_trading ? 'TRADING' : 'STAND ASIDE'} —{' '}
+            {autoInfo.decision.reason}
+          </div>
+        ) : null}
       </header>
 
       <section className="metrics" aria-label="Account metrics">
@@ -283,26 +301,40 @@ export default function App() {
 
       <div className="layout">
         <section className="panel">
-          <h2>MT4 / MT5</h2>
-          <div className="signal-list">
-            <div className="signal">
-              <span className={`side ${mtOnline ? 'buy' : 'sell'}`}>
-                {mtOnline ? 'ON' : 'OFF'}
+          <h2>Auto schedule</h2>
+          <div className="auto-box">
+            <div className="auto-head">
+              <strong>
+                {autoInfo?.decision?.day || '—'} · {autoInfo?.decision?.slot || '—'}
+              </strong>
+              <span className={`side ${autoInfo?.decision?.allow_trading ? 'buy' : 'sell'}`}>
+                {autoInfo?.decision?.allow_trading ? 'LIVE' : 'FLAT'}
               </span>
-              <div>
-                <div>
-                  <strong>{(mt?.platform || mode || 'paper').toUpperCase()}</strong>
-                </div>
-                <div className="meta">
-                  {mt?.bridge_dir || 'Set JM_MT4_BRIDGE_DIR / JM_MT5_BRIDGE_DIR on server'}
-                </div>
-                <div className="meta">
-                  Install EA: mt4/Experts/JM_Forex_Bridge.mq4 or mt5/Experts/JM_Forex_Bridge.mq5
-                </div>
-              </div>
             </div>
+            <p className="auto-reason">
+              {autoInfo?.decision?.reason || 'Waiting for auto decision…'}
+            </p>
+            <div className="meta">
+              Regime: {autoInfo?.decision?.regime || '—'} · Using:{' '}
+              <code>{autoInfo?.display || autoInfo?.active_strategy || '—'}</code>
+              {autoInfo?.decision?.adx != null
+                ? ` · ADX ${Number(autoInfo.decision.adx).toFixed(1)}`
+                : ''}
+            </div>
+            <ul className="auto-schedule">
+              {(autoInfo?.schedule || []).map((row) => (
+                <li key={`${row.slot}-${row.utc}`}>
+                  <span>
+                    {row.days} {row.utc}
+                  </span>
+                  <span>
+                    <strong>{row.slot}</strong> — {row.strategies}
+                  </span>
+                </li>
+              ))}
+            </ul>
             {desk?.last_block_reason ? (
-              <div className="meta" style={{ color: '#ffb4b4' }}>
+              <div className="meta" style={{ color: '#ffb4b4', marginTop: '0.65rem' }}>
                 Last block: {desk.last_block_reason}
               </div>
             ) : null}

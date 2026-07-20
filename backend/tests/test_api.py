@@ -28,6 +28,7 @@ async def test_health(client):
 async def test_strategies_and_status(client):
     res = await client.get("/api/strategies")
     names = res.json()["strategies"]
+    assert "auto_gold" in names
     assert "gold_confluence" in names
     assert "gold_atr_trend" in names
     assert "ema_crossover" in names
@@ -36,7 +37,7 @@ async def test_strategies_and_status(client):
     assert res.status_code == 200
     body = res.json()
     assert body["mode"] == "paper"
-    assert body["active_strategy"] == "gold_confluence"
+    assert body["active_strategy"].startswith("auto_gold")
     assert body["symbols"] == ["XAUUSD"]
 
 
@@ -45,10 +46,20 @@ async def test_desk_endpoint(client):
     res = await client.get("/api/desk")
     assert res.status_code == 200
     data = res.json()
-    assert data["recommended_strategy"] == "gold_confluence"
+    assert data["recommended_strategy"] == "auto_gold"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data
+    assert data["auto"]["enabled"] is True
     assert len(data["indicators"]) >= 4
+
+
+@pytest.mark.asyncio
+async def test_auto_endpoint(client):
+    res = await client.get("/api/auto")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["enabled"] is True
+    assert len(data["schedule"]) >= 4
 
 
 @pytest.mark.asyncio

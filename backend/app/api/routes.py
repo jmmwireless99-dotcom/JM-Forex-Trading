@@ -9,7 +9,7 @@ from app.api.deps import get_engine
 from app.brokers.mt_bridge import resolve_mt_bridge
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
-from app.strategies import STRATEGY_REGISTRY
+from app.strategies import STRATEGY_REGISTRY, list_strategy_names
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import classify_session
 
@@ -125,8 +125,9 @@ async def desk() -> dict:
     block = getattr(strategy, "last_block_reason", None)
     return {
         "symbol": "XAUUSD",
-        "recommended_strategy": "gold_confluence",
-        "active_strategy": engine.strategy.name,
+        "recommended_strategy": "auto_gold",
+        "active_strategy": engine.status().active_strategy,
+        "auto": engine.auto_status(),
         "connection": engine.connection_info(),
         "session": {
             "tier": session.tier.value,
@@ -178,7 +179,16 @@ async def stop_engine() -> dict:
 
 @router.get("/strategies")
 async def list_strategies() -> dict:
-    return {"strategies": list(STRATEGY_REGISTRY.keys())}
+    return {
+        "strategies": list_strategy_names(),
+        "auto": "auto_gold",
+        "pool": list(STRATEGY_REGISTRY.keys()),
+    }
+
+
+@router.get("/auto")
+async def auto_status() -> dict:
+    return get_engine().auto_status()
 
 
 @router.post("/strategies/active")
@@ -282,6 +292,7 @@ async def websocket_feed(ws: WebSocket) -> None:
             }
         )
         await ws.send_json({"event": "connection", "data": engine.connection_info()})
+        await ws.send_json({"event": "auto", "data": engine.auto_status()})
         await ws.send_json(
             {
                 "event": "candles",

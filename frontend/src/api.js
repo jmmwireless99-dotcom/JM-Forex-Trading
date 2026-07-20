@@ -17,6 +17,7 @@ export const api = {
   health: () => request('/health'),
   status: () => request('/status'),
   desk: () => request('/desk'),
+  auto: () => request('/auto'),
   mtStatus: () => request('/mt/status'),
   mt4Status: () => request('/mt/status'),
   setExecutionMode: (mode) =>

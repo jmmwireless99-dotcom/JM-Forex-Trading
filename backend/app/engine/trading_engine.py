@@ -24,10 +24,18 @@ from app.models.domain import (
     Tick,
 )
 from app.risk.manager import RiskManager
-from app.strategies import Strategy, create_strategy
+from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
+from app.strategies.auto_router import AutoStrategyRouter
 
 
 Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+_AUTO_POOL = (
+    "gold_confluence",
+    "gold_atr_trend",
+    "rsi_mean_reversion",
+    "ema_crossover",
+)
 
 
 class TradingEngine:
@@ -39,7 +47,22 @@ class TradingEngine:
         self.broker = self.paper  # compat for older callers
         self.risk = RiskManager(settings)
         self.market = MarketDataSimulator(settings.symbols)
-        self.strategy: Strategy = create_strategy(settings.default_strategy)
+        self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
+        requested = settings.default_strategy
+        self.auto_enabled = bool(
+            settings.auto_strategy or requested == AutoStrategyRouter.name
+        )
+        # Keep all strategies warm so auto-switching keeps indicator history.
+        self._strategies: dict[str, Strategy] = {
+            name: create_strategy(name, managed_by_auto=self.auto_enabled)
+            for name in _AUTO_POOL
+            if name in STRATEGY_REGISTRY
+        }
+        seed = "gold_confluence" if self.auto_enabled else requested
+        if seed not in self._strategies:
+            self._strategies[seed] = create_strategy(seed)
+        self.active_name = seed
+        self.strategy: Strategy = self._strategies[seed]
         self.candles = CandleAggregator(
             period_seconds=settings.candle_period_seconds,
             maxlen=settings.candle_history,
@@ -57,6 +80,7 @@ class TradingEngine:
         self._recent_ticks: dict[str, Tick] = {}
         self._lock = asyncio.Lock()
         self._mt_platform = detected
+        self._last_auto_key: str | None = None
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -106,14 +130,28 @@ class TradingEngine:
         await self._emit("engine", self.status().model_dump(mode="json"))
 
     def set_strategy(self, name: str) -> None:
-        self.strategy = create_strategy(name)
+        if name == AutoStrategyRouter.name or name == "auto":
+            self.auto_enabled = True
+            self.active_name = "gold_confluence"
+            self.strategy = self._strategies["gold_confluence"]
+            return
+        self.auto_enabled = False
+        if name not in self._strategies:
+            self._strategies[name] = create_strategy(name)
+        self.active_name = name
+        self.strategy = self._strategies[name]
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
+        label = (
+            f"auto_gold→{self.active_name}"
+            if self.auto_enabled
+            else self.active_name
+        )
         return EngineStatus(
             running=self.running,
             mode=self.mode,
-            active_strategy=self.strategy.name,
+            active_strategy=label,
             symbols=self.settings.symbols,
             ticks_processed=self.ticks_processed,
             last_tick_at=self.last_tick_at,
@@ -130,6 +168,43 @@ class TradingEngine:
             "using_live_feed": self.using_mt(),
             "candle_period_seconds": self.candles.period_seconds,
         }
+
+    def auto_status(self) -> dict:
+        decision = self.auto_router.last_decision
+        return {
+            "enabled": self.auto_enabled,
+            "active_strategy": self.active_name,
+            "display": (
+                f"auto_gold→{self.active_name}" if self.auto_enabled else self.active_name
+            ),
+            "decision": decision.as_dict() if decision else None,
+            "schedule": self.auto_router.schedule_table(),
+        }
+
+    async def _apply_auto_router(self, tick: Tick) -> bool:
+        """Return True if new entries are allowed this tick."""
+        if not self.auto_enabled:
+            return True
+        prices = self._strategies["gold_confluence"].prices(tick.symbol)
+        decision = self.auto_router.decide(tick.timestamp, prices)
+        key = f"{decision.strategy}:{decision.slot}:{decision.regime.value}:{decision.allow_trading}"
+        if decision.allow_trading and decision.strategy:
+            if decision.strategy != self.active_name:
+                if decision.strategy not in self._strategies:
+                    self._strategies[decision.strategy] = create_strategy(
+                        decision.strategy, managed_by_auto=True
+                    )
+                self.active_name = decision.strategy
+                self.strategy = self._strategies[decision.strategy]
+            if key != self._last_auto_key:
+                self._last_auto_key = key
+                await self._emit("auto", self.auto_status())
+                await self._emit("engine", self.status().model_dump(mode="json"))
+            return True
+        if key != self._last_auto_key:
+            self._last_auto_key = key
+            await self._emit("auto", self.auto_status())
+        return False
 
     def recent_signals(self) -> list[Signal]:
         return list(self._recent_signals)
@@ -256,7 +331,13 @@ class TradingEngine:
                     await self._emit("candle_closed", closed_candle.model_dump(mode="json"))
                 await self._emit("candle", forming.model_dump(mode="json"))
 
-                signal = self.strategy.on_tick(tick)
+                # Warm all strategy histories for seamless auto-switching.
+                for strat in self._strategies.values():
+                    strat.feed(tick)
+
+                allow_entries = await self._apply_auto_router(tick)
+                signal = self.strategy.evaluate(tick) if allow_entries else None
+
                 if signal:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
@@ -270,6 +351,8 @@ class TradingEngine:
                 [p.model_dump(mode="json") for p in self.open_positions()],
             )
             await self._emit("connection", self.connection_info())
+            if self.auto_enabled:
+                await self._emit("auto", self.auto_status())
 
     async def _handle_signal(self, signal: Signal, tick: Tick) -> None:
         for position in self.open_positions():

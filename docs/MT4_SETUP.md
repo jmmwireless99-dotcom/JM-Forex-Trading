@@ -67,7 +67,8 @@ Sa machine kung saan tumatakbo ang JM Forex backend:
 export JM_EXECUTION_MODE=mt4
 export JM_MT4_BRIDGE_DIR="C:\\Users\\YOU\\AppData\\Roaming\\MetaQuotes\\Terminal\\Common\\Files"
 export JM_MT4_SYMBOL=XAUUSD
-export JM_DEFAULT_STRATEGY=gold_confluence
+export JM_DEFAULT_STRATEGY=auto_gold
+export JM_AUTO_STRATEGY=true
 export JM_SESSION_FILTER=true
 export JM_NEWS_FILTER=true
 

@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
-    default_strategy: str = "gold_confluence"
+    # auto_gold = automatic day/session/regime strategy switching
+    default_strategy: str = "auto_gold"
+    auto_strategy: bool = True
     # Live chart candles (seconds). 15s feels live on paper; use 60 for M1.
     candle_period_seconds: int = 15
     candle_history: int = 240

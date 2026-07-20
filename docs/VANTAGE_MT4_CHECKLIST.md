@@ -61,7 +61,8 @@ On the same PC (or a synced path), create a **local** `.env` (not committed):
 JM_EXECUTION_MODE=mt4
 JM_MT4_BRIDGE_DIR=C:\Users\YOUR_WINDOWS_USER\AppData\Roaming\MetaQuotes\Terminal\Common\Files
 JM_MT4_SYMBOL=XAUUSD
-JM_DEFAULT_STRATEGY=gold_confluence
+JM_DEFAULT_STRATEGY=auto_gold
+JM_AUTO_STRATEGY=true
 JM_SESSION_FILTER=true
 JM_NEWS_FILTER=true
 JM_INITIAL_BALANCE=1000

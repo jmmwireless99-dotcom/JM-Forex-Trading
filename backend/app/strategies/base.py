@@ -13,8 +13,12 @@ class Strategy(ABC):
         self.lookback = lookback
         self._history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=lookback))
 
-    def on_tick(self, tick: Tick) -> Signal | None:
+    def feed(self, tick: Tick) -> None:
+        """Update price history without evaluating a signal."""
         self._history[tick.symbol].append(tick.mid)
+
+    def on_tick(self, tick: Tick) -> Signal | None:
+        self.feed(tick)
         return self.evaluate(tick)
 
     def prices(self, symbol: str) -> list[float]:
