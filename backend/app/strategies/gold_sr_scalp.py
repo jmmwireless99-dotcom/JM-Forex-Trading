@@ -1,6 +1,6 @@
 """Gold S/R supply-demand scalp for XAUUSD on closed M5 candles.
 
-London / NY edge:
+Asia desk / London-NY edge:
   - Map swing highs → supply zones and swing lows → demand zones
   - Enter when price revisits a fresh zone with a rejection candle
   - SL beyond the zone + ATR pad; TP toward opposite S/R or ~1.2R
@@ -187,7 +187,12 @@ class GoldSrScalpStrategy(Strategy):
         self.last_session_label = session.label
         ok_session = True
         if self.session_filter:
-            ok_session = session.tier in {SessionTier.PRIME, SessionTier.ALLOWED}
+            # Asia desk uses this for pullback/S/R; full map uses London/NY tiers.
+            ok_session = session.tier in {
+                SessionTier.PRIME,
+                SessionTier.ALLOWED,
+                SessionTier.ASIA,
+            }
         if not gate("session", ok_session, session.reason):
             self.last_block_reason = session.reason
             self.last_checklist = checks

@@ -7,7 +7,7 @@ from app.strategies.session import SessionTier, classify_session
 
 
 def test_asia_session_tier():
-    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)  # Tue 03:00
+    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)  # Tue 03:00 UTC = PH 11:00
     s = classify_session(ts)
     assert s.tier == SessionTier.ASIA
     assert s.label == "asia"
@@ -24,18 +24,19 @@ def test_auto_router_picks_asia_scalp_when_ranging():
     assert d.regime == Regime.RANGE
 
 
-def test_auto_router_blocks_asia_when_trending():
+def test_auto_router_picks_sr_when_asia_trending():
     router = AutoStrategyRouter(news_filter=False, min_trend_adx=25.0)
     ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     prices = [2200 + i * 0.9 for i in range(120)]
     d = router.decide(ts, prices)
-    assert d.allow_trading is False
-    assert d.strategy is None
+    assert d.allow_trading is True
+    assert d.strategy == "gold_sr_scalp"
 
 
-def test_asia_scalp_blocks_london_hours():
+def test_asia_scalp_blocks_outside_desk():
     strat = AsiaRangeScalpStrategy(news_filter=False, asia_only=True)
-    london = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)
+    # 12:00 UTC = 20:00 PH — outside Asia desk
+    outside = datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc)
     bars = []
     price = 2350.0
     for i in range(40):
@@ -47,7 +48,7 @@ def test_asia_scalp_blocks_london_hours():
                 low=price - 0.8,
                 close=price + 0.1,
                 period_seconds=300,
-                open_time=london - timedelta(minutes=5 * (40 - i)),
+                open_time=outside - timedelta(minutes=5 * (40 - i)),
                 is_closed=True,
             )
         )
@@ -56,7 +57,7 @@ def test_asia_scalp_blocks_london_hours():
         bid=price - 0.1,
         ask=price + 0.1,
         mid=price,
-        timestamp=london,
+        timestamp=outside,
     )
     assert strat.on_bar(bars, tick) is None
     assert any(c["name"] == "asia_session" and not c["ok"] for c in strat.last_checklist)

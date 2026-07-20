@@ -43,15 +43,14 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 class AutoStrategyRouter:
     """Pick gold strategy automatically from day + session + market regime.
 
-    Schedule (UTC):
-      Entries evaluate on closed M5 bars only (not ticks).
-      Mon–Fri 00–07  Asia       → asia_range_scalp if ranging; flat if trending
-      Mon–Fri 07–13  London     → ATR trend / confluence; range/pullback → gold_sr_scalp
-      Mon–Fri 13–16  Overlap    → ATR trend if strong; pullback/range → gold_sr_scalp
-      Mon–Fri 16–18  NY         → ATR trend / gold_sr_scalp (range/pullback)
-      Mon–Fri 18–20  NY late    → confluence if trend; gold_sr_scalp if pullback; else flat
-      Fri 18+ / weekend / off   → no new trades
-      News blackout             → no new trades
+    Default (JM_ASIA_DESK_ONLY=true) — PH daytime Asia scalp desk:
+      Entries on closed M5 bars only.
+      Mon–Fri PH 07:00–19:00 (UTC 23:00–11:00)
+        RANGE     → asia_range_scalp (Donchian/RSI fade)
+        else      → gold_sr_scalp (S/R supply-demand)
+      Outside desk / weekend / news → no new trades
+
+    Full map (JM_ASIA_DESK_ONLY=false) restores London/NY trend + S/R schedule.
     """
 
     name = "auto_gold"
@@ -111,25 +110,9 @@ class AutoStrategyRouter:
             self.last_decision = decision
             return decision
 
-        # Asia ranging scalp — only when tape is quiet (not breaking out)
+        # Asia scalp desk — range fade or S/R supply-demand (no London/NY trend tools)
         if session.tier == SessionTier.ASIA:
-            if regime in {Regime.RANGE, Regime.PULLBACK} and (
-                adx_v is None or adx_v <= self.min_trade_adx
-            ):
-                decision = AutoDecision(
-                    True,
-                    "asia_range_scalp",
-                    Regime.RANGE,
-                    session.label,
-                    day,
-                    utc.weekday(),
-                    hour,
-                    session.tier.value,
-                    "Asia ranging candles — Donchian/RSI fade scalp",
-                    adx_v,
-                    atr_v,
-                )
-            else:
+            if regime == Regime.VOLATILE:
                 decision = AutoDecision(
                     False,
                     None,
@@ -139,14 +122,46 @@ class AutoStrategyRouter:
                     utc.weekday(),
                     hour,
                     session.tier.value,
-                    "Asia but not ranging — stand aside (breakout risk)",
+                    "Asia desk volatile — stand aside (spike risk)",
+                    adx_v,
+                    atr_v,
+                )
+            elif regime == Regime.RANGE or (
+                regime == Regime.PULLBACK
+                and (adx_v is None or adx_v <= self.min_trade_adx)
+            ):
+                decision = AutoDecision(
+                    True,
+                    "asia_range_scalp",
+                    Regime.RANGE if regime == Regime.RANGE else regime,
+                    session.label,
+                    day,
+                    utc.weekday(),
+                    hour,
+                    session.tier.value,
+                    "Asia desk ranging — Donchian/RSI fade scalp",
+                    adx_v,
+                    atr_v,
+                )
+            else:
+                # Pullback / mild trend → fade S/R zones instead of chasing
+                decision = AutoDecision(
+                    True,
+                    "gold_sr_scalp",
+                    regime,
+                    session.label,
+                    day,
+                    utc.weekday(),
+                    hour,
+                    session.tier.value,
+                    "Asia desk — S/R supply-demand scalp",
                     adx_v,
                     atr_v,
                 )
             self.last_decision = decision
             return decision
 
-        # Friday late — avoid weekend gap risk
+        # Friday late — avoid weekend gap risk (full-session map only)
         if utc.weekday() == 4 and hour >= 18:
             decision = AutoDecision(
                 False,
@@ -275,7 +290,7 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "asia_range_scalp",
                 "mode": "auto_transfer",
-                "reason": "Asia/Tokyo ranging window — asia_range_scalp",
+                "reason": "Asia scalp desk (PH 7AM–7PM) — asia_range_scalp / gold_sr_scalp",
             }
         if session.tier == SessionTier.PRIME:
             return {
@@ -346,6 +361,38 @@ class AutoStrategyRouter:
 
     def schedule_table(self) -> list[dict]:
         """Human-readable weekly plan for the dashboard."""
+        from app.core.config import get_settings
+
+        if get_settings().asia_desk_only:
+            return [
+                {
+                    "days": "Mon–Fri",
+                    "utc": "23:00–11:00 (PH 7:00AM–7:00PM)",
+                    "slot": "Asia scalp desk",
+                    "strategies": (
+                        "asia_range_scalp (range/RSI fade) · "
+                        "gold_sr_scalp (S/R supply-demand) · FLAT if volatile"
+                    ),
+                },
+                {
+                    "days": "Mon–Fri",
+                    "utc": "11:00–23:00 UTC (after PH 7PM)",
+                    "slot": "Outside Asia desk",
+                    "strategies": "NO new trades — desk closed until PH 7AM",
+                },
+                {
+                    "days": "Sat–Sun",
+                    "utc": "weekend",
+                    "slot": "Weekend",
+                    "strategies": "NO new trades",
+                },
+                {
+                    "days": "Any",
+                    "utc": "NFP/CPI/FOMC window",
+                    "slot": "News blackout",
+                    "strategies": "NO new trades",
+                },
+            ]
         return [
             {
                 "days": "Mon–Fri",

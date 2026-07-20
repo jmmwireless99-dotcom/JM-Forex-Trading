@@ -13,7 +13,7 @@ from app.strategies.entry_setup import (
 )
 from app.strategies.indicators import adx, ema, rsi
 from app.strategies.news_calendar import check_news_blackout
-from app.strategies.session import SessionTier, classify_session, session_allows_entry
+from app.strategies.session import classify_session, session_allows_entry
 
 # One setup per 3× M5 bars by default
 SIGNAL_COOLDOWN_SECONDS = 900
@@ -106,15 +106,15 @@ class GoldConfluenceStrategy(Strategy):
             checks.append({"name": name, "ok": ok, "detail": detail})
             return ok
 
+        # session_filter=False → skip (auto router / tests own the gate)
         ok_session = True
+        session_detail = "Session filter off"
         if self.session_filter:
             ok_session = session_allows_entry(
                 tick.timestamp, prime_only=self.prime_only
             )
-        else:
-            # Auto/managed mode still requires London/NY quality hours.
-            ok_session = session.tier.value in {"prime", "allowed"}
-        if not gate("session", ok_session, session.reason):
+            session_detail = session.reason
+        if not gate("session", ok_session, session_detail):
             self.last_block_reason = session.reason
             self.last_checklist = checks
             return None

@@ -45,31 +45,29 @@ def _bars(
     return bars
 
 
-def test_london_session_allows_sr_scalp():
-    ts = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)
-    assert classify_session(ts).tier == SessionTier.ALLOWED
+def test_asia_desk_allows_sr_scalp_session():
+    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)  # PH 11:00
+    assert classify_session(ts).tier == SessionTier.ASIA
 
 
-def test_auto_router_picks_sr_scalp_on_london_range():
+def test_auto_router_picks_sr_scalp_on_asia_pullback_trend():
+    router = AutoStrategyRouter(news_filter=False, min_trend_adx=25.0)
+    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
+    prices = [2200 + i * 0.9 for i in range(120)]
+    d = router.decide(ts, prices)
+    assert d.allow_trading is True
+    assert d.strategy == "gold_sr_scalp"
+    assert d.slot == "asia"
+
+
+def test_auto_router_range_stays_on_asia_fade():
     router = AutoStrategyRouter(news_filter=False, min_trade_adx=20.0)
-    ts = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)  # Tue London
+    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     prices = [2350.0 + ((i % 4) - 1.5) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "gold_sr_scalp"
+    assert d.strategy == "asia_range_scalp"
     assert d.regime == Regime.RANGE
-
-
-def test_auto_router_picks_sr_scalp_on_overlap_pullback():
-    router = AutoStrategyRouter(
-        news_filter=False, min_trade_adx=20.0, min_trend_adx=40.0
-    )
-    ts = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)  # overlap
-    # Mild drift → ADX in pullback band, not strong trend
-    prices = [2300 + (i % 8) * 0.15 + i * 0.02 for i in range(120)]
-    d = router.decide(ts, prices)
-    assert d.strategy == "gold_sr_scalp"
-    assert d.allow_trading is True
 
 
 def test_evaluate_returns_none():
@@ -79,12 +77,27 @@ def test_evaluate_returns_none():
         bid=2349.0,
         ask=2351.0,
         mid=2350.0,
-        timestamp=datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc),
     )
     assert strat.evaluate(tick) is None
 
 
-def test_blocks_asia_when_session_filter_on():
+def test_blocks_outside_asia_desk_when_session_filter_on():
+    strat = GoldSrScalpStrategy(session_filter=True, news_filter=False)
+    outside = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)  # PH 22:00
+    bars = _bars(80, start=outside)
+    tick = Tick(
+        symbol="XAUUSD",
+        bid=bars[-1].close - 0.1,
+        ask=bars[-1].close + 0.1,
+        mid=bars[-1].close,
+        timestamp=outside,
+    )
+    assert strat.on_bar(bars, tick) is None
+    assert any(c["name"] == "session" and not c["ok"] for c in strat.last_checklist)
+
+
+def test_allows_asia_desk_when_session_filter_on():
     strat = GoldSrScalpStrategy(session_filter=True, news_filter=False)
     asia = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     bars = _bars(80, start=asia)
@@ -95,14 +108,15 @@ def test_blocks_asia_when_session_filter_on():
         mid=bars[-1].close,
         timestamp=asia,
     )
-    assert strat.on_bar(bars, tick) is None
-    assert any(c["name"] == "session" and not c["ok"] for c in strat.last_checklist)
+    # May or may not signal; session gate must pass
+    strat.on_bar(bars, tick)
+    assert any(c["name"] == "session" and c["ok"] for c in strat.last_checklist)
 
 
 def test_detects_zones_and_exposes_last_zones():
     strat = GoldSrScalpStrategy(session_filter=False, news_filter=False)
-    london = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)
-    bars = _bars(80, start=london, pattern="range")
+    asia = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
+    bars = _bars(80, start=asia, pattern="range")
     # Force a bullish rejection into a demand area near recent low
     low = min(c.low for c in bars[-25:-3])
     bars[-1] = Candle(
@@ -112,7 +126,7 @@ def test_detects_zones_and_exposes_last_zones():
         low=low - 0.1,
         close=low + 1.0,
         period_seconds=300,
-        open_time=london - timedelta(minutes=5),
+        open_time=asia - timedelta(minutes=5),
         is_closed=True,
     )
     tick = Tick(
@@ -120,7 +134,7 @@ def test_detects_zones_and_exposes_last_zones():
         bid=bars[-1].close - 0.05,
         ask=bars[-1].close + 0.05,
         mid=bars[-1].close,
-        timestamp=london,
+        timestamp=asia,
     )
     signal = strat.on_bar(bars, tick)
     assert isinstance(strat.last_zones, list)
@@ -136,5 +150,5 @@ def test_detects_zones_and_exposes_last_zones():
 
 def test_schedule_mentions_sr_scalp():
     table = AutoStrategyRouter().schedule_table()
-    london = next(r for r in table if r["slot"] == "London")
-    assert "gold_sr_scalp" in london["strategies"]
+    asia = next(r for r in table if "Asia" in r["slot"])
+    assert "gold_sr_scalp" in asia["strategies"]

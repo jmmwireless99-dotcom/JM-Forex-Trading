@@ -382,20 +382,41 @@ class TradingEngine:
                         else f"Session park {decision.slot}: {park}"
                     ),
                 )
-                if changed or slot_changed:
-                    self._last_auto_key = None
-                    await self._emit("auto", self.auto_status())
-                    await self._emit("engine", self.status().model_dump(mode="json"))
-                    await self._emit(
-                        "transfer",
-                        {
-                            "from_slot": prev,
-                            "to_slot": decision.slot,
-                            "strategy": self.active_name,
-                            "allow_trading": decision.allow_trading,
-                            "reason": decision.reason,
-                        },
+            else:
+                # Desk closed / stand-aside slot — keep last strategy parked, note close.
+                changed = False
+                if slot_changed or prev == "boot":
+                    self._last_transfer_note = (
+                        f"Session transfer {prev} → {decision.slot}: stand aside"
                     )
+            if park and (changed or slot_changed):
+                self._last_auto_key = None
+                await self._emit("auto", self.auto_status())
+                await self._emit("engine", self.status().model_dump(mode="json"))
+                await self._emit(
+                    "transfer",
+                    {
+                        "from_slot": prev,
+                        "to_slot": decision.slot,
+                        "strategy": self.active_name,
+                        "allow_trading": decision.allow_trading,
+                        "reason": decision.reason,
+                    },
+                )
+            elif not park and (slot_changed or prev == "boot"):
+                self._last_auto_key = None
+                await self._emit("auto", self.auto_status())
+                await self._emit("engine", self.status().model_dump(mode="json"))
+                await self._emit(
+                    "transfer",
+                    {
+                        "from_slot": prev,
+                        "to_slot": decision.slot,
+                        "strategy": self.active_name,
+                        "allow_trading": False,
+                        "reason": decision.reason,
+                    },
+                )
 
         if decision.allow_trading and decision.strategy:
             stick = float(self.settings.strategy_stick_seconds)

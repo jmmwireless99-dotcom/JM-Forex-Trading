@@ -8,8 +8,8 @@ from enum import Enum
 class SessionTier(str, Enum):
     PRIME = "prime"  # London/NY overlap — best gold liquidity
     ALLOWED = "allowed"  # London morning or NY afternoon
-    ASIA = "asia"  # Tokyo/Asia range — scalp only when ranging
-    AVOID = "avoid"  # weekend / dead zones
+    ASIA = "asia"  # Asia scalp desk window
+    AVOID = "avoid"  # weekend / outside desk hours
 
 
 @dataclass(frozen=True)
@@ -19,16 +19,36 @@ class SessionWindow:
     reason: str
 
 
-def classify_session(ts: datetime) -> SessionWindow:
-    """Gold session map (UTC).
+def _ph_hour(utc: datetime) -> int:
+    """Philippines time = UTC+8."""
+    return (utc.hour + 8) % 24
 
-    - PRIME: 13:00–16:00 overlap (highest quality)
-    - ALLOWED: 07:00–13:00 London, 16:00–20:00 NY continuation
-    - ASIA: 00:00–07:00 ranging scalp window (Tokyo)
-    - AVOID: weekend
-    """
+
+def classify_asia_desk(ts: datetime) -> SessionWindow:
+    """Asia-first desk: scalp only PH 07:00–19:00 (UTC 23:00–11:00)."""
     utc = ts.astimezone(timezone.utc)
-    if utc.weekday() >= 5:  # Saturday=5, Sunday=6
+    if utc.weekday() >= 5:
+        return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
+
+    ph = _ph_hour(utc)
+    # PH 7:00 inclusive → 19:00 exclusive
+    if 7 <= ph < 19:
+        return SessionWindow(
+            SessionTier.ASIA,
+            "asia",
+            "Asia scalp desk (PH 7:00AM–7:00PM) — range / S/R scalping only",
+        )
+    return SessionWindow(
+        SessionTier.AVOID,
+        "outside_asia_desk",
+        "Outside Asia desk hours — next window PH 7:00AM–7:00PM",
+    )
+
+
+def classify_full_sessions(ts: datetime) -> SessionWindow:
+    """Full gold session map (UTC) — London/NY + short Asia overnight."""
+    utc = ts.astimezone(timezone.utc)
+    if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
@@ -50,18 +70,27 @@ def classify_session(ts: datetime) -> SessionWindow:
             "new_york",
             "New York session — USD-driven gold continuation",
         )
-    if 0 <= hour < 7:
+    if hour >= 23 or hour < 11:
+        # Align with PH daytime Asia desk when full map is off
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia/Tokyo — range scalp only when ADX is quiet",
+            "Asia/Tokyo — range scalp window",
         )
-    # 20:00–24:00 soft dead zone before Asia open
     return SessionWindow(
         SessionTier.AVOID,
         "off_hours",
         "Off-hours — spreads widen, skip new entries",
     )
+
+
+def classify_session(ts: datetime) -> SessionWindow:
+    """Active session map — Asia desk by default (JM_ASIA_DESK_ONLY)."""
+    from app.core.config import get_settings
+
+    if get_settings().asia_desk_only:
+        return classify_asia_desk(ts)
+    return classify_full_sessions(ts)
 
 
 def session_allows_entry(ts: datetime, *, prime_only: bool = False) -> bool:

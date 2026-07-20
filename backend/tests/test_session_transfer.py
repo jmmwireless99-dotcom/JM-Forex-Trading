@@ -25,6 +25,7 @@ async def test_session_change_transfers_strategy():
             auto_strategy=True,
             default_strategy="auto_gold",
             news_filter=False,
+            asia_desk_only=True,
             strategy_stick_seconds=900,
             entry_cooldown_seconds=0,
         )
@@ -41,21 +42,14 @@ async def test_session_change_transfers_strategy():
     assert engine._last_session_slot == "asia"
     assert engine.active_name == "asia_range_scalp"
 
-    london = _tick(datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc))
-    # Uptrend prices so London may pick ATR or confluence — either is fine,
-    # but must leave asia_range_scalp.
-    for i in range(40):
-        engine._strategies["gold_confluence"].feed(
-            _tick(london.timestamp, 2300 + i * 0.8)
-        )
-    await engine._apply_auto_router(london)
-    assert engine._last_session_slot == "london"
-    assert engine.active_name != "asia_range_scalp"
-    assert engine.active_name in {"gold_confluence", "gold_atr_trend", "gold_sr_scalp"}
+    # After PH 7PM (12:00 UTC = 20:00 PH) — desk closed
+    closed = _tick(datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc))
+    await engine._apply_auto_router(closed)
+    assert engine._last_session_slot == "outside_asia_desk"
     assert engine._last_transfer_note is not None
-    assert "london" in (engine._last_transfer_note or "")
+    assert "outside_asia_desk" in (engine._last_transfer_note or "")
 
-    # Back to Asia — must return to asia_range_scalp park
+    # Next Asia morning — back to asia_range_scalp park
     asia2 = _tick(datetime(2026, 7, 22, 2, 30, tzinfo=timezone.utc))
     await engine._apply_auto_router(asia2)
     assert engine._last_session_slot == "asia"

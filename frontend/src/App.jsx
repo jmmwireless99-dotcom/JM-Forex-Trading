@@ -35,13 +35,14 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia / Tokyo',
+    asia: 'Asia desk (PH 7AM–7PM)',
     london: 'London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
     friday_late: 'Friday late',
     weekend: 'Weekend',
     off_hours: 'Off-hours',
+    outside_asia_desk: 'Outside Asia desk',
     asia_off: 'Asia / off',
   }
   return map[key] || (raw ? String(raw).replace(/_/g, ' ') : '—')
@@ -334,7 +335,7 @@ export default function App() {
             className="btn-primary"
             disabled={busy}
             onClick={() => autoTransfer()}
-            title="ON = kusang lilipat ng strategy kada session (Asia↔London↔NY)"
+            title="ON = kusang lilipat ng Asia scalp strategy (range ↔ S/R) habang PH 7AM–7PM"
           >
             Auto transfer
           </button>
