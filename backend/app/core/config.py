@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_name: str = "JM Forex"
     environment: str = "development"
     api_prefix: str = "/api"
+    # Production: directory with Vite build (index.html + assets/)
+    static_dir: str = ""
+    portal_url: str = "https://jmtechsolution.cloud"
 
     # Paper trading account
     initial_balance: float = 10_000.0

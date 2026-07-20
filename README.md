@@ -70,6 +70,18 @@ backend/app/strategies/
   gold_atr_trend.py    # simpler ATR fallback
 ```
 
+## Deploy on jmtechsolution.cloud VPS
+
+```bash
+# on VPS after DNS: forex → VPS IP
+./scripts/deploy-vps.sh
+# then enable Apache site in deploy/apache-forex.jmtechsolution.cloud.conf
+```
+
+- Desk: `https://forex.jmtechsolution.cloud`  
+- Portal button snippet: `deploy/portal-forex-button.snippet.js`  
+- Full guide: **[docs/VPS_DEPLOY_JMTECH.md](docs/VPS_DEPLOY_JMTECH.md)**
+
 ## Connect MT4 (real demo execution)
 
 MT4 has no native Python API — we use a **file bridge**:

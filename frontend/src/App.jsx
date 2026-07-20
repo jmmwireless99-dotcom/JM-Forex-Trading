@@ -347,9 +347,13 @@ export default function App() {
       </div>
 
       <p className="footer-note">
-        Best stack: <strong>gold_confluence</strong> · London/NY · news blackout ·
-        EMA/ADX/RSI/ATR. MT4 connect: install <strong>JM_Forex_Bridge.mq4</strong> then
-        set <strong>JM_MT4_BRIDGE_DIR</strong> — see docs/MT4_SETUP.md.
+        Part of{" "}
+        <a href="https://jmtechsolution.cloud" style={{ color: "#7dffb3" }}>
+          JM TECH SOLUTION
+        </a>
+        {" "}
+        · <strong>gold_confluence</strong> · XAUUSD · paper until MT4 bridge is online ·
+        docs/MT4_SETUP.md
       </p>
     </div>
   )
