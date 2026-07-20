@@ -82,16 +82,16 @@ def test_evaluate_returns_none():
     assert strat.evaluate(tick) is None
 
 
-def test_blocks_outside_asia_desk_when_session_filter_on():
+def test_blocks_off_hours_when_session_filter_on():
     strat = GoldSrScalpStrategy(session_filter=True, news_filter=False)
-    outside = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)  # PH 22:00
-    bars = _bars(80, start=outside)
+    off = datetime(2026, 7, 21, 21, 0, tzinfo=timezone.utc)  # off-hours
+    bars = _bars(80, start=off)
     tick = Tick(
         symbol="XAUUSD",
         bid=bars[-1].close - 0.1,
         ask=bars[-1].close + 0.1,
         mid=bars[-1].close,
-        timestamp=outside,
+        timestamp=off,
     )
     assert strat.on_bar(bars, tick) is None
     assert any(c["name"] == "session" and not c["ok"] for c in strat.last_checklist)

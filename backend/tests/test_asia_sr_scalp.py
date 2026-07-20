@@ -65,7 +65,8 @@ def test_session_default_recommends_asia_sr():
 
 def test_blocks_outside_asia_desk():
     strat = AsiaSrScalpStrategy(news_filter=False, asia_only=True)
-    outside = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+    # Late London after PH 7PM — Asia-only strategy must stay flat
+    outside = datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc)
     bars = _bars(80, start=outside)
     tick = Tick(
         symbol="XAUUSD",

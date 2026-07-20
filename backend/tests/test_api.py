@@ -51,6 +51,8 @@ async def test_desk_endpoint(client):
     data = res.json()
     assert data["recommended_strategy"] == "auto_gold"
     assert data["recommended_asia"] == "asia_sr_scalp"
+    assert data["recommended_london"] == "gold_confluence"
+    assert data["recommended_overlap"] == "gold_atr_trend"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is True

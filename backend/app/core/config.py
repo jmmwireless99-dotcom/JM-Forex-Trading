@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # Asia-first desk: scalp PH 07:00–19:00 only (set false for full London/NY map)
-    # JM_ASIA_DESK_ONLY=true
-    asia_desk_only: bool = True
+    # true = Asia PH 7AM–7PM only (flat after). false = full map (Asia → London → NY)
+    # JM_ASIA_DESK_ONLY=false
+    asia_desk_only: bool = False
 
     # MetaTrader file bridge (empty = paper only)
     # JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR =

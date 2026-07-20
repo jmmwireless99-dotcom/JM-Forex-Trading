@@ -35,8 +35,8 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia desk (PH 7AM–7PM)',
-    london: 'London',
+    asia: 'Asia (PH 7AM–7PM)',
+    london: 'Late London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
     friday_late: 'Friday late',
@@ -315,14 +315,18 @@ export default function App() {
             ).map((name) => (
               <option key={name} value={name}>
                 {name === 'auto_gold'
-                  ? 'auto_gold (Asia desk)'
+                  ? 'auto_gold (session follow)'
                   : name === 'asia_sr_scalp'
-                    ? 'asia_sr_scalp (RECOMMENDED · M5 S/R)'
-                    : name === 'asia_range_scalp'
-                      ? 'asia_range_scalp (Asia Donchian)'
-                      : name === 'gold_sr_scalp'
-                        ? 'gold_sr_scalp (S/R supply-demand)'
-                        : name}
+                    ? 'asia_sr_scalp (BEST Asia · M5 S/R)'
+                    : name === 'gold_confluence'
+                      ? 'gold_confluence (BEST late London)'
+                      : name === 'gold_atr_trend'
+                        ? 'gold_atr_trend (BEST overlap/NY)'
+                        : name === 'asia_range_scalp'
+                          ? 'asia_range_scalp (Asia Donchian)'
+                          : name === 'gold_sr_scalp'
+                            ? 'gold_sr_scalp (S/R chop)'
+                            : name}
               </option>
             ))}
           </select>
@@ -338,7 +342,7 @@ export default function App() {
             className="btn-primary"
             disabled={busy}
             onClick={() => autoTransfer()}
-            title="ON = Auto follow Asia recommended: asia_sr_scalp (M5 S/R) PH 7AM–7PM"
+            title="ON = Auto follow: Asia S/R → London confluence → Overlap/NY ATR"
           >
             Auto transfer
           </button>
@@ -407,8 +411,24 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Recommended Asia: <code>asia_sr_scalp</code> · M5 Support/Resistance
+              BEST now:{' '}
+              <code>
+                {(desk?.recommended_now || autoInfo?.recommended)?.strategy ||
+                  activeStrat}
+              </code>
             </span>
+            {(() => {
+              const nxt =
+                (desk?.recommended_now || autoInfo?.recommended)?.next_session ||
+                desk?.next_session
+              if (!nxt?.strategy) return null
+              return (
+                <span className="meta">
+                  Next session ({sessionLabel(nxt.session)}):{' '}
+                  <code>{nxt.strategy}</code>
+                </span>
+              )
+            })()}
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
             </span>

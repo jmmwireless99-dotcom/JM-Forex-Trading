@@ -6,7 +6,7 @@ from enum import Enum
 
 from app.strategies.indicators import adx, atr, ema
 from app.strategies.news_calendar import check_news_blackout
-from app.strategies.session import SessionTier, classify_session
+from app.strategies.session import SessionTier, classify_session, next_session_hint
 
 
 class Regime(str, Enum):
@@ -43,14 +43,15 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 class AutoStrategyRouter:
     """Pick gold strategy automatically from day + session + market regime.
 
-    Default (JM_ASIA_DESK_ONLY=true) — PH daytime Asia scalp desk:
-      Entries on closed M5 bars only.
-      Mon–Fri PH 07:00–19:00 (UTC 23:00–11:00)
-        RECOMMENDED → asia_sr_scalp (M5 Support/Resistance fade)
-        VOLATILE    → stand aside
-      Outside desk / weekend / news → no new trades
+    Default full desk (JM_ASIA_DESK_ONLY=false) — entries on closed M5 only:
+      Asia PH 7AM–7PM (UTC 23–11) → asia_sr_scalp (BEST Asia M5 S/R)
+      Late London UTC 11–13       → gold_confluence (BEST next after Asia)
+      Overlap UTC 13–16           → gold_atr_trend (BEST liquidity)
+      NY UTC 16–20                → gold_atr_trend / confluence
+      Range/chop London–NY        → gold_sr_scalp
+      Fri 18+ / weekend / news    → stand aside
 
-    Full map (JM_ASIA_DESK_ONLY=false) restores London/NY trend + S/R schedule.
+    JM_ASIA_DESK_ONLY=true keeps Asia-only flat after PH 7PM.
     """
 
     name = "auto_gold"
@@ -227,8 +228,13 @@ class AutoStrategyRouter:
 
         if slot == "london":
             if regime == Regime.TREND:
-                return "gold_atr_trend", "London trend day — ATR trend"
-            return "gold_sr_scalp", "London pullback — S/R supply-demand scalp"
+                return "gold_atr_trend", "London trend — gold_atr_trend"
+            if regime == Regime.PULLBACK:
+                return (
+                    "gold_confluence",
+                    "London recommended: gold_confluence (pullback after Asia)",
+                )
+            return "gold_sr_scalp", "London chop — gold_sr_scalp"
 
         if slot == "new_york":
             if hour >= 18:
@@ -251,6 +257,7 @@ class AutoStrategyRouter:
         session = classify_session(utc)
         day = DAY_NAMES[utc.weekday()]
         hour = utc.hour
+        nxt = next_session_hint(utc)
 
         if session.tier == SessionTier.AVOID or (utc.weekday() == 4 and hour >= 18):
             return {
@@ -260,6 +267,8 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": None,
                 "mode": "stand_aside",
+                "recommended": False,
+                "next_session": nxt,
                 "reason": session.reason
                 if session.tier == SessionTier.AVOID
                 else "Friday after 18:00 UTC — no new gold trades",
@@ -273,9 +282,10 @@ class AutoStrategyRouter:
                 "strategy": "asia_sr_scalp",
                 "mode": "auto_transfer",
                 "recommended": True,
+                "next_session": nxt,
                 "reason": (
-                    "Asia recommended (PH 7AM–7PM): asia_sr_scalp — "
-                    "M5 Support/Resistance fade"
+                    "Asia BEST (PH 7AM–7PM): asia_sr_scalp — M5 Support/Resistance · "
+                    f"Next: {nxt.get('strategy')} ({nxt.get('session')})"
                 ),
             }
         if session.tier == SessionTier.PRIME:
@@ -286,8 +296,10 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "gold_atr_trend",
                 "mode": "auto_transfer",
+                "recommended": True,
+                "next_session": nxt,
                 "reason": (
-                    "London/NY overlap — prefer gold_atr_trend "
+                    "Overlap BEST: gold_atr_trend — prime liquidity "
                     "(fallback gold_sr_scalp on range/pullback)"
                 ),
             }
@@ -299,9 +311,11 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "gold_confluence",
                 "mode": "auto_transfer",
+                "recommended": True,
+                "next_session": nxt,
                 "reason": (
-                    "London session — gold_confluence / ATR if trend "
-                    "(fallback gold_sr_scalp on range/pullback)"
+                    "London BEST after Asia: gold_confluence — "
+                    "ATR if trend · gold_sr_scalp if chop"
                 ),
             }
         if session.label == "new_york":
@@ -312,7 +326,9 @@ class AutoStrategyRouter:
                 "hour_utc": hour,
                 "strategy": "gold_atr_trend" if hour < 18 else "gold_confluence",
                 "mode": "auto_transfer",
-                "reason": "New York session — ATR/confluence by regime",
+                "recommended": True,
+                "next_session": nxt,
+                "reason": "NY BEST: gold_atr_trend early · gold_confluence late",
             }
         return {
             "session": session.label,
@@ -321,6 +337,8 @@ class AutoStrategyRouter:
             "hour_utc": hour,
             "strategy": "gold_confluence",
             "mode": "auto_transfer",
+            "recommended": False,
+            "next_session": nxt,
             "reason": "Default — gold_confluence",
         }
 
@@ -338,6 +356,7 @@ class AutoStrategyRouter:
             "reason": decision.reason,
             "adx": decision.adx,
             "atr": decision.atr,
+            "next_session": base.get("next_session"),
             "transfer_to": (
                 decision.strategy
                 if decision.allow_trading and decision.strategy
@@ -356,15 +375,15 @@ class AutoStrategyRouter:
                     "utc": "23:00–11:00 (PH 7:00AM–7:00PM)",
                     "slot": "Asia scalp desk",
                     "strategies": (
-                        "RECOMMENDED: asia_sr_scalp — M5 Support/Resistance fade · "
+                        "BEST: asia_sr_scalp — M5 Support/Resistance fade · "
                         "FLAT if volatile"
                     ),
                 },
                 {
                     "days": "Mon–Fri",
-                    "utc": "11:00–23:00 UTC (after PH 7PM)",
+                    "utc": "after PH 7PM",
                     "slot": "Outside Asia desk",
-                    "strategies": "NO new trades — desk closed until PH 7AM",
+                    "strategies": "NO new trades (asia_desk_only)",
                 },
                 {
                     "days": "Sat–Sun",
@@ -382,10 +401,17 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon–Fri",
-                "utc": "07:00–13:00",
-                "slot": "London",
+                "utc": "23:00–11:00 (PH 7AM–7PM)",
+                "slot": "Asia",
+                "strategies": "BEST: asia_sr_scalp — M5 Support/Resistance fade",
+            },
+            {
+                "days": "Mon–Fri",
+                "utc": "11:00–13:00 (after PH 7PM)",
+                "slot": "Late London",
                 "strategies": (
-                    "gold_atr_trend (trend) · gold_sr_scalp (range/pullback S/R)"
+                    "BEST next: gold_confluence · gold_atr_trend if trend · "
+                    "gold_sr_scalp if chop"
                 ),
             },
             {
@@ -393,7 +419,7 @@ class AutoStrategyRouter:
                 "utc": "13:00–16:00",
                 "slot": "London/NY overlap (PRIME)",
                 "strategies": (
-                    "gold_atr_trend (strong trend) · gold_sr_scalp (range/pullback)"
+                    "BEST: gold_atr_trend · gold_sr_scalp on range/pullback"
                 ),
             },
             {
@@ -401,8 +427,8 @@ class AutoStrategyRouter:
                 "utc": "16:00–20:00",
                 "slot": "New York",
                 "strategies": (
-                    "gold_atr_trend / gold_sr_scalp · confluence if late trend · "
-                    "flat only if dead after 18:00"
+                    "BEST: gold_atr_trend · gold_confluence late · "
+                    "gold_sr_scalp if chop"
                 ),
             },
             {
@@ -412,13 +438,7 @@ class AutoStrategyRouter:
                 "strategies": "NO new trades",
             },
             {
-                "days": "Mon–Fri",
-                "utc": "00:00–07:00",
-                "slot": "Asia / Tokyo",
-                "strategies": "asia_range_scalp (ranging) · FLAT if ADX/trend wakes up",
-            },
-            {
-                "days": "Sat–Sun / 20–24 UTC",
+                "days": "Sat–Sun / late",
                 "utc": "weekend / off-hours",
                 "slot": "Avoid",
                 "strategies": "NO new trades",
