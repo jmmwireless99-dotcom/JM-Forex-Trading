@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_engine
-from app.brokers.mt4_bridge import resolve_bridge
+from app.brokers.mt_bridge import resolve_mt_bridge
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
 from app.strategies import STRATEGY_REGISTRY
@@ -24,6 +24,10 @@ class StrategyRequest(BaseModel):
     name: str
 
 
+class ExecutionModeBody(BaseModel):
+    mode: str  # paper | mt4 | mt5
+
+
 class ManualOrderBody(BaseModel):
     symbol: str
     side: Side
@@ -39,21 +43,27 @@ async def health() -> dict:
 @router.get("/status")
 async def status() -> dict:
     engine = get_engine()
-    return engine.status().model_dump(mode="json")
+    data = engine.status().model_dump(mode="json")
+    data["connection"] = engine.connection_info()
+    return data
 
 
+@router.get("/mt/status")
 @router.get("/mt4/status")
-async def mt4_status() -> dict:
-    """Check whether the MT4 file bridge folder is connected/alive."""
+async def mt_status() -> dict:
     settings = get_settings()
-    bridge = resolve_bridge(settings)
+    engine = get_engine()
+    bridge, platform = resolve_mt_bridge(settings)
+    info = engine.connection_info()
     if bridge is None:
         return {
             "configured": False,
             "online": False,
             "execution_mode": settings.execution_mode,
+            "platform": platform,
             "bridge_dir": "",
-            "hint": "Set JM_MT4_BRIDGE_DIR to MT4 Common\\Files path. See docs/MT4_SETUP.md",
+            "hint": "Set JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR to Terminal Common\\Files",
+            **info,
         }
     online = bridge.is_online()
     tick = bridge.read_tick() if online else None
@@ -62,27 +72,50 @@ async def mt4_status() -> dict:
         "configured": True,
         "online": online,
         "execution_mode": settings.execution_mode,
+        "platform": info.get("mt_platform") or platform,
         "bridge_dir": str(bridge.bridge_dir),
         "symbol": bridge.symbol,
         "tick": tick.model_dump(mode="json") if tick else None,
         "account": snap.model_dump(mode="json") if snap else None,
         "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+        **info,
     }
 
 
+@router.post("/mt/ping")
 @router.post("/mt4/ping")
-async def mt4_ping() -> dict:
+async def mt_ping() -> dict:
     settings = get_settings()
-    bridge = resolve_bridge(settings)
+    bridge, _ = resolve_mt_bridge(settings)
     if bridge is None:
-        raise HTTPException(status_code=400, detail="JM_MT4_BRIDGE_DIR not configured")
+        raise HTTPException(status_code=400, detail="MT bridge dir not configured")
     ack = bridge.ping()
     return {"ok": ack.ok, "command_id": ack.command_id, "detail": ack.detail}
 
 
+@router.post("/execution/mode")
+async def set_execution_mode(body: ExecutionModeBody) -> dict:
+    engine = get_engine()
+    try:
+        engine.set_execution_mode(body.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **engine.connection_info(), "status": engine.status().model_dump(mode="json")}
+
+
+@router.get("/candles")
+async def candles(symbol: str | None = None, limit: int = 200) -> dict:
+    engine = get_engine()
+    limit = max(10, min(limit, 500))
+    return {
+        "symbol": (symbol or engine.settings.symbols[0]).upper(),
+        "period_seconds": engine.candles.period_seconds,
+        "candles": engine.candle_history(symbol, limit),
+    }
+
+
 @router.get("/desk")
 async def desk() -> dict:
-    """Live session/news gates + recommended gold confluence stack."""
     settings = get_settings()
     engine = get_engine()
     now = utcnow()
@@ -94,6 +127,7 @@ async def desk() -> dict:
         "symbol": "XAUUSD",
         "recommended_strategy": "gold_confluence",
         "active_strategy": engine.strategy.name,
+        "connection": engine.connection_info(),
         "session": {
             "tier": session.tier.value,
             "label": session.label,
@@ -159,22 +193,23 @@ async def set_strategy(body: StrategyRequest) -> dict:
 
 @router.get("/account")
 async def account() -> dict:
-    return get_engine().broker.snapshot().model_dump(mode="json")
+    return get_engine().account_snapshot().model_dump(mode="json")
 
 
 @router.get("/positions")
 async def positions() -> dict:
     engine = get_engine()
-    return {
-        "open": [p.model_dump(mode="json") for p in engine.broker.open_positions()],
-        "all": [p.model_dump(mode="json") for p in engine.broker.all_positions()],
-    }
+    open_pos = [p.model_dump(mode="json") for p in engine.open_positions()]
+    all_pos = open_pos
+    if hasattr(engine.paper, "all_positions"):
+        all_pos = [p.model_dump(mode="json") for p in engine.paper.all_positions()]
+    return {"open": open_pos, "all": all_pos}
 
 
 @router.get("/orders")
 async def orders() -> dict:
     return {
-        "orders": [o.model_dump(mode="json") for o in get_engine().broker.recent_orders()]
+        "orders": [o.model_dump(mode="json") for o in get_engine().paper.recent_orders()]
     }
 
 
@@ -226,19 +261,27 @@ async def websocket_feed(ws: WebSocket) -> None:
 
     engine.subscribe(listener)
     try:
-        # Send initial snapshot
         await ws.send_json({"event": "engine", "data": engine.status().model_dump(mode="json")})
         await ws.send_json(
-            {"event": "account", "data": engine.broker.snapshot().model_dump(mode="json")}
+            {"event": "account", "data": engine.account_snapshot().model_dump(mode="json")}
         )
         await ws.send_json(
             {
                 "event": "positions",
-                "data": [p.model_dump(mode="json") for p in engine.broker.open_positions()],
+                "data": [p.model_dump(mode="json") for p in engine.open_positions()],
+            }
+        )
+        await ws.send_json({"event": "connection", "data": engine.connection_info()})
+        await ws.send_json(
+            {
+                "event": "candles",
+                "data": {
+                    "period_seconds": engine.candles.period_seconds,
+                    "candles": engine.candle_history(limit=200),
+                },
             }
         )
         while True:
-            # Keepalive / ignore client pings
             await ws.receive_text()
     except WebSocketDisconnect:
         pass

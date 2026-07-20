@@ -52,7 +52,10 @@ class Candle(BaseModel):
     low: float
     close: float
     volume: float = 0.0
+    period_seconds: int = 60
+    open_time: datetime = Field(default_factory=utcnow)
     timestamp: datetime = Field(default_factory=utcnow)
+    is_closed: bool = False
 
 
 class Signal(BaseModel):

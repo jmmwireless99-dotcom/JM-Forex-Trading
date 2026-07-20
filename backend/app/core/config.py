@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
     default_strategy: str = "gold_confluence"
+    # Live chart candles (seconds). 15s feels live on paper; use 60 for M1.
+    candle_period_seconds: int = 15
+    candle_history: int = 240
 
     # Live gold: enable session + keep news filter on
     # JM_SESSION_FILTER=true  JM_NEWS_FILTER=true  JM_PRIME_SESSION_ONLY=false
@@ -36,13 +39,15 @@ class Settings(BaseSettings):
     news_filter: bool = True
     prime_session_only: bool = False
 
-    # MT4 file bridge (empty = paper only)
-    # Windows example:
-    # JM_MT4_BRIDGE_DIR=C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files
-    # JM_EXECUTION_MODE=mt4
-    execution_mode: str = "paper"  # paper | mt4
+    # MetaTrader file bridge (empty = paper only)
+    # JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR =
+    #   C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files
+    # JM_EXECUTION_MODE=paper|mt4|mt5
+    execution_mode: str = "paper"
     mt4_bridge_dir: str = ""
+    mt5_bridge_dir: str = ""
     mt4_symbol: str = "XAUUSD"
+    mt_symbol: str = "XAUUSD"
 
     @property
     def symbols(self) -> list[str]:

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, connectFeed } from './api'
+import CandleChart from './CandleChart'
 import './App.css'
 
 const emptyAccount = {
@@ -27,13 +28,16 @@ function pnlClass(n) {
 export default function App() {
   const [status, setStatus] = useState(null)
   const [desk, setDesk] = useState(null)
-  const [mt4, setMt4] = useState(null)
+  const [mt, setMt] = useState(null)
   const [account, setAccount] = useState(emptyAccount)
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
   const [strategy, setStrategy] = useState('gold_confluence')
+  const [mode, setMode] = useState('paper')
+  const [candles, setCandles] = useState([])
+  const [liveCandle, setLiveCandle] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -41,16 +45,18 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const [st, acc, pos, sig, tk, strat, deskInfo, mt4Info] = await Promise.all([
-          api.status(),
-          api.account(),
-          api.positions(),
-          api.signals(),
-          api.ticks(),
-          api.strategies(),
-          api.desk(),
-          api.mt4Status(),
-        ])
+        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo] =
+          await Promise.all([
+            api.status(),
+            api.account(),
+            api.positions(),
+            api.signals(),
+            api.ticks(),
+            api.strategies(),
+            api.desk(),
+            api.mtStatus(),
+            api.candles('XAUUSD', 200),
+          ])
         if (!alive) return
         setStatus(st)
         setAccount(acc)
@@ -58,7 +64,9 @@ export default function App() {
         setSignals(sig.signals || [])
         setStrategies(strat.strategies || [])
         setDesk(deskInfo)
-        setMt4(mt4Info)
+        setMt(mtInfo)
+        setMode(st.mode || st.connection?.mode || 'paper')
+        setCandles(candleInfo.candles || [])
         if (st.active_strategy) setStrategy(st.active_strategy)
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
@@ -70,7 +78,10 @@ export default function App() {
 
     const disconnect = connectFeed((msg) => {
       if (!alive) return
-      if (msg.event === 'engine') setStatus(msg.data)
+      if (msg.event === 'engine') {
+        setStatus(msg.data)
+        if (msg.data?.mode) setMode(msg.data.mode)
+      }
       if (msg.event === 'account') setAccount(msg.data)
       if (msg.event === 'positions') setPositions(msg.data || [])
       if (msg.event === 'tick') {
@@ -82,12 +93,40 @@ export default function App() {
       if (msg.event === 'position_closed') {
         setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
       }
+      if (msg.event === 'connection') {
+        setMt((prev) => ({ ...(prev || {}), ...msg.data }))
+        if (msg.data?.mode) setMode(msg.data.mode)
+      }
+      if (msg.event === 'candles') {
+        setCandles(msg.data.candles || [])
+      }
+      if (msg.event === 'candle') {
+        setLiveCandle(msg.data)
+        setCandles((prev) => {
+          const next = [...prev]
+          const idx = next.findIndex(
+            (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
+          )
+          if (idx >= 0) next[idx] = msg.data
+          else next.push(msg.data)
+          return next.slice(-240)
+        })
+      }
+      if (msg.event === 'candle_closed') {
+        setCandles((prev) => {
+          const next = prev.filter(
+            (c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp),
+          )
+          next.push(msg.data)
+          return next.slice(-240)
+        })
+      }
     })
 
     const deskTimer = setInterval(() => {
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
-      api.mt4Status().then((m) => alive && setMt4(m)).catch(() => {})
-    }, 15000)
+      api.mtStatus().then((m) => alive && setMt(m)).catch(() => {})
+    }, 10000)
 
     return () => {
       alive = false
@@ -101,8 +140,10 @@ export default function App() {
     setError('')
     try {
       const next = await action()
-      if (next) setStatus(next)
+      if (next?.running !== undefined || next?.mode) setStatus(next)
+      if (next?.status) setStatus(next.status)
       setDesk(await api.desk())
+      setMt(await api.mtStatus())
     } catch (err) {
       setError(err.message || 'Action failed')
     } finally {
@@ -122,6 +163,8 @@ export default function App() {
 
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
+  const mtOnline = Boolean(mt?.online || mt?.mt_online)
+  const gold = ticks.XAUUSD
 
   return (
     <div className="app">
@@ -131,14 +174,27 @@ export default function App() {
             JM <span>Forex</span>
           </h1>
           <div className="mode-chip">
-            {status?.running ? 'Gold desk live' : 'Engine paused'} · XAUUSD paper
+            {status?.running ? 'Desk live' : 'Paused'} · {mode.toUpperCase()}
+            {mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''}
           </div>
         </div>
         <p>
-          Recommended stack: session + news blackout + EMA/ADX/RSI confluence with
-          ATR risk — built for Gold vs USD.
+          XAUUSD automation with MT4/MT5 bridge, confluence strategy, and live
+          candle view.
         </p>
         <div className="controls">
+          <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
+            <option value="paper">paper</option>
+            <option value="mt4">mt4</option>
+            <option value="mt5">mt5</option>
+          </select>
+          <button
+            className="btn-ghost"
+            disabled={busy}
+            onClick={() => run(() => api.setExecutionMode(mode))}
+          >
+            Apply mode
+          </button>
           <select
             value={strategy}
             onChange={(e) => setStrategy(e.target.value)}
@@ -172,18 +228,6 @@ export default function App() {
           >
             Stop
           </button>
-          <button
-            className="btn-ghost"
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                await api.setStrategy(strategy)
-                return api.status()
-              })
-            }
-          >
-            Apply strategy
-          </button>
         </div>
         {error ? <div className="error-banner">{error}</div> : null}
         <div className="status-row">
@@ -191,9 +235,9 @@ export default function App() {
           <span>Session: {sessionTier}</span>
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>
-            MT4:{' '}
-            {mt4?.online ? 'online' : mt4?.configured ? 'offline' : 'not configured'}
+            MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
           </span>
+          {gold ? <span>XAUUSD {gold.mid}</span> : null}
         </div>
       </header>
 
@@ -218,65 +262,35 @@ export default function App() {
         </div>
       </section>
 
+      <section className="chart-panel">
+        <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
+      </section>
+
       <div className="layout">
         <section className="panel">
-          <h2>Desk filters</h2>
-          {desk ? (
-            <div className="signal-list">
-              <div className="signal">
-                <span className={`side ${sessionTier === 'avoid' ? 'sell' : 'buy'}`}>
-                  {sessionTier}
-                </span>
+          <h2>MT4 / MT5</h2>
+          <div className="signal-list">
+            <div className="signal">
+              <span className={`side ${mtOnline ? 'buy' : 'sell'}`}>
+                {mtOnline ? 'ON' : 'OFF'}
+              </span>
+              <div>
                 <div>
-                  <div>
-                    <strong>{desk.session.label}</strong>
-                  </div>
-                  <div className="meta">{desk.session.reason}</div>
+                  <strong>{(mt?.platform || mode || 'paper').toUpperCase()}</strong>
+                </div>
+                <div className="meta">
+                  {mt?.bridge_dir || 'Set JM_MT4_BRIDGE_DIR / JM_MT5_BRIDGE_DIR on server'}
+                </div>
+                <div className="meta">
+                  Install EA: mt4/Experts/JM_Forex_Bridge.mq4 or mt5/Experts/JM_Forex_Bridge.mq5
                 </div>
               </div>
-              <div className="signal">
-                <span className={`side ${newsBlocked ? 'sell' : 'buy'}`}>
-                  {newsBlocked ? 'NEWS' : 'OK'}
-                </span>
-                <div>
-                  <div>
-                    <strong>{desk.news.event || 'No blackout'}</strong>
-                  </div>
-                  <div className="meta">{desk.news.reason}</div>
-                </div>
-              </div>
-              <div className="meta" style={{ marginTop: '0.75rem' }}>
-                {(desk.indicators || []).map((item) => (
-                  <div key={item}>· {item}</div>
-                ))}
-              </div>
-              {desk.last_block_reason ? (
-                <div className="meta" style={{ marginTop: '0.75rem', color: '#ffb4b4' }}>
-                  Last block: {desk.last_block_reason}
-                </div>
-              ) : null}
             </div>
-          ) : (
-            <div className="empty">Loading desk filters…</div>
-          )}
-        </section>
-
-        <section className="panel">
-          <h2>Live gold</h2>
-          <div className="tick-grid">
-            {Object.values(ticks).length === 0 ? (
-              <div className="empty">Waiting for XAUUSD ticks…</div>
-            ) : (
-              Object.values(ticks).map((t) => (
-                <div className="tick" key={t.symbol}>
-                  <div className="sym">{t.symbol}</div>
-                  <div className="px">{t.mid}</div>
-                  <div className="spread">
-                    {t.bid} / {t.ask}
-                  </div>
-                </div>
-              ))
-            )}
+            {desk?.last_block_reason ? (
+              <div className="meta" style={{ color: '#ffb4b4' }}>
+                Last block: {desk.last_block_reason}
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -284,7 +298,7 @@ export default function App() {
           <h2>Signals</h2>
           <div className="signal-list">
             {signals.length === 0 ? (
-              <div className="empty">No confluence signals yet.</div>
+              <div className="empty">Waiting for confluence signals…</div>
             ) : (
               signals.map((s, i) => (
                 <div className="signal" key={`${s.timestamp}-${i}`}>
@@ -347,13 +361,12 @@ export default function App() {
       </div>
 
       <p className="footer-note">
-        Part of{" "}
-        <a href="https://jmtechsolution.cloud" style={{ color: "#7dffb3" }}>
+        Part of{' '}
+        <a href="https://jmtechsolution.cloud" style={{ color: '#7dffb3' }}>
           JM TECH SOLUTION
         </a>
-        {" "}
-        · <strong>gold_confluence</strong> · XAUUSD · paper until MT4 bridge is online ·
-        docs/MT4_SETUP.md
+        {' '}
+        · paper / MT4 / MT5 · live candles · gold_confluence
       </p>
     </div>
   )

@@ -3,16 +3,22 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 from app.brokers.market_data import MarketDataSimulator
+from app.brokers.mt_bridge import resolve_mt_bridge
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
+from app.engine.candles import CandleAggregator
 from app.models.domain import (
+    AccountSnapshot,
     EngineStatus,
     Order,
     OrderRequest,
+    OrderStatus,
     Position,
+    PositionStatus,
+    Side,
     Signal,
     Tick,
 )
@@ -24,16 +30,22 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 
 class TradingEngine:
-    """Orchestrates market data → strategy → risk → paper broker."""
+    """Orchestrates market data → strategy → risk → paper/MT broker + candles."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.broker = PaperBroker(settings.initial_balance, settings.base_currency)
+        self.paper = PaperBroker(settings.initial_balance, settings.base_currency)
+        self.broker = self.paper  # compat for older callers
         self.risk = RiskManager(settings)
         self.market = MarketDataSimulator(settings.symbols)
         self.strategy: Strategy = create_strategy(settings.default_strategy)
+        self.candles = CandleAggregator(
+            period_seconds=settings.candle_period_seconds,
+            maxlen=settings.candle_history,
+        )
+        self.mt, detected = resolve_mt_bridge(settings)
+        self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
         self.running = False
-        self.mode = "paper"
         self.ticks_processed = 0
         self.last_tick_at = None
         self._started_at: float | None = None
@@ -42,6 +54,7 @@ class TradingEngine:
         self._recent_signals: deque[Signal] = deque(maxlen=100)
         self._recent_ticks: dict[str, Tick] = {}
         self._lock = asyncio.Lock()
+        self._mt_platform = detected
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -56,6 +69,20 @@ class TradingEngine:
             result = listener(message)
             if asyncio.iscoroutine(result):
                 await result
+
+    def set_execution_mode(self, mode: str) -> None:
+        mode = mode.lower().strip()
+        if mode not in {"paper", "mt4", "mt5"}:
+            raise ValueError("mode must be paper, mt4, or mt5")
+        self.mode = mode
+        self.settings.execution_mode = mode
+        self.mt, self._mt_platform = resolve_mt_bridge(self.settings)
+
+    def mt_online(self) -> bool:
+        return bool(self.mt and self.mt.is_online())
+
+    def using_mt(self) -> bool:
+        return self.mode in {"mt4", "mt5"} and self.mt_online()
 
     async def start(self) -> None:
         if self.running:
@@ -91,11 +118,39 @@ class TradingEngine:
             uptime_seconds=round(uptime, 1),
         )
 
+    def connection_info(self) -> dict:
+        return {
+            "mode": self.mode,
+            "mt_configured": self.mt is not None,
+            "mt_online": self.mt_online(),
+            "mt_platform": self.mode if self.mode in {"mt4", "mt5"} else self._mt_platform,
+            "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
+            "using_live_feed": self.using_mt(),
+            "candle_period_seconds": self.candles.period_seconds,
+        }
+
     def recent_signals(self) -> list[Signal]:
         return list(self._recent_signals)
 
     def latest_ticks(self) -> list[Tick]:
         return list(self._recent_ticks.values())
+
+    def candle_history(self, symbol: str | None = None, limit: int = 200) -> list:
+        symbol = (symbol or self.settings.symbols[0]).upper()
+        return [c.model_dump(mode="json") for c in self.candles.history(symbol, limit)]
+
+    def account_snapshot(self) -> AccountSnapshot:
+        if self.using_mt():
+            return self.mt.snapshot()
+        return self.paper.snapshot()
+
+    def open_positions(self) -> list[Position]:
+        if self.using_mt():
+            return self.mt.open_positions()
+        return self.paper.open_positions()
+
+    def _balance(self) -> float:
+        return self.account_snapshot().balance
 
     async def manual_order(self, request: OrderRequest) -> Order:
         async with self._lock:
@@ -103,11 +158,29 @@ class TradingEngine:
 
     async def close_position(self, position_id: str) -> Position | None:
         async with self._lock:
-            closed = self.broker.close_position(position_id, reason="manual")
+            if self.using_mt():
+                ack = self.mt.close_all()
+                await self._emit("account", self.account_snapshot().model_dump(mode="json"))
+                await self._emit(
+                    "positions",
+                    [p.model_dump(mode="json") for p in self.open_positions()],
+                )
+                if not ack.ok:
+                    return None
+                return Position(
+                    id=position_id,
+                    symbol=self.settings.symbols[0],
+                    side=Side.BUY,
+                    lots=0.0,
+                    entry_price=0.0,
+                    status=PositionStatus.CLOSED,
+                    close_reason="mt_close",
+                )
+            closed = self.paper.close_position(position_id, reason="manual")
             if closed:
                 self.risk.record_realized_pnl(closed.realized_pnl)
                 await self._emit("position_closed", closed.model_dump(mode="json"))
-                await self._emit("account", self.broker.snapshot().model_dump(mode="json"))
+                await self._emit("account", self.paper.snapshot().model_dump(mode="json"))
             return closed
 
     async def _loop(self) -> None:
@@ -118,17 +191,30 @@ class TradingEngine:
         except asyncio.CancelledError:
             raise
 
+    async def _next_ticks(self) -> list[Tick]:
+        if self.using_mt():
+            tick = self.mt.read_tick()
+            return [tick] if tick else []
+        return self.market.next_ticks()
+
     async def _tick_once(self) -> None:
         async with self._lock:
-            ticks = self.market.next_ticks()
+            ticks = await self._next_ticks()
             for tick in ticks:
                 self.ticks_processed += 1
                 self.last_tick_at = tick.timestamp
                 self._recent_ticks[tick.symbol] = tick
-                closed = self.broker.update_tick(tick)
-                for position in closed:
-                    self.risk.record_realized_pnl(position.realized_pnl)
-                    await self._emit("position_closed", position.model_dump(mode="json"))
+
+                if not self.using_mt():
+                    closed = self.paper.update_tick(tick)
+                    for position in closed:
+                        self.risk.record_realized_pnl(position.realized_pnl)
+                        await self._emit("position_closed", position.model_dump(mode="json"))
+
+                closed_candle, forming = self.candles.update(tick)
+                if closed_candle is not None:
+                    await self._emit("candle_closed", closed_candle.model_dump(mode="json"))
+                await self._emit("candle", forming.model_dump(mode="json"))
 
                 signal = self.strategy.on_tick(tick)
                 if signal:
@@ -138,23 +224,25 @@ class TradingEngine:
 
                 await self._emit("tick", tick.model_dump(mode="json"))
 
-            await self._emit("account", self.broker.snapshot().model_dump(mode="json"))
+            await self._emit("account", self.account_snapshot().model_dump(mode="json"))
             await self._emit(
                 "positions",
-                [p.model_dump(mode="json") for p in self.broker.open_positions()],
+                [p.model_dump(mode="json") for p in self.open_positions()],
             )
+            await self._emit("connection", self.connection_info())
 
     async def _handle_signal(self, signal: Signal, tick: Tick) -> None:
-        # Close opposite exposure first
-        for position in self.broker.open_positions():
+        for position in self.open_positions():
             if position.symbol == signal.symbol and position.side != signal.side:
-                closed = self.broker.close_position(position.id, reason="signal_reverse")
-                if closed:
-                    self.risk.record_realized_pnl(closed.realized_pnl)
-                    await self._emit("position_closed", closed.model_dump(mode="json"))
+                if self.using_mt():
+                    self.mt.close_all()
+                else:
+                    closed = self.paper.close_position(position.id, reason="signal_reverse")
+                    if closed:
+                        self.risk.record_realized_pnl(closed.realized_pnl)
+                        await self._emit("position_closed", closed.model_dump(mode="json"))
 
-        # Skip if already aligned
-        for position in self.broker.open_positions():
+        for position in self.open_positions():
             if position.symbol == signal.symbol and position.side == signal.side:
                 return
 
@@ -163,11 +251,10 @@ class TradingEngine:
             side=signal.side,
             lots=0.10,
             strategy=signal.strategy,
-            comment=signal.reason,
+            comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
         )
-        # If strategy only provided pip distances, convert using risk helper
         if request.stop_loss is None and signal.stop_loss_pips and tick:
             pip = self.risk.pip_size(signal.symbol)
             entry = tick.ask if signal.side.value == "BUY" else tick.bid
@@ -185,13 +272,11 @@ class TradingEngine:
         tick = tick or self._recent_ticks.get(request.symbol)
         decision = self.risk.evaluate(
             request,
-            balance=self.broker.balance,
-            open_positions=self.broker.open_positions(),
+            balance=self._balance(),
+            open_positions=self.open_positions(),
             tick=tick,
         )
         if not decision.approved:
-            from app.models.domain import OrderStatus
-
             rejected = Order(
                 symbol=request.symbol,
                 side=request.side,
@@ -210,11 +295,28 @@ class TradingEngine:
             request.take_profit = request.take_profit or tp
 
         request.lots = decision.adjusted_lots or request.lots
-        order = self.broker.place_order(request)
+
+        if self.using_mt():
+            order = self.mt.place_order(request)
+        else:
+            if self.mode in {"mt4", "mt5"} and not self.mt_online():
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA",
+                )
+                await self._emit("order", rejected.model_dump(mode="json"))
+                return rejected
+            order = self.paper.place_order(request)
+
         await self._emit("order", order.model_dump(mode="json"))
-        await self._emit("account", self.broker.snapshot().model_dump(mode="json"))
+        await self._emit("account", self.account_snapshot().model_dump(mode="json"))
         await self._emit(
             "positions",
-            [p.model_dump(mode="json") for p in self.broker.open_positions()],
+            [p.model_dump(mode="json") for p in self.open_positions()],
         )
         return order

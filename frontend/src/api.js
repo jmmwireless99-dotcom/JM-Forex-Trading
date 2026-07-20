@@ -17,7 +17,12 @@ export const api = {
   health: () => request('/health'),
   status: () => request('/status'),
   desk: () => request('/desk'),
-  mt4Status: () => request('/mt4/status'),
+  mtStatus: () => request('/mt/status'),
+  mt4Status: () => request('/mt/status'),
+  setExecutionMode: (mode) =>
+    request('/execution/mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  candles: (symbol = 'XAUUSD', limit = 200) =>
+    request(`/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
   account: () => request('/account'),
   positions: () => request('/positions'),
   orders: () => request('/orders'),
