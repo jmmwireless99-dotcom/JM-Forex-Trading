@@ -1,4 +1,5 @@
-const API = '/api'
+const BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+const API = `${BASE}api`
 
 async function request(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -42,7 +43,8 @@ export const api = {
 
 export function connectFeed(onMessage) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${window.location.host}/api/ws`)
+  const wsPath = `${BASE}api/ws`.replace(/\/{2,}/g, '/')
+  const ws = new WebSocket(`${proto}://${window.location.host}${wsPath}`)
   ws.onmessage = (evt) => {
     try {
       onMessage(JSON.parse(evt.data))
