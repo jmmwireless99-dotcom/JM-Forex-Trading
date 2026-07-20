@@ -223,7 +223,11 @@ export default function App() {
           <Text style={styles.meta}>{rec?.reason || 'Waiting for session recommendation…'}</Text>
           <View style={styles.actions}>
             <Text style={styles.meta}>
-              ON = kusang lilipat: Asia→asia_range_scalp · London/NY→confluence/ATR
+              Active now:{' '}
+              {(rec?.session || desk?.session?.label || '—').replace(/_/g, ' ')} session
+              {auto?.enabled
+                ? ` · ${status?.active_strategy || rec?.transfer_to || '—'}`
+                : ' · auto follow OFF'}
             </Text>
             <Btn
               title="Auto transfer (session follow)"

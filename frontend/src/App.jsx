@@ -32,6 +32,21 @@ function normalizeStrategy(label) {
   return label
 }
 
+function sessionLabel(raw) {
+  const key = String(raw || '').toLowerCase()
+  const map = {
+    asia: 'Asia / Tokyo',
+    london: 'London',
+    london_ny_overlap: 'London / NY overlap',
+    new_york: 'New York',
+    friday_late: 'Friday late',
+    weekend: 'Weekend',
+    off_hours: 'Off-hours',
+    asia_off: 'Asia / off',
+  }
+  return map[key] || (raw ? String(raw).replace(/_/g, ' ') : '—')
+}
+
 export default function App() {
   const [status, setStatus] = useState(null)
   const [desk, setDesk] = useState(null)
@@ -362,16 +377,27 @@ export default function App() {
             {autoInfo.decision.reason}
           </div>
         ) : null}
-        {(desk?.recommended_now || autoInfo?.recommended) && (
+        {(desk?.recommended_now || autoInfo?.recommended) && (() => {
+          const rec = desk?.recommended_now || autoInfo?.recommended || {}
+          const activeSession =
+            autoInfo?.session_slot ||
+            autoInfo?.decision?.slot ||
+            rec.session ||
+            desk?.session?.label
+          const activeStrat =
+            (status?.active_strategy || '').includes('→')
+              ? status.active_strategy.split('→')[1]
+              : status?.active_strategy ||
+                rec.transfer_to ||
+                rec.strategy ||
+                autoInfo?.active_strategy ||
+                '—'
+          return (
           <div className="recommend-box">
-            <strong>Session follow</strong>
+            <strong>Active session</strong>
             <span>
-              {(desk?.recommended_now || autoInfo?.recommended)?.session || '—'} ·{' '}
-              <code>
-                {(desk?.recommended_now || autoInfo?.recommended)?.transfer_to ||
-                  (desk?.recommended_now || autoInfo?.recommended)?.strategy ||
-                  'stand aside'}
-              </code>
+              {sessionLabel(activeSession)} ·{' '}
+              <code>{activeStrat}</code>
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
@@ -380,8 +406,10 @@ export default function App() {
               <span className="meta">Last transfer: {autoInfo.last_transfer}</span>
             ) : null}
             <span className="meta">
-              Kapag ON: Asia → asia_range_scalp · London/NY → confluence/ATR ·
-              kusang lilipat pag bumago ang session.
+              Active now: {sessionLabel(activeSession)} session
+              {autoInfo?.enabled
+                ? ` · following with ${activeStrat}`
+                : ' · auto follow OFF'}
             </span>
             {!autoInfo?.enabled ? (
               <button
@@ -393,10 +421,13 @@ export default function App() {
                 I-ON ang Auto transfer (session follow)
               </button>
             ) : (
-              <span className="mode-chip">Auto transfer ON · session follow</span>
+              <span className="mode-chip">
+                Auto ON · {sessionLabel(activeSession)}
+              </span>
             )}
           </div>
-        )}
+          )
+        })()}
       </header>
 
       <section className="metrics" aria-label="Account metrics">
