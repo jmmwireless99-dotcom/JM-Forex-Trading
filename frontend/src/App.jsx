@@ -220,6 +220,14 @@ export default function App() {
     await run(async () => api.setStrategy(strategy))
   }
 
+  async function autoTransfer() {
+    await run(async () => {
+      const result = await api.autoTransfer()
+      if (result?.to) clearStrategyDirty('auto_gold')
+      return result
+    })
+  }
+
   async function onClose(id) {
     await run(async () => {
       await api.closePosition(id)
@@ -300,6 +308,14 @@ export default function App() {
           <button
             className="btn-primary"
             disabled={busy}
+            onClick={() => autoTransfer()}
+            title="Enable auto_gold and transfer to the strategy recommended for this session"
+          >
+            Auto transfer
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={busy}
             onClick={() =>
               run(async () => {
                 await api.setStrategy(strategy)
@@ -339,6 +355,34 @@ export default function App() {
             {autoInfo.decision.reason}
           </div>
         ) : null}
+        {(desk?.recommended_now || autoInfo?.recommended) && (
+          <div className="recommend-box">
+            <strong>Recommended now</strong>
+            <span>
+              {(desk?.recommended_now || autoInfo?.recommended)?.session || '—'} ·{' '}
+              <code>
+                {(desk?.recommended_now || autoInfo?.recommended)?.transfer_to ||
+                  (desk?.recommended_now || autoInfo?.recommended)?.strategy ||
+                  'stand aside'}
+              </code>
+            </span>
+            <span className="meta">
+              {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
+            </span>
+            {!autoInfo?.enabled ? (
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={() => autoTransfer()}
+              >
+                Transfer to auto / recommended
+              </button>
+            ) : (
+              <span className="mode-chip">Auto transfer ON</span>
+            )}
+          </div>
+        )}
       </header>
 
       <section className="metrics" aria-label="Account metrics">

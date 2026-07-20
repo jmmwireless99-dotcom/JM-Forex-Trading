@@ -42,6 +42,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+  recommended: () => request('/strategies/recommended'),
+  autoTransfer: () =>
+    request('/strategies/auto-transfer', { method: 'POST' }),
   placeOrder: (body) =>
     request('/orders', { method: 'POST', body: JSON.stringify(body) }),
   closePosition: (id) =>

@@ -251,8 +251,32 @@ class TradingEngine:
             "signal_timeframe": f"M{max(1, self.signal_candles.period_seconds // 60)}",
         }
 
+    def _signal_prices(self, symbol: str | None = None) -> list[float]:
+        symbol = (symbol or self.settings.symbols[0]).upper()
+        bars = self.signal_candles.closed_history(symbol, 200)
+        if bars:
+            return [c.close for c in bars]
+        if "gold_confluence" in self._strategies:
+            return self._strategies["gold_confluence"].prices(symbol)
+        return []
+
+    def recommended_now(self) -> dict:
+        """Session + regime recommended strategy for the desk clock."""
+        ts = self.last_tick_at or utcnow()
+        prices = self._signal_prices()
+        rec = self.auto_router.recommend(ts, prices)
+        return {
+            **rec,
+            "auto_enabled": self.auto_enabled,
+            "current_strategy": self.active_name,
+            "display": (
+                f"auto_gold→{self.active_name}" if self.auto_enabled else self.active_name
+            ),
+        }
+
     def auto_status(self) -> dict:
         decision = self.auto_router.last_decision
+        rec = self.recommended_now()
         return {
             "enabled": self.auto_enabled,
             "active_strategy": self.active_name,
@@ -260,7 +284,38 @@ class TradingEngine:
                 f"auto_gold→{self.active_name}" if self.auto_enabled else self.active_name
             ),
             "decision": decision.as_dict() if decision else None,
+            "recommended": rec,
             "schedule": self.auto_router.schedule_table(),
+        }
+
+    async def auto_transfer(self, *, start_engine: bool = True) -> dict:
+        """Enable auto_gold and immediately transfer to session-recommended strategy."""
+        self.set_strategy(AutoStrategyRouter.name)
+        rec = self.recommended_now()
+        target = rec.get("transfer_to") or rec.get("strategy") or "gold_confluence"
+        if target in self._strategies or target in STRATEGY_REGISTRY:
+            if target not in self._strategies:
+                self._strategies[target] = create_strategy(target, managed_by_auto=True)
+            # Keep auto_enabled True while parking on the session pick.
+            self.active_name = target
+            self.strategy = self._strategies[target]
+            self._last_strategy_switch_at = time.time()
+            self._last_auto_key = None
+        if start_engine and not self.running:
+            await self.start()
+        status = self.status().model_dump(mode="json")
+        auto = self.auto_status()
+        await self._emit("engine", status)
+        await self._emit("auto", auto)
+        return {
+            "ok": True,
+            "transferred": True,
+            "auto_enabled": True,
+            "to": target,
+            "recommended": rec,
+            "status": status,
+            "auto": auto,
+            **status,
         }
 
     def _arm_entry_cooldown(self) -> None:

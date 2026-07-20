@@ -240,6 +240,96 @@ class AutoStrategyRouter:
 
         return "gold_confluence", "Default gold confluence"
 
+    def session_default(self, ts: datetime) -> dict:
+        """Recommended strategy from session clock alone (before regime refine)."""
+        utc = ts.astimezone(timezone.utc)
+        session = classify_session(utc)
+        day = DAY_NAMES[utc.weekday()]
+        hour = utc.hour
+
+        if session.tier == SessionTier.AVOID or (utc.weekday() == 4 and hour >= 18):
+            return {
+                "session": session.label,
+                "tier": session.tier.value,
+                "day": day,
+                "hour_utc": hour,
+                "strategy": None,
+                "mode": "stand_aside",
+                "reason": session.reason
+                if session.tier == SessionTier.AVOID
+                else "Friday after 18:00 UTC — no new gold trades",
+            }
+        if session.tier == SessionTier.ASIA:
+            return {
+                "session": session.label,
+                "tier": session.tier.value,
+                "day": day,
+                "hour_utc": hour,
+                "strategy": "asia_range_scalp",
+                "mode": "auto_transfer",
+                "reason": "Asia/Tokyo ranging window — asia_range_scalp",
+            }
+        if session.tier == SessionTier.PRIME:
+            return {
+                "session": session.label,
+                "tier": session.tier.value,
+                "day": day,
+                "hour_utc": hour,
+                "strategy": "gold_atr_trend",
+                "mode": "auto_transfer",
+                "reason": "London/NY overlap — prefer gold_atr_trend (regime may switch to confluence)",
+            }
+        if session.label == "london":
+            return {
+                "session": session.label,
+                "tier": session.tier.value,
+                "day": day,
+                "hour_utc": hour,
+                "strategy": "gold_confluence",
+                "mode": "auto_transfer",
+                "reason": "London session — gold_confluence (ATR if strong trend)",
+            }
+        if session.label == "new_york":
+            return {
+                "session": session.label,
+                "tier": session.tier.value,
+                "day": day,
+                "hour_utc": hour,
+                "strategy": "gold_atr_trend" if hour < 18 else "gold_confluence",
+                "mode": "auto_transfer",
+                "reason": "New York session — ATR/confluence by regime",
+            }
+        return {
+            "session": session.label,
+            "tier": session.tier.value,
+            "day": day,
+            "hour_utc": hour,
+            "strategy": "gold_confluence",
+            "mode": "auto_transfer",
+            "reason": "Default — gold_confluence",
+        }
+
+    def recommend(self, ts: datetime, prices: list[float]) -> dict:
+        """Full recommendation: session default refined by live regime decision."""
+        base = self.session_default(ts)
+        decision = self.decide(ts, prices)
+        return {
+            **base,
+            "regime": decision.regime.value,
+            "allow_trading": decision.allow_trading,
+            "strategy": decision.strategy if decision.allow_trading else base.get("strategy"),
+            "active_pick": decision.strategy,
+            "stand_aside": not decision.allow_trading,
+            "reason": decision.reason,
+            "adx": decision.adx,
+            "atr": decision.atr,
+            "transfer_to": (
+                decision.strategy
+                if decision.allow_trading and decision.strategy
+                else base.get("strategy")
+            ),
+        }
+
     def schedule_table(self) -> list[dict]:
         """Human-readable weekly plan for the dashboard."""
         return [

@@ -126,6 +126,7 @@ async def desk() -> dict:
     return {
         "symbol": "XAUUSD",
         "recommended_strategy": "auto_gold",
+        "recommended_now": engine.recommended_now(),
         "active_strategy": engine.status().active_strategy,
         "auto": engine.auto_status(),
         "connection": engine.connection_info(),
@@ -202,6 +203,19 @@ async def list_strategies() -> dict:
 @router.get("/auto")
 async def auto_status() -> dict:
     return get_engine().auto_status()
+
+
+@router.get("/strategies/recommended")
+async def recommended_strategy() -> dict:
+    """Recommended strategy for the current session time (+ regime)."""
+    return get_engine().recommended_now()
+
+
+@router.post("/strategies/auto-transfer")
+async def auto_transfer_strategy() -> dict:
+    """Turn on auto_gold and transfer to the session-recommended strategy."""
+    engine = get_engine()
+    return await engine.auto_transfer(start_engine=True)
 
 
 @router.post("/strategies/active")

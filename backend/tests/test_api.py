@@ -95,3 +95,27 @@ async def test_apply_strategy_switches_and_disables_auto(client):
     body = res.json()
     assert body["active_strategy"].startswith("auto_gold")
     assert body["auto"]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_transfer_enables_session_strategy(client):
+    # Leave manual mode first
+    await client.post("/api/strategies/active", json={"name": "ema_crossover"})
+    res = await client.get("/api/strategies/recommended")
+    assert res.status_code == 200
+    rec = res.json()
+    assert "session" in rec
+    assert "reason" in rec
+
+    res = await client.post("/api/strategies/auto-transfer")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["auto_enabled"] is True
+    assert body["transferred"] is True
+    assert body["active_strategy"].startswith("auto_gold")
+    assert body["to"] in {
+        "gold_confluence",
+        "gold_atr_trend",
+        "asia_range_scalp",
+    }
