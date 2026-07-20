@@ -40,6 +40,7 @@ _AUTO_POOL = (
     "gold_confluence",
     "gold_atr_trend",
     "gold_sr_scalp",
+    "asia_sr_scalp",
     "asia_range_scalp",
 )
 

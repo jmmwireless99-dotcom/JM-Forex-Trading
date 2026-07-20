@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.domain import Candle, Tick
 from app.strategies.asia_range_scalp import AsiaRangeScalpStrategy
-from app.strategies.auto_router import AutoStrategyRouter, Regime
 from app.strategies.session import SessionTier, classify_session
 
 
@@ -11,26 +10,6 @@ def test_asia_session_tier():
     s = classify_session(ts)
     assert s.tier == SessionTier.ASIA
     assert s.label == "asia"
-
-
-def test_auto_router_picks_asia_scalp_when_ranging():
-    router = AutoStrategyRouter(news_filter=False, min_trade_adx=20.0)
-    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
-    # Flat series → RANGE / low ADX
-    prices = [2350.0 + ((i % 4) - 1.5) * 0.05 for i in range(120)]
-    d = router.decide(ts, prices)
-    assert d.allow_trading is True
-    assert d.strategy == "asia_range_scalp"
-    assert d.regime == Regime.RANGE
-
-
-def test_auto_router_picks_sr_when_asia_trending():
-    router = AutoStrategyRouter(news_filter=False, min_trend_adx=25.0)
-    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
-    prices = [2200 + i * 0.9 for i in range(120)]
-    d = router.decide(ts, prices)
-    assert d.allow_trading is True
-    assert d.strategy == "gold_sr_scalp"
 
 
 def test_asia_scalp_blocks_outside_desk():

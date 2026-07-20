@@ -46,8 +46,8 @@ class AutoStrategyRouter:
     Default (JM_ASIA_DESK_ONLY=true) — PH daytime Asia scalp desk:
       Entries on closed M5 bars only.
       Mon–Fri PH 07:00–19:00 (UTC 23:00–11:00)
-        RANGE     → asia_range_scalp (Donchian/RSI fade)
-        else      → gold_sr_scalp (S/R supply-demand)
+        RECOMMENDED → asia_sr_scalp (M5 Support/Resistance fade)
+        VOLATILE    → stand aside
       Outside desk / weekend / news → no new trades
 
     Full map (JM_ASIA_DESK_ONLY=false) restores London/NY trend + S/R schedule.
@@ -110,7 +110,7 @@ class AutoStrategyRouter:
             self.last_decision = decision
             return decision
 
-        # Asia scalp desk — range fade or S/R supply-demand (no London/NY trend tools)
+        # Asia scalp desk — recommended: M5 Support/Resistance fade
         if session.tier == SessionTier.ASIA:
             if regime == Regime.VOLATILE:
                 decision = AutoDecision(
@@ -126,35 +126,17 @@ class AutoStrategyRouter:
                     adx_v,
                     atr_v,
                 )
-            elif regime == Regime.RANGE or (
-                regime == Regime.PULLBACK
-                and (adx_v is None or adx_v <= self.min_trade_adx)
-            ):
-                decision = AutoDecision(
-                    True,
-                    "asia_range_scalp",
-                    Regime.RANGE if regime == Regime.RANGE else regime,
-                    session.label,
-                    day,
-                    utc.weekday(),
-                    hour,
-                    session.tier.value,
-                    "Asia desk ranging — Donchian/RSI fade scalp",
-                    adx_v,
-                    atr_v,
-                )
             else:
-                # Pullback / mild trend → fade S/R zones instead of chasing
                 decision = AutoDecision(
                     True,
-                    "gold_sr_scalp",
+                    "asia_sr_scalp",
                     regime,
                     session.label,
                     day,
                     utc.weekday(),
                     hour,
                     session.tier.value,
-                    "Asia desk — S/R supply-demand scalp",
+                    "Asia recommended: M5 Support/Resistance scalp (asia_sr_scalp)",
                     adx_v,
                     atr_v,
                 )
@@ -288,9 +270,13 @@ class AutoStrategyRouter:
                 "tier": session.tier.value,
                 "day": day,
                 "hour_utc": hour,
-                "strategy": "asia_range_scalp",
+                "strategy": "asia_sr_scalp",
                 "mode": "auto_transfer",
-                "reason": "Asia scalp desk (PH 7AM–7PM) — asia_range_scalp / gold_sr_scalp",
+                "recommended": True,
+                "reason": (
+                    "Asia recommended (PH 7AM–7PM): asia_sr_scalp — "
+                    "M5 Support/Resistance fade"
+                ),
             }
         if session.tier == SessionTier.PRIME:
             return {
@@ -370,8 +356,8 @@ class AutoStrategyRouter:
                     "utc": "23:00–11:00 (PH 7:00AM–7:00PM)",
                     "slot": "Asia scalp desk",
                     "strategies": (
-                        "asia_range_scalp (range/RSI fade) · "
-                        "gold_sr_scalp (S/R supply-demand) · FLAT if volatile"
+                        "RECOMMENDED: asia_sr_scalp — M5 Support/Resistance fade · "
+                        "FLAT if volatile"
                     ),
                 },
                 {

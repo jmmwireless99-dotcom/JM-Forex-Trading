@@ -304,6 +304,7 @@ export default function App() {
               ? strategies
               : [
                   'auto_gold',
+                  'asia_sr_scalp',
                   'gold_confluence',
                   'gold_atr_trend',
                   'gold_sr_scalp',
@@ -314,12 +315,14 @@ export default function App() {
             ).map((name) => (
               <option key={name} value={name}>
                 {name === 'auto_gold'
-                  ? 'auto_gold (recommended)'
-                  : name === 'asia_range_scalp'
-                    ? 'asia_range_scalp (Asia ranging)'
-                    : name === 'gold_sr_scalp'
-                      ? 'gold_sr_scalp (S/R supply-demand)'
-                      : name}
+                  ? 'auto_gold (Asia desk)'
+                  : name === 'asia_sr_scalp'
+                    ? 'asia_sr_scalp (RECOMMENDED · M5 S/R)'
+                    : name === 'asia_range_scalp'
+                      ? 'asia_range_scalp (Asia Donchian)'
+                      : name === 'gold_sr_scalp'
+                        ? 'gold_sr_scalp (S/R supply-demand)'
+                        : name}
               </option>
             ))}
           </select>
@@ -335,7 +338,7 @@ export default function App() {
             className="btn-primary"
             disabled={busy}
             onClick={() => autoTransfer()}
-            title="ON = kusang lilipat ng Asia scalp strategy (range ↔ S/R) habang PH 7AM–7PM"
+            title="ON = Auto follow Asia recommended: asia_sr_scalp (M5 S/R) PH 7AM–7PM"
           >
             Auto transfer
           </button>
@@ -402,6 +405,9 @@ export default function App() {
             <span>
               {sessionLabel(activeSession)} ·{' '}
               <code>{activeStrat}</code>
+            </span>
+            <span className="meta">
+              Recommended Asia: <code>asia_sr_scalp</code> · M5 Support/Resistance
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
