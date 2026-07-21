@@ -39,7 +39,7 @@ def _bootstrap_database() -> None:
         if settings.database_seed_on_boot:
             from app.db.seed import seed_strategies
 
-            result = seed_strategies()
+            result = seed_strategies(force_update=True)
             log.info("strategy seed: %s", result)
     except Exception:  # noqa: BLE001
         log.exception("database bootstrap failed — continuing without DB")
