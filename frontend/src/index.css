@@ -345,6 +345,55 @@ select {
   animation: rise 850ms 100ms ease both;
 }
 
+.chart-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.chart-mode-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.chart-mode-btn.on {
+  color: var(--ink);
+  background: var(--mint);
+  border-color: var(--mint);
+}
+
+.chart-mode-hint {
+  flex: 1 1 200px;
+}
+
+.tv-chart-wrap {
+  min-height: 480px;
+}
+
+.tv-chart-canvas {
+  width: 100%;
+  height: min(58vh, 520px);
+  min-height: 360px;
+}
+
+.tradingview-widget-copyright {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: right;
+  padding-top: 0.25rem;
+}
+
+.tradingview-widget-copyright a {
+  color: var(--mint);
+}
+
 .chart-wrap {
   border: 1px solid var(--line);
   background: var(--panel);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, connectFeed } from './api'
 import CandleChart from './CandleChart'
+import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
 
 const emptyAccount = {
@@ -94,6 +95,7 @@ export default function App() {
   const [manualLots, setManualLots] = useState(0.01)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
+  const [chartMode, setChartMode] = useState('tradingview') // tradingview | desk
 
   useEffect(() => {
     let alive = true
@@ -524,7 +526,32 @@ export default function App() {
       </section>
 
       <section className="chart-panel">
-        <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
+        <div className="chart-mode-bar">
+          <button
+            type="button"
+            className={`chart-mode-btn ${chartMode === 'tradingview' ? 'on' : ''}`}
+            onClick={() => setChartMode('tradingview')}
+          >
+            TradingView (live gold)
+          </button>
+          <button
+            type="button"
+            className={`chart-mode-btn ${chartMode === 'desk' ? 'on' : ''}`}
+            onClick={() => setChartMode('desk')}
+          >
+            Desk tape ({mode})
+          </button>
+          <span className="meta chart-mode-hint">
+            {chartMode === 'tradingview'
+              ? 'Real XAUUSD market chart · strategies still use paper/MT feed'
+              : 'Engine candles — paper sim or MT bridge when online'}
+          </span>
+        </div>
+        {chartMode === 'tradingview' ? (
+          <TradingViewGoldChart symbol="OANDA:XAUUSD" interval="5" />
+        ) : (
+          <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
+        )}
       </section>
 
       <div className="layout">
