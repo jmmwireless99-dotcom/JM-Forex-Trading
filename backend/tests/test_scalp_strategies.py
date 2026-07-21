@@ -151,12 +151,30 @@ def test_ema_rsi_buy_on_forced_setup():
 
 def test_smc_waits_for_sweep():
     strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
-    bars = _bars(80, now=datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc))
+    # Flat tape — no swing break / no sweep → must stand aside
+    now = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+    bars = []
+    for i in range(80):
+        ts = now - timedelta(minutes=5 * (80 - i))
+        bars.append(
+            Candle(
+                symbol="XAUUSD",
+                open=2350.0,
+                high=2350.2,
+                low=2349.8,
+                close=2350.0,
+                volume=10,
+                period_seconds=300,
+                open_time=ts,
+                timestamp=ts + timedelta(minutes=4, seconds=50),
+                is_closed=True,
+            )
+        )
     tick = Tick(
         symbol="XAUUSD",
-        bid=bars[-1].close - 0.1,
-        ask=bars[-1].close + 0.1,
-        mid=bars[-1].close,
+        bid=2349.9,
+        ask=2350.1,
+        mid=2350.0,
         timestamp=datetime(2026, 7, 21, 14, 5, tzinfo=timezone.utc),
     )
     strat.set_structure_bars(bars)

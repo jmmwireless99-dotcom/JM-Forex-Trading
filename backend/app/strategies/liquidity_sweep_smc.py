@@ -153,17 +153,26 @@ class LiquiditySweepSmcStrategy(Strategy):
             lo = min(c.low for c in prev_day)
             zones.append(Zone("PDH", high=hi, low=hi))
             zones.append(Zone("PDL", high=lo, low=lo))
+        # Recent swing pool — critical when price already left the Asia box
+        recent = bars[-30:] if len(bars) >= 10 else bars
+        if len(recent) >= 8:
+            # Exclude forming extremes of last 2 bars so a sweep can print against them
+            body = recent[:-2]
+            r_hi = max(c.high for c in body)
+            r_lo = min(c.low for c in body)
+            zones.append(Zone("SWING_HIGH", high=r_hi, low=r_hi))
+            zones.append(Zone("SWING_LOW", high=r_lo, low=r_lo))
         return zones, asia, prev_day
 
     def _scan_sweep_on_bar(
         self, bar: Candle, zones: list[Zone], pad: float, day: date
     ) -> SweepMemory | None:
         for z in zones:
-            if z.kind in {"ASIAN_HIGH", "PDH"}:
+            if z.kind in {"ASIAN_HIGH", "PDH", "SWING_HIGH"}:
                 if bar.high > z.high + pad and bar.close < z.high:
                     z.swept = True
                     return SweepMemory("SELL", f"{z.kind} sweep", z.high, bar.timestamp, day)
-            if z.kind in {"ASIAN_LOW", "PDL"}:
+            if z.kind in {"ASIAN_LOW", "PDL", "SWING_LOW"}:
                 if bar.low < z.low - pad and bar.close > z.low:
                     z.swept = True
                     return SweepMemory("BUY", f"{z.kind} sweep", z.low, bar.timestamp, day)
@@ -269,11 +278,18 @@ class LiquiditySweepSmcStrategy(Strategy):
         ]
 
         if self.require_sweep and sweep is None:
-            self.last_block_reason = "Waiting for Asia/PDH-PDL liquidity sweep"
+            # Soft path: MSS alone can start a scalp when recent swing breaks
+            if mss_bias is None:
+                self.last_block_reason = "Waiting for Asia/PDH/swing liquidity sweep"
+                return None
+            bias = mss_bias
+            self.last_block_reason = None
+        elif bias is None:
+            self.last_block_reason = "Sweep locked — waiting MSS/ChoCH"
             return None
 
         if bias is None:
-            self.last_block_reason = "Sweep locked — waiting MSS/ChoCH"
+            self.last_block_reason = "No SMC bias yet"
             return None
 
         # Prefer FVG/OB retest; else momentum candle after sweep+structure
