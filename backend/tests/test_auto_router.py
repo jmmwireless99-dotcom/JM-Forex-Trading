@@ -18,7 +18,7 @@ def test_asia_recommends_sr_scalp():
     prices = [2300.0 + ((i % 3) - 1) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "asia_sr_scalp"
+    assert d.strategy == "asia_m3m5_sr_scalp"
     assert d.slot == "asia"
 
 
@@ -46,7 +46,7 @@ def test_session_default_next_session():
     router = AutoStrategyRouter(news_filter=False)
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)
     rec = router.session_default(ts)
-    assert rec["strategy"] == "asia_sr_scalp"
+    assert rec["strategy"] == "asia_m3m5_sr_scalp"
     assert rec["next_session"]["strategy"] == "gold_confluence"
     assert rec["next_session"]["session"] == "london"
 
@@ -56,6 +56,6 @@ def test_schedule_table_full_desk():
     table = router.schedule_table()
     assert len(table) >= 4
     asia = next(r for r in table if r["slot"] == "Asia")
-    assert "asia_sr_scalp" in asia["strategies"]
+    assert "asia_m3m5_sr_scalp" in asia["strategies"]
     london = next(r for r in table if "London" in r["slot"])
     assert "gold_confluence" in london["strategies"]

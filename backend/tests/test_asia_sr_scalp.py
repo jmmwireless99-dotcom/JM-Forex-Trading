@@ -36,30 +36,21 @@ def test_asia_session_open_for_sr():
     assert classify_session(ts).tier == SessionTier.ASIA
 
 
-def test_auto_router_recommends_asia_sr_scalp():
+def test_auto_router_prefers_m3m5_over_asia_sr():
     router = AutoStrategyRouter(news_filter=False)
     ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     prices = [2350.0 + ((i % 4) - 1.5) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "asia_sr_scalp"
+    assert d.strategy == "asia_m3m5_sr_scalp"
     assert d.regime == Regime.RANGE
 
 
-def test_auto_router_recommends_asia_sr_on_mild_trend():
-    router = AutoStrategyRouter(news_filter=False)
-    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
-    prices = [2200 + i * 0.8 for i in range(120)]
-    d = router.decide(ts, prices)
-    assert d.allow_trading is True
-    assert d.strategy == "asia_sr_scalp"
-
-
-def test_session_default_recommends_asia_sr():
+def test_session_default_recommends_m3m5():
     router = AutoStrategyRouter(news_filter=False)
     ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     rec = router.session_default(ts)
-    assert rec["strategy"] == "asia_sr_scalp"
+    assert rec["strategy"] == "asia_m3m5_sr_scalp"
     assert rec.get("recommended") is True
 
 

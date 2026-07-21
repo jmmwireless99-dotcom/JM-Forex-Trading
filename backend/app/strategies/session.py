@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 
@@ -19,58 +19,66 @@ class SessionWindow:
     reason: str
 
 
-def _ph_hour(utc: datetime) -> int:
+# Asia M3/M5 scalp desk — Philippines local hours
+ASIA_PH_START = 7
+ASIA_PH_END = 17  # exclusive → until 5:00PM
+
+
+def ph_hour(utc: datetime) -> int:
     """Philippines time = UTC+8."""
     return (utc.hour + 8) % 24
 
 
+# Back-compat alias used by older imports
+_ph_hour = ph_hour
+
+
 def classify_asia_desk(ts: datetime) -> SessionWindow:
-    """Asia-only desk: scalp PH 07:00–19:00; flat outside (JM_ASIA_DESK_ONLY)."""
+    """Asia-only desk: scalp PH 07:00–17:00; flat outside (JM_ASIA_DESK_ONLY)."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
-    ph = _ph_hour(utc)
-    if 7 <= ph < 19:
+    ph = ph_hour(utc)
+    if ASIA_PH_START <= ph < ASIA_PH_END:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–7:00PM) — M5 Support/Resistance",
+            "Asia scalp desk (PH 7:00AM–5:00PM) — M3/M5 Support/Resistance",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "outside_asia_desk",
-        "Outside Asia desk hours — next window PH 7:00AM–7:00PM",
+        "Outside Asia desk hours — next window PH 7:00AM–5:00PM",
     )
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map: Asia PH 7AM–7PM, then London → Overlap → NY.
+    """Full desk map: Asia PH 7AM–5PM, then London → Overlap → NY.
 
-    Asia owns UTC 23:00–11:00 (PH daytime) so London morning UTC is Asia scalp.
-    After PH 7PM (UTC 11:00) strategies restore to London/NY tools.
+    Asia owns UTC 23:00–09:00 (PH 7AM–5PM).
+    After PH 5PM (UTC 09:00) strategies restore to London/NY tools.
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
-    ph = _ph_hour(utc)
+    ph = ph_hour(utc)
 
-    # Asia scalp until PH 7PM (covers classic Tokyo + London morning UTC)
-    if 7 <= ph < 19:
+    if ASIA_PH_START <= ph < ASIA_PH_END:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (PH 7:00AM–7:00PM) — M5 S/R scalping",
+            "Asia session (PH 7:00AM–5:00PM) — M3/M5 S/R scalping",
         )
 
-    # After Asia close → late London → overlap → NY
-    if 11 <= hour < 13:
+    # After Asia close → London → overlap → NY
+    if 9 <= hour < 13:
         return SessionWindow(
             SessionTier.ALLOWED,
             "london",
-            "Late London after Asia — directional gold moves",
+            "London after Asia — directional gold moves",
         )
     if 13 <= hour < 16:
         return SessionWindow(
@@ -115,12 +123,8 @@ def next_session_hint(ts: datetime) -> dict:
     """What comes after the current slot — strategy recommendation for planning."""
     utc = ts.astimezone(timezone.utc)
     current = classify_session(utc)
-    # Walk forward hour-by-hour (max 24h) to find the next different label.
     for add in range(1, 25):
         probe_hour = (utc.hour + add) % 24
-        # Build a probe on the same calendar day shift
-        from datetime import timedelta
-
         probe = utc + timedelta(hours=add)
         nxt = classify_session(probe)
         if nxt.label != current.label and nxt.tier != SessionTier.AVOID:
@@ -133,7 +137,6 @@ def next_session_hint(ts: datetime) -> dict:
                 "reason": _recommend_reason(nxt.label),
             }
         if nxt.label != current.label and nxt.tier == SessionTier.AVOID:
-            # Keep scanning toward next tradeable window
             continue
     return {
         "from_session": current.label,
@@ -146,7 +149,7 @@ def next_session_hint(ts: datetime) -> dict:
 
 def _recommended_for_label(label: str, hour_utc: int) -> str | None:
     if label == "asia":
-        return "asia_sr_scalp"
+        return "asia_m3m5_sr_scalp"
     if label == "london":
         return "gold_confluence"
     if label == "london_ny_overlap":
@@ -158,7 +161,7 @@ def _recommended_for_label(label: str, hour_utc: int) -> str | None:
 
 def _recommend_reason(label: str) -> str:
     return {
-        "asia": "Asia BEST: asia_sr_scalp — M5 Support/Resistance fade",
+        "asia": "Asia BEST: asia_m3m5_sr_scalp — M3 entry / M5 S/R (PH 7AM–5PM)",
         "london": "Next BEST: gold_confluence — London pullback/continuation",
         "london_ny_overlap": "Next BEST: gold_atr_trend — prime liquidity trend",
         "new_york": "Next BEST: gold_atr_trend — NY continuation (confluence if late)",

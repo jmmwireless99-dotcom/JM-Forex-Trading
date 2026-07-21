@@ -56,7 +56,7 @@ def test_auto_router_asia_uses_asia_sr_not_gold_sr():
     prices = [2200 + i * 0.9 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "asia_sr_scalp"
+    assert d.strategy == "asia_m3m5_sr_scalp"
     assert d.slot == "asia"
 
 
@@ -66,7 +66,7 @@ def test_auto_router_asia_range_uses_asia_sr():
     prices = [2350.0 + ((i % 4) - 1.5) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "asia_sr_scalp"
+    assert d.strategy == "asia_m3m5_sr_scalp"
     assert d.regime == Regime.RANGE
 
 
@@ -148,7 +148,7 @@ def test_detects_zones_and_exposes_last_zones():
         assert signal.take_profit is not None
 
 
-def test_schedule_mentions_asia_sr_scalp():
+def test_schedule_mentions_asia_m3m5_sr_scalp():
     table = AutoStrategyRouter().schedule_table()
     asia = next(r for r in table if "Asia" in r["slot"])
-    assert "asia_sr_scalp" in asia["strategies"]
+    assert "asia_m3m5_sr_scalp" in asia["strategies"]

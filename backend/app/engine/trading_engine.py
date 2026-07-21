@@ -40,6 +40,7 @@ _AUTO_POOL = (
     "gold_confluence",
     "gold_atr_trend",
     "gold_sr_scalp",
+    "asia_m3m5_sr_scalp",
     "asia_sr_scalp",
     "asia_range_scalp",
 )
@@ -70,7 +71,7 @@ class TradingEngine:
             self._strategies[seed] = create_strategy(seed)
         self.active_name = seed
         self.strategy: Strategy = self._strategies[seed]
-        # Chart TF (M1) vs decision TF (M5) — entries only on signal bar close.
+        # Chart TF (M1) · structure TF (M5) · fast entry TF (M3 for Asia scalp)
         self.candles = CandleAggregator(
             period_seconds=settings.candle_period_seconds,
             maxlen=settings.candle_history,
@@ -78,6 +79,10 @@ class TradingEngine:
         self.signal_candles = CandleAggregator(
             period_seconds=settings.signal_period_seconds,
             maxlen=max(settings.candle_history, 120),
+        )
+        self.m3_candles = CandleAggregator(
+            period_seconds=180,
+            maxlen=max(settings.candle_history, 160),
         )
         self.journal = TradeJournal(maxlen=500)
         self.mt, detected = resolve_mt_bridge(settings)
@@ -135,6 +140,7 @@ class TradingEngine:
         now = utcnow()
         for period, agg, count in (
             (self.settings.signal_period_seconds, self.signal_candles, 90),
+            (180, self.m3_candles, 120),
             (self.settings.candle_period_seconds, self.candles, 120),
         ):
             bars: list[Candle] = []
@@ -628,16 +634,25 @@ class TradingEngine:
                 await self._emit("candle", forming.model_dump(mode="json"))
 
                 closed_signal, _forming_signal = self.signal_candles.update(tick)
+                closed_m3, _forming_m3 = self.m3_candles.update(tick)
                 signal = None
+                uses_m3_entry = (
+                    getattr(self.strategy, "entry_period_seconds", None) == 180
+                )
+
                 if closed_signal is not None:
-                    # Feed M5 closes into strategies — not every noisy tick.
+                    # Feed M5 closes into strategies — structure / standard entries.
                     for strat in self._strategies.values():
                         if getattr(strat, "candle_driven", False):
                             strat.feed_bar(closed_signal)
+                            if hasattr(strat, "set_structure_bars"):
+                                strat.set_structure_bars(
+                                    self.signal_candles.closed_history(tick.symbol, 200)
+                                )
                         else:
                             strat.feed(tick)
                     allow_entries = await self._apply_auto_router(tick)
-                    if allow_entries:
+                    if allow_entries and not uses_m3_entry:
                         bars = self.signal_candles.closed_history(tick.symbol, 200)
                         if getattr(self.strategy, "candle_driven", False):
                             signal = self.strategy.on_bar(bars, tick)
@@ -652,6 +667,22 @@ class TradingEngine:
                 else:
                     # Keep auto status fresh even between M5 closes.
                     await self._apply_auto_router(tick)
+
+                # Asia M3/M5 strategy: trigger on closed M3 with M5 structure.
+                if (
+                    signal is None
+                    and closed_m3 is not None
+                    and uses_m3_entry
+                    and getattr(self.strategy, "candle_driven", False)
+                ):
+                    if hasattr(self.strategy, "set_structure_bars"):
+                        self.strategy.set_structure_bars(
+                            self.signal_candles.closed_history(tick.symbol, 200)
+                        )
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries:
+                        m3_bars = self.m3_candles.closed_history(tick.symbol, 200)
+                        signal = self.strategy.on_bar(m3_bars, tick)
 
                 if signal:
                     self._recent_signals.appendleft(signal)

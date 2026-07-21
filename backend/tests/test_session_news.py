@@ -37,7 +37,7 @@ def test_overlap_prime():
     assert session_allows_entry(ts, prime_only=True) is True
 
 
-def test_asia_desk_only_blocks_after_7pm():
+def test_asia_desk_only_blocks_after_5pm():
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     assert classify_asia_desk(ts).tier == SessionTier.AVOID
     assert classify_full_sessions(ts).label == "london"

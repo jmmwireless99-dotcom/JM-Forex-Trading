@@ -35,8 +35,8 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–7PM)',
-    london: 'Late London',
+    asia: 'Asia (PH 7AM–5PM)',
+    london: 'London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
     friday_late: 'Friday late',
@@ -345,6 +345,7 @@ export default function App() {
               ? strategies
               : [
                   'auto_gold',
+                  'asia_m3m5_sr_scalp',
                   'asia_sr_scalp',
                   'gold_confluence',
                   'gold_atr_trend',
@@ -357,17 +358,19 @@ export default function App() {
               <option key={name} value={name}>
                 {name === 'auto_gold'
                   ? 'auto_gold (session follow)'
-                  : name === 'asia_sr_scalp'
-                    ? 'asia_sr_scalp (BEST Asia · M5 S/R)'
-                    : name === 'gold_confluence'
-                      ? 'gold_confluence (BEST late London)'
-                      : name === 'gold_atr_trend'
-                        ? 'gold_atr_trend (BEST overlap/NY)'
-                        : name === 'asia_range_scalp'
-                          ? 'asia_range_scalp (Asia Donchian)'
-                          : name === 'gold_sr_scalp'
-                            ? 'gold_sr_scalp (S/R chop)'
-                            : name}
+                  : name === 'asia_m3m5_sr_scalp'
+                    ? 'asia_m3m5_sr_scalp (BEST Asia · M3/M5 S/R)'
+                    : name === 'asia_sr_scalp'
+                      ? 'asia_sr_scalp (Asia M5 S/R)'
+                      : name === 'gold_confluence'
+                        ? 'gold_confluence (BEST London)'
+                        : name === 'gold_atr_trend'
+                          ? 'gold_atr_trend (BEST overlap/NY)'
+                          : name === 'asia_range_scalp'
+                            ? 'asia_range_scalp (Asia Donchian)'
+                            : name === 'gold_sr_scalp'
+                              ? 'gold_sr_scalp (S/R chop)'
+                              : name}
               </option>
             ))}
           </select>
@@ -383,7 +386,7 @@ export default function App() {
             className="btn-primary"
             disabled={busy}
             onClick={() => autoTransfer()}
-            title="ON = Auto follow: Asia S/R → London confluence → Overlap/NY ATR"
+            title="ON = Auto follow: Asia M3/M5 S/R (7AM–5PM) → London → Overlap/NY"
           >
             Auto transfer
           </button>
