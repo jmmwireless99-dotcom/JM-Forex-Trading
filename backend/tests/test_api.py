@@ -108,7 +108,7 @@ async def test_apply_strategy_switches(client):
 
 
 @pytest.mark.asyncio
-async def test_auto_transfer_clean_slate(client):
+async def test_auto_transfer_session_follow(client):
     res = await client.get("/api/strategies/recommended")
     assert res.status_code == 200
     rec = res.json()
@@ -119,6 +119,11 @@ async def test_auto_transfer_clean_slate(client):
     assert res.status_code == 200
     body = res.json()
     assert body["ok"] is True
-    assert body["auto_enabled"] is False
-    assert body["to"] == "manual_only"
-    assert body["active_strategy"] == "manual_only"
+    assert body["auto_enabled"] is True
+    assert body["to"] in {
+        "manual_only",
+        "EMA_RSI_Scalp",
+        "London_Judas_Sweep",
+        "Liquidity_Sweep_SMC",
+    }
+    assert body["active_strategy"] == body["to"]

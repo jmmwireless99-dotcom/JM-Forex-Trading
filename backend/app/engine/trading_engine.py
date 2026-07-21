@@ -36,8 +36,12 @@ from app.strategies.auto_router import AutoStrategyRouter
 
 Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
-# Clean slate — only idle placeholder until new strategies are added.
-_AUTO_POOL = ("manual_only",)
+# Session-follow pool for auto transfer by time.
+_AUTO_POOL = (
+    "EMA_RSI_Scalp",
+    "London_Judas_Sweep",
+    "Liquidity_Sweep_SMC",
+)
 
 
 class TradingEngine:
@@ -53,7 +57,7 @@ class TradingEngine:
         requested = settings.default_strategy or "manual_only"
         if requested not in STRATEGY_REGISTRY:
             requested = "manual_only"
-        self.auto_enabled = False
+        self.auto_enabled = bool(settings.auto_strategy)
         self._strategies: dict[str, Strategy] = {
             "manual_only": create_strategy("manual_only"),
         }
@@ -189,15 +193,18 @@ class TradingEngine:
     def set_strategy(self, name: str) -> None:
         name = (name or "").strip()
         if name.startswith("auto_gold") or name in {"auto", AutoStrategyRouter.name}:
-            # Auto desk disabled on clean slate — park idle placeholder.
-            self.auto_enabled = False
-            self._strategies["manual_only"] = create_strategy("manual_only")
-            self.active_name = "manual_only"
-            self.strategy = self._strategies["manual_only"]
+            self.auto_enabled = True
+            rec = self.recommended_now()
+            target = rec.get("transfer_to") or rec.get("strategy") or "manual_only"
+            if target not in STRATEGY_REGISTRY:
+                target = "manual_only"
+            self._strategies[target] = create_strategy(target)
+            self.active_name = target
+            self.strategy = self._strategies[target]
             self._last_strategy_switch_at = time.time()
             self._last_auto_key = None
-            self._last_session_slot = None
-            self._last_transfer_note = "Clean slate — auto strategies removed"
+            self._last_session_slot = rec.get("session")
+            self._last_transfer_note = f"Auto transfer -> {target}"
             return
 
         from app.strategies import STRATEGY_REGISTRY, list_strategy_names
@@ -246,13 +253,13 @@ class TradingEngine:
         return self.strategy.prices(symbol)
 
     def recommended_now(self) -> dict:
-        """Session clock hint — no auto strategy on clean slate."""
+        """Session clock + recommended session strategy."""
         ts = self.last_tick_at or utcnow()
         prices = self._signal_prices()
         rec = self.auto_router.recommend(ts, prices)
         return {
             **rec,
-            "auto_enabled": False,
+            "auto_enabled": self.auto_enabled,
             "current_strategy": self.active_name,
             "display": self.active_name,
         }
@@ -261,8 +268,8 @@ class TradingEngine:
         decision = self.auto_router.last_decision
         rec = self.recommended_now()
         return {
-            "enabled": False,
-            "session_follow": False,
+            "enabled": self.auto_enabled,
+            "session_follow": self.auto_enabled,
             "active_strategy": self.active_name,
             "display": self.active_name,
             "session_slot": self._last_session_slot,
@@ -289,9 +296,17 @@ class TradingEngine:
         return True
 
     async def auto_transfer(self, *, start_engine: bool = True) -> dict:
-        """Clean slate — no auto strategies to transfer to."""
-        self.set_strategy("manual_only")
+        """Enable session-follow and transfer to current recommended strategy."""
+        self.auto_enabled = True
         rec = self.recommended_now()
+        target = rec.get("transfer_to") or rec.get("strategy")
+        switched = False
+        previous = self.active_name
+        if target and target in STRATEGY_REGISTRY:
+            switched = self._park_strategy(
+                target, note=f"Auto session transfer ({rec.get('session')})"
+            )
+            self._last_session_slot = rec.get("session")
         if start_engine and not self.running:
             await self.start()
         status = self.status().model_dump(mode="json")
@@ -300,13 +315,18 @@ class TradingEngine:
         await self._emit("auto", auto)
         return {
             "ok": True,
-            "transferred": False,
-            "auto_enabled": False,
-            "to": "manual_only",
+            "transferred": switched,
+            "auto_enabled": self.auto_enabled,
+            "from": previous,
+            "to": self.active_name,
             "recommended": rec,
             "status": status,
             "auto": auto,
-            "message": "Clean slate — no auto strategies loaded",
+            "message": (
+                f"Session-follow active: {previous} -> {self.active_name}"
+                if switched
+                else f"Session-follow active: stay on {self.active_name}"
+            ),
             **status,
         }
 
@@ -512,17 +532,26 @@ class TradingEngine:
             pass
 
     async def _apply_auto_router(self, tick: Tick) -> bool:
-        """Allow candle strategies to fire; manual_only stays idle."""
+        """Apply session-follow transfer and decide if entries are allowed."""
         prices = self._signal_prices(tick.symbol)
-        self.auto_router.decide(tick.timestamp, prices)
+        decision = self.auto_router.decide(tick.timestamp, prices)
+
+        if self.auto_enabled and decision.strategy:
+            switched = self._park_strategy(
+                decision.strategy, note=f"Session auto-follow ({decision.slot})"
+            )
+            if switched:
+                self._last_session_slot = decision.slot
+                await self._emit("engine", self.status().model_dump(mode="json"))
+                await self._emit("auto", self.auto_status())
 
         if self.active_name == "manual_only":
             return False
         if time.time() < self._entry_cooldown_until:
             return False
-        if getattr(self.strategy, "candle_driven", False) or self.active_name in STRATEGY_REGISTRY:
-            return True
-        return False
+        if self.auto_enabled and not decision.allow_trading:
+            return False
+        return getattr(self.strategy, "candle_driven", False) or self.active_name in STRATEGY_REGISTRY
 
     def recent_signals(self) -> list[Signal]:
         return list(self._recent_signals)

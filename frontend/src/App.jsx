@@ -248,6 +248,10 @@ export default function App() {
     await run(async () => api.setStrategy(strategy))
   }
 
+  async function autoTransferBySession() {
+    await run(async () => api.autoTransfer())
+  }
+
   async function onClose(id) {
     await run(async () => {
       await api.closePosition(id)
@@ -356,6 +360,14 @@ export default function App() {
             title="Apply selected strategy without restarting"
           >
             Apply strategy
+          </button>
+          <button
+            className="btn-primary"
+            disabled={busy}
+            onClick={() => autoTransferBySession()}
+            title="Auto follow by session time"
+          >
+            Auto transfer (session)
           </button>
           <button
             className="btn-ghost"
