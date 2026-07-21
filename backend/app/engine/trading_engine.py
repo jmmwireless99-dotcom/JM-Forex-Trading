@@ -668,6 +668,55 @@ class TradingEngine:
             return self.mt.snapshot()
         return self.paper.snapshot()
 
+    def capital_preview(self, deposit: float | None = None) -> dict:
+        """Show how risk / lot sizing scales with a paper deposit amount."""
+        amount = float(deposit if deposit is not None else self.paper.deposit)
+        risk_pct = float(self.settings.max_risk_per_trade_pct)
+        daily_pct = float(self.settings.max_daily_loss_pct)
+        stop_pips = float(self.settings.default_stop_loss_pips)
+        tp_pips = float(self.settings.default_take_profit_pips)
+        risk_usd = amount * (risk_pct / 100.0)
+        daily_usd = amount * (daily_pct / 100.0)
+        pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
+        suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
+        suggested_lots = max(0.01, round(suggested, 2))
+        return {
+            "deposit": round(amount, 2),
+            "currency": self.settings.base_currency,
+            "paper": not self.using_mt(),
+            "risk_per_trade_pct": risk_pct,
+            "risk_per_trade_usd": round(risk_usd, 2),
+            "max_daily_loss_pct": daily_pct,
+            "max_daily_loss_usd": round(daily_usd, 2),
+            "default_stop_loss_pips": stop_pips,
+            "default_take_profit_pips": tp_pips,
+            "suggested_lots": suggested_lots,
+            "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
+            "note": "Paper demo capital — change deposit to trial different risk sizing",
+        }
+
+    async def set_paper_deposit(self, amount: float, *, reset: bool = True) -> dict:
+        """Set fake deposit / starting capital for paper trials."""
+        if self.using_mt():
+            raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
+        async with self._lock:
+            self.paper.set_deposit(float(amount), close_positions=reset)
+            self.risk.reset_daily(self.paper.balance)
+            if reset:
+                self.journal.clear()
+                self._journaled_limit_ids.clear()
+                self._london_signal_ids.clear()
+            snap = self.paper.snapshot()
+            capital = self.capital_preview()
+            await self._emit("account", snap.model_dump(mode="json"))
+            await self._emit("trades", self._trades_payload())
+            return {
+                "ok": True,
+                "account": snap.model_dump(mode="json"),
+                "capital": capital,
+                "message": f"Paper deposit set to ${capital['deposit']:,.2f}",
+            }
+
     def open_positions(self) -> list[Position]:
         if self.using_mt():
             return self.mt.open_positions()

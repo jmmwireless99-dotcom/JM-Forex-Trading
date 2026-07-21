@@ -137,6 +137,9 @@ class AccountSnapshot(BaseModel):
     open_positions: int
     daily_pnl: float
     currency: str = "USD"
+    # Paper desk starting capital (client-selectable deposit for demos)
+    deposit: float = 0.0
+    paper: bool = True
     timestamp: datetime = Field(default_factory=utcnow)
 
 

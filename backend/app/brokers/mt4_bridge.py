@@ -93,6 +93,8 @@ class MT4FileBridge:
             open_positions=open_positions,
             daily_pnl=round(equity - balance, 2),
             currency="USD",
+            deposit=balance,
+            paper=False,
         )
 
     def open_positions(self) -> list[Position]:

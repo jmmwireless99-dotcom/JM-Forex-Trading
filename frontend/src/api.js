@@ -25,6 +25,17 @@ export const api = {
   candles: (symbol = 'XAUUSD', limit = 200) =>
     request(`/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
   account: () => request('/account'),
+  capitalPreview: (amount) =>
+    request(
+      amount != null
+        ? `/account/capital?amount=${encodeURIComponent(amount)}`
+        : '/account/capital',
+    ),
+  setDeposit: (amount, reset = true) =>
+    request('/account/deposit', {
+      method: 'POST',
+      body: JSON.stringify({ amount: Number(amount), reset }),
+    }),
   positions: () => request('/positions'),
   orders: () => request('/orders'),
   trades: (limit = 100) => request(`/trades?limit=${limit}`),

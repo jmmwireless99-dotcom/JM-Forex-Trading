@@ -96,6 +96,8 @@ export default function App() {
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
   const [chartMode, setChartMode] = useState('tradingview') // tradingview | desk
+  const [depositInput, setDepositInput] = useState('1000')
+  const [capital, setCapital] = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -118,6 +120,9 @@ export default function App() {
         if (!alive) return
         setStatus(st)
         setAccount(acc)
+        setCapital(acc.capital || null)
+        if (acc.deposit != null) setDepositInput(String(acc.deposit))
+        else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
         setStrategies(strat.strategies || [])
@@ -254,6 +259,34 @@ export default function App() {
       if (res?.message) setOrderNote(res.message)
       return res
     })
+  }
+
+  async function applyDeposit(amount) {
+    const value = Number(amount ?? depositInput)
+    if (!Number.isFinite(value) || value < 50) {
+      setError('Minimum paper deposit is $50')
+      return
+    }
+    await run(async () => {
+      const res = await api.setDeposit(value, true)
+      if (res?.account) setAccount(res.account)
+      if (res?.capital) setCapital(res.capital)
+      setDepositInput(String(res?.capital?.deposit ?? value))
+      setOrderNote(res?.message || `Paper deposit set to $${value}`)
+      setPositions([])
+      setTrades([])
+      setTradeSummary({ total: 0, open: 0, closed: 0, wins: 0, losses: 0, net_pnl: 0 })
+      return res
+    })
+  }
+
+  async function previewDeposit(amount) {
+    try {
+      const preview = await api.capitalPreview(amount)
+      setCapital(preview)
+    } catch (err) {
+      setError(err.message || 'Preview failed')
+    }
   }
 
   async function onClose(id) {
@@ -462,6 +495,10 @@ export default function App() {
           <strong>${money(account.balance)}</strong>
         </div>
         <div className="metric">
+          <label>Deposit</label>
+          <strong>${money(account.deposit ?? capital?.deposit ?? account.balance)}</strong>
+        </div>
+        <div className="metric">
           <label>Daily P&amp;L</label>
           <strong className={pnlClass(account.daily_pnl)}>
             ${money(account.daily_pnl)}
@@ -471,6 +508,92 @@ export default function App() {
           <label>Open</label>
           <strong>{account.open_positions}</strong>
         </div>
+      </section>
+
+      <section className="panel deposit-panel" aria-label="Paper deposit">
+        <div className="deposit-head">
+          <div>
+            <h2>Paper deposit · trial capital</h2>
+            <p className="meta">
+              Fake money for client demos — try different amounts and see risk / lot sizing change.
+            </p>
+          </div>
+          <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
+            {mode === 'paper' ? 'PAPER DEMO' : 'LIVE MT'}
+          </span>
+        </div>
+
+        <div className="deposit-presets">
+          {(capital?.presets || [100, 250, 500, 1000, 2500, 5000, 10000]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`preset-btn ${Number(depositInput) === p ? 'on' : ''}`}
+              disabled={busy || mode !== 'paper'}
+              onClick={() => {
+                setDepositInput(String(p))
+                previewDeposit(p)
+              }}
+            >
+              ${p.toLocaleString()}
+            </button>
+          ))}
+        </div>
+
+        <div className="deposit-controls">
+          <label className="lots-field">
+            Deposit (USD)
+            <input
+              type="number"
+              min="50"
+              max="1000000"
+              step="50"
+              value={depositInput}
+              disabled={busy || mode !== 'paper'}
+              onChange={(e) => {
+                setDepositInput(e.target.value)
+                const n = Number(e.target.value)
+                if (Number.isFinite(n) && n >= 50) previewDeposit(n)
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy || mode !== 'paper'}
+            onClick={() => applyDeposit()}
+          >
+            Set deposit
+          </button>
+        </div>
+
+        {capital ? (
+          <div className="capital-calc" aria-label="Capital calculation">
+            <div>
+              <label>Risk / trade</label>
+              <strong>
+                ${money(capital.risk_per_trade_usd)}{' '}
+                <span className="meta">({capital.risk_per_trade_pct}%)</span>
+              </strong>
+            </div>
+            <div>
+              <label>Max daily loss</label>
+              <strong>
+                ${money(capital.max_daily_loss_usd)}{' '}
+                <span className="meta">({capital.max_daily_loss_pct}%)</span>
+              </strong>
+            </div>
+            <div>
+              <label>Suggested lots</label>
+              <strong>
+                {Number(capital.suggested_lots).toFixed(2)}{' '}
+                <span className="meta">
+                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                </span>
+              </strong>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="manual-trade" aria-label="Manual buy sell">

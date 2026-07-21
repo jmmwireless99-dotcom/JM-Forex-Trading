@@ -85,6 +85,31 @@ async def test_account_endpoint(client):
     data = res.json()
     assert data["balance"] == 10000.0
     assert data["currency"] == "USD"
+    assert data["deposit"] == 10000.0
+    assert data["paper"] is True
+    assert "capital" in data
+    assert data["capital"]["suggested_lots"] >= 0.01
+
+
+@pytest.mark.asyncio
+async def test_paper_deposit_changes_capital(client):
+    res = await client.post("/api/account/deposit", json={"amount": 500, "reset": True})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["account"]["balance"] == 500.0
+    assert body["account"]["deposit"] == 500.0
+    assert body["capital"]["deposit"] == 500.0
+    assert body["capital"]["risk_per_trade_usd"] == 2.5  # 0.5% of 500
+
+    preview = await client.get("/api/account/capital?amount=1000")
+    assert preview.status_code == 200
+    assert preview.json()["deposit"] == 1000.0
+    assert preview.json()["risk_per_trade_usd"] == 5.0
+
+    # Live account still at 500 until applied
+    acc = await client.get("/api/account")
+    assert acc.json()["deposit"] == 500.0
 
 
 @pytest.mark.asyncio

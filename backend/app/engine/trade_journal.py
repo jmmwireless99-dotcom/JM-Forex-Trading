@@ -147,3 +147,8 @@ class TradeJournal:
             "net_pnl": round(net, 2),
             "win_rate_pct": round(len(wins) / len(closed) * 100, 1) if closed else 0.0,
         }
+
+    def clear(self) -> None:
+        """Wipe in-memory trade log (used when paper deposit is reset)."""
+        self._trades.clear()
+        self._by_ticket.clear()

@@ -42,6 +42,13 @@ class ManualOrderBody(BaseModel):
     take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
 
 
+class DepositBody(BaseModel):
+    """Paper demo deposit / starting capital for client trials."""
+
+    amount: float = Field(..., gt=0, le=1_000_000)
+    reset: bool = True  # close opens + clear paper trade log
+
+
 class PositionStopsBody(BaseModel):
     """Set SL/TP on an open position. auto=True uses desk default pip distances."""
 
@@ -323,7 +330,28 @@ async def set_strategy(body: StrategyRequest) -> dict:
 
 @router.get("/account")
 async def account() -> dict:
-    return get_engine().account_snapshot().model_dump(mode="json")
+    engine = get_engine()
+    snap = engine.account_snapshot().model_dump(mode="json")
+    return {
+        **snap,
+        "capital": engine.capital_preview(),
+    }
+
+
+@router.get("/account/capital")
+async def capital_preview(amount: float | None = None) -> dict:
+    """Preview risk sizing for a deposit amount without applying it."""
+    return get_engine().capital_preview(amount)
+
+
+@router.post("/account/deposit")
+async def set_deposit(body: DepositBody) -> dict:
+    """Set paper demo deposit so clients can trial different capital sizes."""
+    engine = get_engine()
+    try:
+        return await engine.set_paper_deposit(body.amount, reset=body.reset)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/positions")

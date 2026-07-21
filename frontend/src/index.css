@@ -178,10 +178,93 @@ select {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.85rem;
   margin-bottom: 1.25rem;
   animation: rise 800ms 80ms ease both;
+}
+
+.deposit-panel {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem 1.15rem;
+  animation: rise 700ms 100ms ease both;
+}
+
+.deposit-panel h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 400;
+}
+
+.deposit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.deposit-head .meta {
+  margin: 0.35rem 0 0;
+}
+
+.deposit-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.preset-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.preset-btn.on,
+.preset-btn:hover:not(:disabled) {
+  border-color: rgba(125, 255, 179, 0.45);
+  color: var(--mint);
+  background: rgba(125, 255, 179, 0.08);
+}
+
+.deposit-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.85rem;
+}
+
+.capital-calc {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.capital-calc label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  margin-bottom: 0.25rem;
+}
+
+.capital-calc strong {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.capital-calc .meta {
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 
 .manual-trade {
@@ -855,6 +938,10 @@ select {
 @media (max-width: 900px) {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .capital-calc {
+    grid-template-columns: 1fr;
   }
 
   .layout {

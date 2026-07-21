@@ -26,11 +26,32 @@ class PaperBroker:
     DEFAULT_CONTRACT_SIZE = 100_000  # FX standard lot
 
     def __init__(self, initial_balance: float = 10_000.0, currency: str = "USD") -> None:
-        self.balance = initial_balance
+        self.deposit = float(initial_balance)
+        self.balance = float(initial_balance)
         self.currency = currency
         self.orders: list[Order] = []
         self.positions: list[Position] = []
         self._last_ticks: dict[str, Tick] = {}
+
+    def set_deposit(self, amount: float, *, close_positions: bool = True) -> None:
+        """Reset paper capital to a client-selected deposit (demo / trial)."""
+        amount = float(amount)
+        if amount < 50:
+            raise ValueError("Minimum paper deposit is $50")
+        if amount > 1_000_000:
+            raise ValueError("Maximum paper deposit is $1,000,000")
+        if close_positions:
+            for position in list(self.positions):
+                if position.status == PositionStatus.OPEN:
+                    self.close_position(position.id, reason="deposit_reset")
+            for order in self.orders:
+                if order.status == OrderStatus.PENDING:
+                    order.status = OrderStatus.CANCELLED
+                    order.reject_reason = "Cancelled — paper deposit reset"
+            self.positions = []
+            self.orders = []
+        self.deposit = round(amount, 2)
+        self.balance = round(amount, 2)
 
     def update_tick(self, tick: Tick) -> list[Position]:
         self._last_ticks[tick.symbol] = tick
@@ -264,6 +285,8 @@ class PaperBroker:
             open_positions=len(open_positions),
             daily_pnl=round(daily_pnl, 2),
             currency=self.currency,
+            deposit=round(self.deposit, 2),
+            paper=True,
         )
 
     def open_positions(self) -> list[Position]:
