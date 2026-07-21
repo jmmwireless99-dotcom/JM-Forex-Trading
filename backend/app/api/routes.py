@@ -132,6 +132,7 @@ async def candles(symbol: str | None = None, limit: int = 200) -> dict:
 
 @router.get("/desk")
 async def desk() -> dict:
+    """Clean slate desk board — session/news/risk only; no auto strategies."""
     settings = get_settings()
     engine = get_engine()
     now = utcnow()
@@ -141,7 +142,8 @@ async def desk() -> dict:
     block = getattr(strategy, "last_block_reason", None)
     return {
         "symbol": "XAUUSD",
-        "recommended_strategy": "auto_gold",
+        "mode": "clean_slate",
+        "recommended_strategy": "manual_only",
         "recommended_now": engine.recommended_now(),
         "active_strategy": engine.status().active_strategy,
         "auto": engine.auto_status(),
@@ -162,25 +164,22 @@ async def desk() -> dict:
         "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
         "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
         "entry_rules": [
-            "Asia BEST (PH 7AM–5PM): asia_m5_sr_scalp — active M5 scalp",
-            "Path A: fade Asia box high/low after rejection → TP mid",
-            "Path B: fade local M5 swing S/R → TP ~1R / mid",
-            "Soft cutoff PH 4:45 · Flat if news / ADX extreme",
-            "Next after 5PM → London: gold_confluence",
-            "Overlap/NY: gold_atr_trend · chop: gold_sr_scalp",
+            "Clean slate — lahat ng auto strategy na-wipe",
+            "Manual BUY/SELL with auto SL/TP lang muna",
+            "Bagong strategy after — walang session auto-pick",
         ],
-        "recommended_asia": "asia_m5_sr_scalp",
-        "recommended_london": "gold_confluence",
-        "recommended_overlap": "gold_atr_trend",
-        "recommended_ny": "gold_atr_trend",
-        "recommended_sr_scalp": "gold_sr_scalp",
+        "recommended_asia": None,
+        "recommended_london": None,
+        "recommended_overlap": None,
+        "recommended_ny": None,
+        "recommended_sr_scalp": None,
         "asia_desk_only": settings.asia_desk_only,
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
-            "Asia box + local M5 swing Support/Resistance",
-            "Rejection wick + RSI filter (relaxed for active scalps)",
-            "M5 ADX (block only when extreme)",
-            "SL beyond level · TP mid / ~1R",
+            "Manual desk only",
+            "Session clock still active (Asia → London → NY)",
+            "News blackout filter still active",
+            "Auto SL/TP on manual fills",
         ],
         "entry_checklist": getattr(strategy, "last_checklist", []),
         "asia_range": getattr(strategy, "last_range", None),
@@ -218,7 +217,7 @@ async def stop_engine() -> dict:
 async def list_strategies() -> dict:
     return {
         "strategies": list_strategy_names(),
-        "auto": "auto_gold",
+        "auto": None,
         "pool": list(STRATEGY_REGISTRY.keys()),
     }
 
@@ -236,7 +235,7 @@ async def recommended_strategy() -> dict:
 
 @router.post("/strategies/auto-transfer")
 async def auto_transfer_strategy() -> dict:
-    """Turn on auto_gold and transfer to the session-recommended strategy."""
+    """Clean slate — no auto strategies to transfer to."""
     engine = get_engine()
     return await engine.auto_transfer(start_engine=True)
 

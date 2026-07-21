@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.domain import Candle, Side
 from app.strategies.entry_setup import structure_levels, true_atr
-from app.strategies.gold_confluence import GoldConfluenceStrategy
+from app.strategies.manual_only import ManualOnlyStrategy
 from app.models.domain import Tick
 
 
@@ -45,8 +45,8 @@ def test_true_atr_and_structure_sl_tp():
     assert levels.reward_r >= 1.5
 
 
-def test_confluence_waits_for_checklist():
-    strat = GoldConfluenceStrategy(news_filter=False, session_filter=False, min_atr=0.2, min_adx=1.0)
+def test_manual_only_never_signals():
+    strat = ManualOnlyStrategy()
     bars = _bars()
     tick = Tick(
         symbol="XAUUSD",
@@ -55,9 +55,4 @@ def test_confluence_waits_for_checklist():
         mid=bars[-1].close,
         timestamp=datetime(2026, 7, 20, 14, 5, tzinfo=timezone.utc),
     )
-    # evaluate() disabled on ticks
     assert strat.evaluate(tick) is None
-    # on_bar may or may not fire depending on confirm candle — must not crash
-    signal = strat.on_bar(bars, tick)
-    assert signal is None or signal.stop_loss is not None
-    assert isinstance(strat.last_checklist, list)

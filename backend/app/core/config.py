@@ -29,9 +29,10 @@ class Settings(BaseSettings):
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
-    # auto_gold = automatic day/session/regime strategy switching
-    default_strategy: str = "auto_gold"
-    auto_strategy: bool = True
+    # Clean slate — manual desk until new strategies are added
+    # JM_DEFAULT_STRATEGY=manual_only  JM_AUTO_STRATEGY=false
+    default_strategy: str = "manual_only"
+    auto_strategy: bool = False
     # Avoid flip-flopping between strategies / overtrading paper noise
     strategy_stick_seconds: int = 900
     entry_cooldown_seconds: int = 300

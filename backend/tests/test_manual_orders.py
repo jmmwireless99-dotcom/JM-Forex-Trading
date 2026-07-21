@@ -25,7 +25,7 @@ def _seed_tick(engine: TradingEngine, price: float = 2350.0) -> Tick:
 async def test_manual_buy_attaches_auto_stops():
     get_settings.cache_clear()
     engine = TradingEngine(
-        Settings(auto_strategy=False, default_strategy="ema_crossover", news_filter=False)
+        Settings(auto_strategy=False, default_strategy="manual_only", news_filter=False)
     )
     _seed_tick(engine)
     order = await engine.manual_order(
@@ -53,7 +53,7 @@ async def test_manual_buy_attaches_auto_stops():
 async def test_manual_sell_without_stops_then_attach():
     get_settings.cache_clear()
     engine = TradingEngine(
-        Settings(auto_strategy=False, default_strategy="ema_crossover", news_filter=False)
+        Settings(auto_strategy=False, default_strategy="manual_only", news_filter=False)
     )
     _seed_tick(engine, 2400.0)
     order = await engine.manual_order(

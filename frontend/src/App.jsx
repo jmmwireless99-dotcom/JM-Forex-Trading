@@ -25,10 +25,10 @@ function pnlClass(n) {
   return ''
 }
 
-/** Map engine label like "auto_gold→gold_atr_trend" back to select value. */
+/** Map engine labels back to select value (clean slate = manual_only). */
 function normalizeStrategy(label) {
-  if (!label) return 'auto_gold'
-  if (label === 'auto' || label.startsWith('auto_gold')) return 'auto_gold'
+  if (!label) return 'manual_only'
+  if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
   return label
 }
 
@@ -57,8 +57,8 @@ export default function App() {
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
   const [strategies, setStrategies] = useState([])
-  const [strategy, setStrategy] = useState('auto_gold')
-  const [appliedStrategy, setAppliedStrategy] = useState('auto_gold')
+  const [strategy, setStrategy] = useState('manual_only')
+  const [appliedStrategy, setAppliedStrategy] = useState('manual_only')
   const [strategyDirty, setStrategyDirty] = useState(false)
   const strategyDirtyRef = useRef(false)
   const [mode, setMode] = useState('paper')
@@ -246,14 +246,6 @@ export default function App() {
     await run(async () => api.setStrategy(strategy))
   }
 
-  async function autoTransfer() {
-    await run(async () => {
-      const result = await api.autoTransfer()
-      if (result?.to) clearStrategyDirty('auto_gold')
-      return result
-    })
-  }
-
   async function onClose(id) {
     await run(async () => {
       await api.closePosition(id)
@@ -320,8 +312,8 @@ export default function App() {
           </div>
         </div>
         <p>
-          XAUUSD auto desk — M5 candle entries only after full checklist
-          (trend, pullback, confirm) with structure SL and R-multiple TP.
+          Clean slate — lahat ng auto strategy na-wipe. Manual Buy/Sell with
+          auto SL/TP. Magbuo tayo ng bagong strategy after.
         </p>
         <div className="controls">
           <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
@@ -341,39 +333,11 @@ export default function App() {
             onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length
-              ? strategies
-              : [
-                  'auto_gold',
-                  'asia_m5_sr_scalp',
-                  'asia_m3m5_sr_scalp',
-                  'asia_sr_scalp',
-                  'gold_confluence',
-                  'gold_atr_trend',
-                  'gold_sr_scalp',
-                  'asia_range_scalp',
-                  'ema_crossover',
-                  'rsi_mean_reversion',
-                ]
-            ).map((name) => (
+            {(strategies.length ? strategies : ['manual_only']).map((name) => (
               <option key={name} value={name}>
-                {name === 'auto_gold'
-                  ? 'auto_gold (session follow)'
-                  : name === 'asia_m5_sr_scalp'
-                    ? 'asia_m5_sr_scalp (BEST Asia · M5 box fade · 7AM–5PM)'
-                    : name === 'asia_m3m5_sr_scalp'
-                      ? 'asia_m3m5_sr_scalp (Asia M3 entry / M5 S/R)'
-                      : name === 'asia_sr_scalp'
-                        ? 'asia_sr_scalp (Asia M5 S/R legacy)'
-                        : name === 'gold_confluence'
-                          ? 'gold_confluence (BEST London)'
-                          : name === 'gold_atr_trend'
-                            ? 'gold_atr_trend (BEST overlap/NY)'
-                            : name === 'asia_range_scalp'
-                              ? 'asia_range_scalp (Asia Donchian)'
-                              : name === 'gold_sr_scalp'
-                                ? 'gold_sr_scalp (S/R chop)'
-                                : name}
+                {name === 'manual_only'
+                  ? 'manual_only (clean slate · no auto signals)'
+                  : name}
               </option>
             ))}
           </select>
@@ -383,15 +347,7 @@ export default function App() {
             onClick={() => applyStrategy()}
             title="Apply selected strategy without restarting"
           >
-            Apply strategy
-          </button>
-          <button
-            className="btn-primary"
-            disabled={busy}
-            onClick={() => autoTransfer()}
-            title="ON = Auto follow: Asia M5 S/R (7AM–5PM) → London → Overlap/NY"
-          >
-            Auto transfer
+            Apply (manual only)
           </button>
           <button
             className="btn-ghost"
@@ -452,56 +408,21 @@ export default function App() {
                 '—'
           return (
           <div className="recommend-box">
-            <strong>Active session</strong>
+            <strong>Clean slate</strong>
             <span>
               {sessionLabel(activeSession)} ·{' '}
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              BEST now:{' '}
-              <code>
-                {(desk?.recommended_now || autoInfo?.recommended)?.strategy ||
-                  activeStrat}
-              </code>
+              Auto strategies wiped — manual Buy/Sell only
             </span>
-            {(() => {
-              const nxt =
-                (desk?.recommended_now || autoInfo?.recommended)?.next_session ||
-                desk?.next_session
-              if (!nxt?.strategy) return null
-              return (
-                <span className="meta">
-                  Next session ({sessionLabel(nxt.session)}):{' '}
-                  <code>{nxt.strategy}</code>
-                </span>
-              )
-            })()}
             <span className="meta">
-              {(desk?.recommended_now || autoInfo?.recommended)?.reason || ''}
+              {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
+                'Waiting for new strategy build'}
             </span>
             {autoInfo?.last_transfer ? (
-              <span className="meta">Last transfer: {autoInfo.last_transfer}</span>
+              <span className="meta">Note: {autoInfo.last_transfer}</span>
             ) : null}
-            <span className="meta">
-              Active now: {sessionLabel(activeSession)} session
-              {autoInfo?.enabled
-                ? ` · following with ${activeStrat}`
-                : ' · auto follow OFF'}
-            </span>
-            {!autoInfo?.enabled ? (
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={busy}
-                onClick={() => autoTransfer()}
-              >
-                I-ON ang Auto transfer (session follow)
-              </button>
-            ) : (
-              <span className="mode-chip">
-                Auto ON · {sessionLabel(activeSession)}
-              </span>
-            )}
           </div>
           )
         })()}
@@ -807,7 +728,7 @@ export default function App() {
         </section>
 
         <section className="panel schedule-bottom" style={{ gridColumn: '1 / -1' }}>
-          <h2>Kailan papasok · Weekly schedule</h2>
+          <h2>Clean slate · Desk notes</h2>
           <div className="entry-rules">
             <strong>Entry rules</strong>
             <ul>
@@ -837,7 +758,7 @@ export default function App() {
           JM TECH SOLUTION
         </a>
         {' '}
-        · paper / MT4 / MT5 · live candles · gold_confluence
+        · paper / MT4 / MT5 · live candles · manual_only (clean slate)
       </p>
     </div>
   )

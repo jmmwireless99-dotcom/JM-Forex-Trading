@@ -15,14 +15,7 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar'
 import * as Linking from 'expo-linking'
 import { api, defaultApiBase, getApiBase, setApiBase } from './src/api'
 
-const STRATEGIES = [
-  'auto_gold',
-  'gold_confluence',
-  'gold_atr_trend',
-  'asia_range_scalp',
-  'ema_crossover',
-  'rsi_mean_reversion',
-]
+const STRATEGIES = ['manual_only']
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
@@ -76,7 +69,7 @@ export default function App() {
   const [trades, setTrades] = useState([])
   const [summary, setSummary] = useState(null)
   const [gold, setGold] = useState(null)
-  const [strategy, setStrategy] = useState('auto_gold')
+  const [strategy, setStrategy] = useState('manual_only')
   const [strategies, setStrategies] = useState(STRATEGIES)
 
   const load = useCallback(async () => {
@@ -103,7 +96,7 @@ export default function App() {
       const xau = (tk.ticks || []).find((t) => t.symbol === 'XAUUSD')
       setGold(xau || null)
       const label = st.active_strategy || ''
-      if (label.startsWith('auto_gold')) setStrategy('auto_gold')
+      if (label.startsWith('auto_gold') || label === 'auto') setStrategy('manual_only')
       else if (label) setStrategy(label)
     } catch (err) {
       setError(err.message || 'Failed to reach desk API')
@@ -142,7 +135,7 @@ export default function App() {
           style={[styles.stratPill, strategy === name && styles.stratPillOn]}
         >
           <Text style={[styles.stratPillText, strategy === name && styles.stratPillTextOn]}>
-            {name === 'auto_gold' ? 'auto_gold ★' : name}
+            {name === 'manual_only' ? 'manual_only (clean slate)' : name}
           </Text>
         </Pressable>
       )),
@@ -216,24 +209,17 @@ export default function App() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.section}>Recommended now</Text>
-          <Text style={styles.recommend}>
-            {rec?.transfer_to || rec?.strategy || 'stand aside'}
+          <Text style={styles.section}>Clean slate</Text>
+          <Text style={styles.recommend}>manual_only</Text>
+          <Text style={styles.meta}>
+            {rec?.reason || 'Auto strategies wiped — build new ones next'}
           </Text>
-          <Text style={styles.meta}>{rec?.reason || 'Waiting for session recommendation…'}</Text>
           <View style={styles.actions}>
             <Text style={styles.meta}>
               Active now:{' '}
               {(rec?.session || desk?.session?.label || '—').replace(/_/g, ' ')} session
-              {auto?.enabled
-                ? ` · ${status?.active_strategy || rec?.transfer_to || '—'}`
-                : ' · auto follow OFF'}
+              {' · no auto follow'}
             </Text>
-            <Btn
-              title="Auto transfer (session follow)"
-              disabled={busy}
-              onPress={() => run(() => api.autoTransfer())}
-            />
           </View>
         </View>
 
