@@ -51,28 +51,31 @@ API checks:
 
 ---
 
-## VPS (systemd desk + Docker Postgres)
+## VPS (systemd desk + Postgres)
 
-Typical layout on `72.62.73.235`:
-- App: `/opt/jm-forex-trading` + `jm-forex.service`
-- DB: Docker container `jm-forex-db` on `127.0.0.1:5432`
+On `72.62.73.235` the desk runs via systemd; Postgres is **apt PostgreSQL 16** on `127.0.0.1:5432`
+(Docker Compose also works when port 5432 is free).
 
 ```bash
 cd /opt/jm-forex-trading
 git pull
-docker compose up -d postgres
 
-# systemd Environment=
-# JM_DATABASE_URL=postgresql+psycopg://jm:jm_scalp_2026@127.0.0.1:5432/jm_forex
-# JM_DATABASE_AUTO_MIGRATE=true
-# JM_DATABASE_SEED_ON_BOOT=true
+# If using Docker (port 5432 free):
+# docker compose up -d postgres
 
-cd backend
-.venv/bin/pip install -r requirements.txt
-JM_DATABASE_URL=... .venv/bin/alembic upgrade head
+# Apt fallback (already used on live VPS):
+# apt install postgresql postgresql-contrib
+# createuser/db: jm / jm_forex
+
+export JM_DATABASE_URL='postgresql+psycopg://jm:jm_scalp_2026@127.0.0.1:5432/jm_forex'
+cd backend && .venv/bin/pip install -r requirements.txt
+.venv/bin/alembic upgrade head
+.venv/bin/python -c 'from app.db.seed import seed_strategies; print(seed_strategies())'
+
+# systemd: JM_DATABASE_URL + AUTO_MIGRATE + SEED_ON_BOOT
 systemctl restart jm-forex.service
 curl -s http://127.0.0.1:8000/api/db/health
 curl -s http://127.0.0.1:8000/api/db/strategies
 ```
 
-Change `POSTGRES_PASSWORD` / URL before public exposure; keep port bound to localhost when possible.
+Change the DB password before exposing anything beyond localhost.
