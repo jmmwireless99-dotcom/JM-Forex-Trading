@@ -49,6 +49,11 @@ export const api = {
     request('/orders', { method: 'POST', body: JSON.stringify(body) }),
   closePosition: (id) =>
     request(`/positions/${id}/close`, { method: 'POST' }),
+  setStops: (id, body) =>
+    request(`/positions/${id}/stops`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export function connectFeed(onMessage) {

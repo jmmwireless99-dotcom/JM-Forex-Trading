@@ -29,10 +29,26 @@ class ExecutionModeBody(BaseModel):
 
 
 class ManualOrderBody(BaseModel):
-    symbol: str
+    symbol: str = "XAUUSD"
     side: Side
-    lots: float = Field(gt=0, le=10)
+    lots: float = Field(default=0.01, gt=0, le=10)
     comment: str = "manual"
+    # Auto-attach desk default SL/TP right after fill (or use pips below)
+    auto_stops: bool = True
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    stop_loss_pips: float | None = Field(default=None, gt=0, le=500)
+    take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
+
+
+class PositionStopsBody(BaseModel):
+    """Set SL/TP on an open position. auto=True uses desk default pip distances."""
+
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    auto: bool = False
+    stop_loss_pips: float | None = Field(default=None, gt=0, le=500)
+    take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
 
 
 @router.get("/health")
@@ -290,17 +306,43 @@ async def ticks() -> dict:
 
 @router.post("/orders")
 async def place_order(body: ManualOrderBody) -> dict:
+    """Manual BUY/SELL. With auto_stops=true, SL/TP attach on fill."""
     engine = get_engine()
+    settings = get_settings()
+    symbol = (body.symbol or "XAUUSD").upper()
+    sl = body.stop_loss
+    tp = body.take_profit
+    tick = engine._recent_ticks.get(symbol)
+    if body.auto_stops and tick is not None and (
+        body.stop_loss_pips is not None or body.take_profit_pips is not None
+    ):
+        entry = tick.ask if body.side == Side.BUY else tick.bid
+        auto_sl, auto_tp = engine.risk.stops_from_entry(
+            symbol=symbol,
+            side=body.side,
+            entry=entry,
+            stop_loss_pips=body.stop_loss_pips,
+            take_profit_pips=body.take_profit_pips,
+        )
+        sl = sl if sl is not None else auto_sl
+        tp = tp if tp is not None else auto_tp
     order = await engine.manual_order(
         OrderRequest(
-            symbol=body.symbol.upper(),
+            symbol=symbol,
             side=body.side,
             lots=body.lots,
             comment=body.comment,
             strategy="manual",
+            stop_loss=sl,
+            take_profit=tp,
+            attach_stops=body.auto_stops,
         )
     )
-    return order.model_dump(mode="json")
+    data = order.model_dump(mode="json")
+    data["auto_stops"] = body.auto_stops
+    data["default_sl_pips"] = settings.default_stop_loss_pips
+    data["default_tp_pips"] = settings.default_take_profit_pips
+    return data
 
 
 @router.post("/positions/{position_id}/close")
@@ -309,6 +351,32 @@ async def close_position(position_id: str) -> dict:
     if closed is None:
         raise HTTPException(status_code=404, detail="Position not found or already closed")
     return closed.model_dump(mode="json")
+
+
+@router.post("/positions/{position_id}/stops")
+async def set_position_stops(position_id: str, body: PositionStopsBody) -> dict:
+    """Attach / update SL & TP after a manual (or any) open."""
+    if not body.auto and body.stop_loss is None and body.take_profit is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide stop_loss/take_profit or set auto=true",
+        )
+    updated = await get_engine().set_position_stops(
+        position_id,
+        stop_loss=body.stop_loss,
+        take_profit=body.take_profit,
+        auto=body.auto
+        or body.stop_loss_pips is not None
+        or body.take_profit_pips is not None,
+        stop_loss_pips=body.stop_loss_pips,
+        take_profit_pips=body.take_profit_pips,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Position not found, already closed, or MT modify unsupported",
+        )
+    return updated.model_dump(mode="json")
 
 
 @router.websocket("/ws")

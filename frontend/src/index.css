@@ -184,6 +184,133 @@ select {
   animation: rise 800ms 80ms ease both;
 }
 
+.manual-trade {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem 1.15rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(20, 99, 92, 0.22), rgba(12, 20, 19, 0.55));
+  animation: rise 700ms 120ms ease both;
+}
+
+.manual-trade-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.manual-trade-head strong {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 400;
+}
+
+.manual-prices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.price-pill {
+  padding: 0.65rem 0.8rem;
+  border-top: 1px solid var(--line);
+  background: rgba(8, 16, 16, 0.45);
+}
+
+.price-pill label {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.price-pill strong {
+  font-family: var(--display);
+  font-size: 1.55rem;
+  font-weight: 400;
+}
+
+.price-pill.buy strong {
+  color: var(--win);
+}
+
+.price-pill.sell strong {
+  color: var(--loss);
+}
+
+.manual-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.lots-field {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.lots-field input {
+  width: 5.5rem;
+  background: var(--panel);
+  color: var(--sand);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+}
+
+.auto-stops-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--mist);
+  font-size: 0.9rem;
+}
+
+.btn-buy {
+  background: rgba(125, 255, 179, 0.92);
+  color: var(--ink);
+  font-weight: 700;
+  min-width: 8.5rem;
+}
+
+.btn-sell {
+  background: rgba(255, 107, 107, 0.9);
+  color: #1a0a0a;
+  font-weight: 700;
+  min-width: 8.5rem;
+}
+
+.manual-note {
+  margin-top: 0.65rem;
+  color: var(--gold);
+}
+
+.pos-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .manual-prices {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-buy,
+  .btn-sell {
+    flex: 1 1 auto;
+  }
+}
+
 .metric {
   padding: 1rem 1.1rem;
   border-top: 1px solid var(--line);

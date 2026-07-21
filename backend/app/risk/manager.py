@@ -103,3 +103,28 @@ class RiskManager:
             sl = request.stop_loss or (entry + sl_pips * pip)
             tp = request.take_profit or (entry - tp_pips * pip)
         return sl, tp
+
+    def stops_from_entry(
+        self,
+        *,
+        symbol: str,
+        side: Side,
+        entry: float,
+        stop_loss_pips: float | None = None,
+        take_profit_pips: float | None = None,
+    ) -> tuple[float, float]:
+        """Build SL/TP prices from entry + pip distances (manual / post-open)."""
+        pip = self.pip_size(symbol)
+        sl_pips = (
+            stop_loss_pips
+            if stop_loss_pips is not None
+            else self.settings.default_stop_loss_pips
+        )
+        tp_pips = (
+            take_profit_pips
+            if take_profit_pips is not None
+            else self.settings.default_take_profit_pips
+        )
+        if side == Side.BUY:
+            return entry - sl_pips * pip, entry + tp_pips * pip
+        return entry + sl_pips * pip, entry - tp_pips * pip

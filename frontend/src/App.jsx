@@ -91,6 +91,9 @@ export default function App() {
   const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [manualLots, setManualLots] = useState(0.01)
+  const [autoStops, setAutoStops] = useState(true)
+  const [orderNote, setOrderNote] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -261,10 +264,48 @@ export default function App() {
     })
   }
 
+  async function manualTrade(side) {
+    await run(async () => {
+      const order = await api.placeOrder({
+        symbol: 'XAUUSD',
+        side,
+        lots: Number(manualLots) || 0.01,
+        comment: 'manual',
+        auto_stops: autoStops,
+      })
+      if (order?.status === 'REJECTED') {
+        throw new Error(order.reject_reason || 'Order rejected')
+      }
+      const sl = order.stop_loss != null ? ` SL ${order.stop_loss}` : ''
+      const tp = order.take_profit != null ? ` TP ${order.take_profit}` : ''
+      setOrderNote(
+        `${order.side} ${order.lots} @ ${order.fill_price ?? '—'}${sl}${tp}`,
+      )
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setAccount(await api.account())
+      const tradeInfo = await api.trades(100)
+      setTrades(tradeInfo.trades || [])
+      setTradeSummary(tradeInfo.summary || null)
+      return null
+    })
+  }
+
+  async function attachAutoStops(id) {
+    await run(async () => {
+      await api.setStops(id, { auto: true })
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote('Auto SL/TP attached')
+      return null
+    })
+  }
+
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
+  const hasOpen = positions.length > 0
 
   return (
     <div className="app">
@@ -481,6 +522,76 @@ export default function App() {
         </div>
       </section>
 
+      <section className="manual-trade" aria-label="Manual buy sell">
+        <div className="manual-trade-head">
+          <strong>Manual trade</strong>
+          <span className="meta">
+            XAUUSD · {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
+          </span>
+        </div>
+        <div className="manual-prices">
+          <div className="price-pill sell">
+            <label>SELL</label>
+            <strong>{gold?.bid != null ? Number(gold.bid).toFixed(2) : '—'}</strong>
+          </div>
+          <div className="price-pill mid">
+            <label>MID</label>
+            <strong>{gold?.mid != null ? Number(gold.mid).toFixed(2) : '—'}</strong>
+          </div>
+          <div className="price-pill buy">
+            <label>BUY</label>
+            <strong>{gold?.ask != null ? Number(gold.ask).toFixed(2) : '—'}</strong>
+          </div>
+        </div>
+        <div className="manual-controls">
+          <label className="lots-field">
+            Lots
+            <input
+              type="number"
+              min="0.01"
+              max="10"
+              step="0.01"
+              value={manualLots}
+              disabled={busy}
+              onChange={(e) => setManualLots(e.target.value)}
+            />
+          </label>
+          <label className="auto-stops-toggle">
+            <input
+              type="checkbox"
+              checked={autoStops}
+              disabled={busy}
+              onChange={(e) => setAutoStops(e.target.checked)}
+            />
+            Auto SL/TP after fill
+          </label>
+          <button
+            type="button"
+            className="btn-sell"
+            disabled={busy || !gold || hasOpen}
+            onClick={() => manualTrade('SELL')}
+            title={hasOpen ? 'Close open position first' : 'Market SELL'}
+          >
+            SELL {gold?.bid != null ? Number(gold.bid).toFixed(2) : ''}
+          </button>
+          <button
+            type="button"
+            className="btn-buy"
+            disabled={busy || !gold || hasOpen}
+            onClick={() => manualTrade('BUY')}
+            title={hasOpen ? 'Close open position first' : 'Market BUY'}
+          >
+            BUY {gold?.ask != null ? Number(gold.ask).toFixed(2) : ''}
+          </button>
+        </div>
+        {orderNote ? <div className="meta manual-note">{orderNote}</div> : null}
+        {hasOpen ? (
+          <div className="meta">
+            Flat first (1 position max) — Close open trade, or attach Auto SL/TP below.
+          </div>
+        ) : null}
+      </section>
+
       <section className="chart-panel">
         <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
       </section>
@@ -603,8 +714,22 @@ export default function App() {
                     <td className={pnlClass(p.unrealized_pnl)}>
                       ${money(p.unrealized_pnl)}
                     </td>
-                    <td>
-                      <button className="btn-ghost" onClick={() => onClose(p.id)}>
+                    <td className="pos-actions">
+                      {p.stop_loss == null || p.take_profit == null ? (
+                        <button
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => attachAutoStops(p.id)}
+                          title="Auto attach desk default SL/TP"
+                        >
+                          Auto SL/TP
+                        </button>
+                      ) : null}
+                      <button
+                        className="btn-ghost"
+                        disabled={busy}
+                        onClick={() => onClose(p.id)}
+                      >
                         Close
                       </button>
                     </td>

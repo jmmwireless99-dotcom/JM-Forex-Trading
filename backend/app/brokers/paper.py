@@ -101,6 +101,23 @@ class PaperBroker:
         self.positions.append(position)
         return order
 
+    def set_stops(
+        self,
+        position_id: str,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+    ) -> Position | None:
+        """Attach or update SL/TP on an open position."""
+        position = next((p for p in self.positions if p.id == position_id), None)
+        if position is None or position.status != PositionStatus.OPEN:
+            return None
+        if stop_loss is not None:
+            position.stop_loss = stop_loss
+        if take_profit is not None:
+            position.take_profit = take_profit
+        return position
+
     def close_position(
         self, position_id: str, price: float | None = None, reason: str = "manual"
     ) -> Position | None:

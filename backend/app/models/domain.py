@@ -80,6 +80,8 @@ class OrderRequest(BaseModel):
     take_profit: Optional[float] = None
     strategy: Optional[str] = None
     comment: str = ""
+    # When True (default), fill missing SL/TP from desk defaults at execute time.
+    attach_stops: bool = True
 
 
 class Order(BaseModel):

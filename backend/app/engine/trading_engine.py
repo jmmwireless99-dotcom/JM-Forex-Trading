@@ -514,6 +514,56 @@ class TradingEngine:
         async with self._lock:
             return await self._execute(request)
 
+    async def set_position_stops(
+        self,
+        position_id: str,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        auto: bool = False,
+        stop_loss_pips: float | None = None,
+        take_profit_pips: float | None = None,
+    ) -> Position | None:
+        """Attach / update SL & TP on an open position (manual desk helper)."""
+        async with self._lock:
+            if self.using_mt():
+                return None  # MT modify not supported via file bridge yet
+            pos = next(
+                (
+                    p
+                    for p in self.paper.open_positions()
+                    if p.id == position_id
+                ),
+                None,
+            )
+            if pos is None:
+                return None
+            sl = stop_loss
+            tp = take_profit
+            if auto or (sl is None and tp is None):
+                auto_sl, auto_tp = self.risk.stops_from_entry(
+                    symbol=pos.symbol,
+                    side=pos.side,
+                    entry=pos.entry_price,
+                    stop_loss_pips=stop_loss_pips,
+                    take_profit_pips=take_profit_pips,
+                )
+                if sl is None:
+                    sl = auto_sl
+                if tp is None:
+                    tp = auto_tp
+            updated = self.paper.set_stops(
+                position_id, stop_loss=sl, take_profit=tp
+            )
+            if updated:
+                self.journal.update_open_pnl(self.paper.open_positions())
+                await self._emit("position", updated.model_dump(mode="json"))
+                await self._emit(
+                    "positions",
+                    [p.model_dump(mode="json") for p in self.open_positions()],
+                )
+            return updated
+
     async def close_position(self, position_id: str) -> Position | None:
         async with self._lock:
             if self.using_mt():
@@ -681,7 +731,7 @@ class TradingEngine:
             await self._emit("order", rejected.model_dump(mode="json"))
             return rejected
 
-        if tick is not None:
+        if tick is not None and request.attach_stops:
             sl, tp = self.risk.apply_default_stops(request, tick)
             request.stop_loss = request.stop_loss or sl
             request.take_profit = request.take_profit or tp
