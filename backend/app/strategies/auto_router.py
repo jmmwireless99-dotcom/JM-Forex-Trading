@@ -51,6 +51,7 @@ class AutoStrategyRouter:
         self.session_map: dict[str, str | None] = {
             "asia": "EMA_RSI_Scalp",
             "london": "London_Judas_Sweep",
+            "london_close": None,
             "london_ny_overlap": "Liquidity_Sweep_SMC",
             "new_york": "EMA_RSI_Scalp",
             "friday_late": None,
@@ -123,15 +124,21 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
-                "utc": "00:00-08:59",
+                "utc": "00:00-06:59",
                 "slot": "Asia",
                 "strategies": "EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
-                "utc": "09:00-12:59",
+                "utc": "07:00-11:59",
                 "slot": "London",
                 "strategies": "London_Judas_Sweep",
+            },
+            {
+                "days": "Mon-Fri",
+                "utc": "12:00-12:59",
+                "slot": "London close",
+                "strategies": "Stand aside (kill limits)",
             },
             {
                 "days": "Mon-Fri",

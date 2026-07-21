@@ -1,3 +1,5 @@
+"""USD / London news blackout windows for XAUUSD desk."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,17 +19,20 @@ class NewsEvent:
     # Approximate UTC hour when the print usually hits
     utc_hour: int
     utc_minute: int = 30
-    # weekday: 0=Mon … 4=Fri; None = any weekday (rare)
+    # weekday: 0=Mon … 4=Fri; None = any weekday
     weekday: int | None = None
-    # day_rule helpers
     week_of_month: int | None = None  # 1..5
     day_of_month: int | None = None
     # First Friday = NFP style
     first_weekday_of_month: int | None = None
+    # Last Friday of month (Core PCE style)
+    last_weekday_of_month: int | None = None
+    # Inclusive day-of-month window (e.g. mid-month CPI)
+    day_range: tuple[int, int] | None = None
 
 
 # High-impact USD events that commonly spike XAUUSD.
-# Times are typical US schedule in UTC (EST/EDT shifts ±1h — we use wide buffers).
+# Times are typical US schedule in UTC (EST/EDT shifts ±1h — we use buffers).
 USD_GOLD_EVENTS: list[NewsEvent] = [
     NewsEvent(
         "Non-Farm Payrolls (NFP)",
@@ -41,38 +46,48 @@ USD_GOLD_EVENTS: list[NewsEvent] = [
         NewsImpact.HIGH,
         utc_hour=12,
         utc_minute=30,
-        # mid-month-ish; we blackout around typical CPI window using day range in matcher
-        day_of_month=None,
-        weekday=None,
+        # Typical mid-month Tuesday print (approx)
+        weekday=1,
+        day_range=(10, 16),
     ),
     NewsEvent(
         "FOMC Rate Decision",
         NewsImpact.HIGH,
         utc_hour=18,
         utc_minute=0,
-        weekday=2,  # usually Wednesday
-        week_of_month=None,
+        weekday=2,  # Wednesday
+        week_of_month=2,  # ~2nd Wednesday proxy (desk-safe, not every Wed)
     ),
     NewsEvent(
         "Core PCE",
         NewsImpact.HIGH,
         utc_hour=12,
         utc_minute=30,
+        last_weekday_of_month=4,  # last Friday of month
     ),
     NewsEvent(
         "US GDP / ISM / Jobless proxy window",
         NewsImpact.MEDIUM,
         utc_hour=14,
         utc_minute=0,
+        weekday=3,  # Thursday proxy — avoid daily soft blocks
     ),
 ]
 
 # High-impact UK / EUR red-folder style windows (London morning risk)
+# Anchored to specific weekdays so we do not pause every London open.
 LONDON_RED_FOLDER: list[NewsEvent] = [
-    NewsEvent("UK CPI / GDP proxy", NewsImpact.HIGH, utc_hour=6, utc_minute=0),
-    NewsEvent("UK BOE / Labour proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=30),
-    NewsEvent("EUR CPI / GDP proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=0),
-    NewsEvent("ECB rate decision proxy", NewsImpact.HIGH, utc_hour=12, utc_minute=15, weekday=3),
+    NewsEvent("UK CPI / GDP proxy", NewsImpact.HIGH, utc_hour=6, utc_minute=0, weekday=2),
+    NewsEvent("UK BOE / Labour proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=30, weekday=3),
+    NewsEvent("EUR CPI / GDP proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=0, weekday=2),
+    NewsEvent(
+        "ECB rate decision proxy",
+        NewsImpact.HIGH,
+        utc_hour=12,
+        utc_minute=15,
+        weekday=3,
+        week_of_month=2,
+    ),
 ]
 
 
@@ -99,6 +114,18 @@ def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int | None:
     return None
 
 
+def _last_weekday(year: int, month: int, weekday: int) -> int | None:
+    last = None
+    for day in range(1, 32):
+        try:
+            dt = datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError:
+            break
+        if dt.weekday() == weekday:
+            last = day
+    return last
+
+
 def _event_occurrences(event: NewsEvent, day: datetime) -> list[datetime]:
     """Possible event timestamps on a given UTC calendar day."""
     day = day.astimezone(timezone.utc)
@@ -113,37 +140,32 @@ def _event_occurrences(event: NewsEvent, day: datetime) -> list[datetime]:
             )
         return candidates
 
+    if event.last_weekday_of_month is not None:
+        target = _last_weekday(y, m, event.last_weekday_of_month)
+        if target == d:
+            candidates.append(
+                datetime(y, m, d, event.utc_hour, event.utc_minute, tzinfo=timezone.utc)
+            )
+        return candidates
+
     if event.weekday is not None and day.weekday() != event.weekday:
         return []
 
-    # FOMC-ish: 2nd or 3rd Wednesday — mark both potential Wednesdays in month
-    if event.name.startswith("FOMC"):
-        for n in (1, 2, 3, 4):
-            target = _nth_weekday(y, m, 2, n)
-            if target == d:
-                candidates.append(
-                    datetime(y, m, d, event.utc_hour, event.utc_minute, tzinfo=timezone.utc)
-                )
-        return candidates
+    if event.week_of_month is not None:
+        target = _nth_weekday(y, m, event.weekday if event.weekday is not None else day.weekday(), event.week_of_month)
+        if target != d:
+            return []
 
-    # CPI / PCE / generic high-impact USD data: typically 08:30 ET ≈ 12:30 UTC
-    # Blackout on likely mid-month data days (10–15) for CPI-named events,
-    # and last business week window for PCE-named events.
-    if "CPI" in event.name and not (10 <= d <= 15):
-        return []
-    if "PCE" in event.name and not (20 <= d <= 31):
+    if event.day_of_month is not None and event.day_of_month != d:
         return []
 
-    # Medium catch-all: only weekdays
+    if event.day_range is not None:
+        lo, hi = event.day_range
+        if not (lo <= d <= hi):
+            return []
+
     if day.weekday() >= 5:
         return []
-
-    if event.impact == NewsImpact.MEDIUM:
-        # Soft window — only flag near the top of typical US open data hour
-        candidates.append(
-            datetime(y, m, d, event.utc_hour, event.utc_minute, tzinfo=timezone.utc)
-        )
-        return candidates
 
     candidates.append(
         datetime(y, m, d, event.utc_hour, event.utc_minute, tzinfo=timezone.utc)

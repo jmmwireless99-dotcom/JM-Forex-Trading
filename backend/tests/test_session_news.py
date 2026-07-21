@@ -13,7 +13,7 @@ from app.strategies.session import (
 
 
 def test_asia_ph_daytime():
-    # 02:00 UTC = 10:00 PH → Asia
+    # 02:00 UTC = Asia box / EMA window
     ts = datetime(2026, 7, 20, 2, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ASIA
@@ -21,13 +21,21 @@ def test_asia_ph_daytime():
     assert session_allows_entry(ts) is False
 
 
-def test_after_ph_7pm_is_london():
-    # 12:00 UTC = 20:00 PH → late London (full map)
-    ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+def test_london_judas_window():
+    # 08:00 UTC — primary Judas sweep/entry (must NOT be Asia)
+    ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ALLOWED
     assert window.label == "london"
     assert session_allows_entry(ts) is True
+
+
+def test_london_kill_hour_stand_aside():
+    # 12:00 UTC — kill pending, no new strategy entries
+    ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "london_close"
 
 
 def test_overlap_prime():
@@ -40,14 +48,14 @@ def test_overlap_prime():
 def test_asia_desk_only_blocks_after_5pm():
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     assert classify_asia_desk(ts).tier == SessionTier.AVOID
-    assert classify_full_sessions(ts).label == "london"
+    assert classify_full_sessions(ts).label == "london_close"
 
 
 def test_next_session_after_asia_is_london():
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
-    assert nxt["strategy"] is None
+    assert nxt["strategy"] == "London_Judas_Sweep"
 
 
 def test_weekend_avoided():
@@ -66,3 +74,18 @@ def test_nfp_blackout_first_friday():
 def test_quiet_day_not_blocked():
     quiet = check_news_blackout(datetime(2026, 7, 19, 3, 0, tzinfo=timezone.utc))
     assert quiet.blocked is False
+
+
+def test_core_pce_not_every_late_month_day():
+    # Tue Jul 21 2026 is NOT last Friday — must not blackout for Core PCE
+    ts = datetime(2026, 7, 21, 12, 20, tzinfo=timezone.utc)
+    result = check_news_blackout(ts, before_minutes=45, after_minutes=30)
+    assert result.blocked is False
+
+
+def test_core_pce_last_friday_blackout():
+    # Last Friday of July 2026 = Jul 31
+    ts = datetime(2026, 7, 31, 12, 20, tzinfo=timezone.utc)
+    result = check_news_blackout(ts, before_minutes=45, after_minutes=30)
+    assert result.blocked is True
+    assert result.event == "Core PCE"

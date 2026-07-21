@@ -60,8 +60,8 @@ def strategy_catalog() -> list[dict]:
             ),
             "entry_rules": [
                 "Build Asian box 00:00–06:00 UTC (high / low / mid).",
-                "Sweep window 07:00–09:00 UTC — wick beyond Asia H/L by 5–15 pips.",
-                "Price must reject back inside the Asian range after the sweep.",
+                "Active London strategy window 07:00–11:59 UTC (sweep+entry).",
+                "Sweep: wick beyond Asia H/L by 5–15 pips, then reject inside.",
                 "Require ChoCH (break of recent swing high/low on M5 or M1).",
                 "Place LIMIT at bearish/bullish FVG 50% equilibrium (mid).",
                 "Cancel pending limits at 12:00 UTC (kill switch).",
@@ -96,7 +96,7 @@ def strategy_catalog() -> list[dict]:
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
-                "RSI 40–50 for BUY; RSI 50–60 for SELL.",
+                "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with bullish/bearish engulfing or pin bar on M5 close.",
             ],
             "entry_flow": [

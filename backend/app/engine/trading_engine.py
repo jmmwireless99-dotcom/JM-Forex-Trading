@@ -174,10 +174,20 @@ class TradingEngine:
         if self.running:
             return
         self._seed_candle_history()
+        if self.auto_enabled:
+            rec = self.recommended_now()
+            target = rec.get("transfer_to") or rec.get("strategy")
+            if target and target in STRATEGY_REGISTRY:
+                self._park_strategy(
+                    target, note=f"Boot session auto-follow ({rec.get('session')})"
+                )
+                self._last_session_slot = rec.get("session")
         self.running = True
         self._started_at = time.time()
         self._task = asyncio.create_task(self._loop())
         await self._emit("engine", self.status().model_dump(mode="json"))
+        if self.auto_enabled:
+            await self._emit("auto", self.auto_status())
 
     async def stop(self) -> None:
         self.running = False

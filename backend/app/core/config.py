@@ -29,13 +29,13 @@ class Settings(BaseSettings):
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
-    # Clean slate — manual desk until new strategies are added
-    # JM_DEFAULT_STRATEGY=manual_only  JM_AUTO_STRATEGY=false
+    # Scalp desk: session auto-follow on by default
+    # JM_DEFAULT_STRATEGY=manual_only  JM_AUTO_STRATEGY=true
     default_strategy: str = "manual_only"
-    auto_strategy: bool = False
+    auto_strategy: bool = True
     # Avoid flip-flopping between strategies / overtrading paper noise
-    strategy_stick_seconds: int = 900
-    entry_cooldown_seconds: int = 300
+    strategy_stick_seconds: int = 300
+    entry_cooldown_seconds: int = 120
     # Chart candles (M1) vs signal timeframe for entries (M5)
     candle_period_seconds: int = 60
     signal_period_seconds: int = 300

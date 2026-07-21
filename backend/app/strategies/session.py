@@ -54,31 +54,38 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map: Asia PH 7AM–5PM, then London → Overlap → NY.
+    """Full desk map aligned with strategy clocks (UTC).
 
-    Asia owns UTC 23:00–09:00 (PH 7AM–5PM).
-    After PH 5PM (UTC 09:00) strategies restore to London/NY tools.
+    Asia 00:00–06:59 — build Asia box + EMA_RSI
+    London 07:00–11:59 — Judas sweep/entry (matches strategy 07–11)
+    London close 12:00–12:59 — kill pending, no new entries
+    Overlap 13:00–15:59 — SMC
+    New York 16:00–19:59 — EMA_RSI
+    Off-hours / weekend — stand aside
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
-    ph = ph_hour(utc)
 
-    if ASIA_PH_START <= ph < ASIA_PH_END:
+    if 0 <= hour < 7:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (PH 7:00AM–5:00PM) — M5 S/R scalping",
+            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
         )
-
-    # After Asia close → London → overlap → NY
-    if 9 <= hour < 13:
+    if 7 <= hour < 12:
         return SessionWindow(
             SessionTier.ALLOWED,
             "london",
-            "London after Asia — directional gold moves",
+            "London Judas window (UTC 07:00–11:59) — sweep + FVG limit",
+        )
+    if 12 <= hour < 13:
+        return SessionWindow(
+            SessionTier.AVOID,
+            "london_close",
+            "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
         )
     if 13 <= hour < 16:
         return SessionWindow(
@@ -147,9 +154,20 @@ def next_session_hint(ts: datetime) -> dict:
     }
 
 
+_SESSION_STRATEGY = {
+    "asia": "EMA_RSI_Scalp",
+    "london": "London_Judas_Sweep",
+    "london_ny_overlap": "Liquidity_Sweep_SMC",
+    "new_york": "EMA_RSI_Scalp",
+}
+
+
 def _recommended_for_label(label: str, hour_utc: int) -> str | None:
-    return None
+    return _SESSION_STRATEGY.get(label)
 
 
 def _recommend_reason(label: str) -> str:
-    return "Clean slate — no strategy assigned yet"
+    pick = _SESSION_STRATEGY.get(label)
+    if pick:
+        return f"Next slot {label} → {pick}"
+    return f"Next slot {label} — stand aside"

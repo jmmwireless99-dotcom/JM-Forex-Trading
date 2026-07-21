@@ -29,8 +29,8 @@ class EmaRsiScalpStrategy(Strategy):
         ema_fast: int = 20,
         ema_slow: int = 50,
         rsi_period: int = 14,
-        rsi_buy: tuple[float, float] = (40.0, 50.0),
-        rsi_sell: tuple[float, float] = (50.0, 60.0),
+        rsi_buy: tuple[float, float] = (38.0, 52.0),
+        rsi_sell: tuple[float, float] = (48.0, 62.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
     ) -> None:
