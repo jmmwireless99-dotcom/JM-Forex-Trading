@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -253,3 +254,73 @@ class TradeRow(Base):
 
     signal: Mapped[Optional[SignalRow]] = relationship(back_populates="trades")
     strategy: Mapped[Optional[StrategyRow]] = relationship(back_populates="trades")
+
+
+class LondonSignalStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    EXECUTED = "EXECUTED"
+    INVALIDATED = "INVALIDATED"
+    CLOSED_TP = "CLOSED_TP"
+    CLOSED_SL = "CLOSED_SL"
+    CANCELLED = "CANCELLED"
+
+
+class LondonSessionRange(Base):
+    __tablename__ = "london_session_ranges"
+    __table_args__ = (UniqueConstraint("date", name="uq_london_session_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    asian_high: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    asian_low: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    asian_range_pips: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    is_swept_high: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_swept_low: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    signals: Mapped[list["LondonSignal"]] = relationship(back_populates="session")
+
+
+class LondonSignal(Base):
+    __tablename__ = "london_signals"
+    __table_args__ = (Index("ix_london_signals_status", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("london_session_ranges.id", ondelete="SET NULL")
+    )
+    signal_type: Mapped[SignalSide] = mapped_column(
+        Enum(SignalSide, name="signal_side", native_enum=True, create_constraint=False),
+        nullable=False,
+    )
+    sweep_price: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    entry_price: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    stop_loss: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    take_profit: Mapped[float] = mapped_column(Numeric(14, 5), nullable=False)
+    risk_reward_ratio: Mapped[Optional[float]] = mapped_column(Numeric(8, 3))
+    status: Mapped[LondonSignalStatus] = mapped_column(
+        Enum(
+            LondonSignalStatus,
+            name="london_signal_status",
+            native_enum=True,
+            create_constraint=False,
+        ),
+        nullable=False,
+        default=LondonSignalStatus.PENDING,
+    )
+    execution_timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    session: Mapped[Optional[LondonSessionRange]] = relationship(back_populates="signals")
+

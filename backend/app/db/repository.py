@@ -13,6 +13,9 @@ from sqlalchemy import select
 from app.db.models import (
     DbTradeStatus,
     LiquidityZone,
+    LondonSessionRange,
+    LondonSignal,
+    LondonSignalStatus,
     MarketDataCandle,
     SignalRow,
     SignalSide,
@@ -279,3 +282,102 @@ def upsert_zone(
     except Exception:  # noqa: BLE001
         log.exception("upsert_zone failed")
         return None
+
+
+def upsert_london_range(
+    *,
+    session_date,
+    asian_high: float,
+    asian_low: float,
+    asian_range_pips: float,
+    is_swept_high: bool = False,
+    is_swept_low: bool = False,
+) -> str | None:
+    if not db_enabled():
+        return None
+    try:
+        with session_scope() as session:
+            row = session.scalar(
+                select(LondonSessionRange).where(LondonSessionRange.date == session_date)
+            )
+            if row is None:
+                row = LondonSessionRange(
+                    date=session_date,
+                    asian_high=_dec(asian_high),
+                    asian_low=_dec(asian_low),
+                    asian_range_pips=_dec(asian_range_pips),
+                    is_swept_high=is_swept_high,
+                    is_swept_low=is_swept_low,
+                )
+                session.add(row)
+            else:
+                row.asian_high = _dec(asian_high)
+                row.asian_low = _dec(asian_low)
+                row.asian_range_pips = _dec(asian_range_pips)
+                if is_swept_high:
+                    row.is_swept_high = True
+                if is_swept_low:
+                    row.is_swept_low = True
+            session.flush()
+            return str(row.id)
+    except Exception:  # noqa: BLE001
+        log.exception("upsert_london_range failed")
+        return None
+
+
+def create_london_signal(
+    *,
+    session_id: str | None,
+    signal_type: str,
+    sweep_price: float,
+    entry_price: float,
+    stop_loss: float,
+    take_profit: float,
+    risk_reward_ratio: float | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str | None:
+    if not db_enabled():
+        return None
+    try:
+        with session_scope() as session:
+            sid = uuid.UUID(session_id) if session_id else None
+            row = LondonSignal(
+                session_id=sid,
+                signal_type=SignalSide(signal_type.upper()),
+                sweep_price=_dec(sweep_price),
+                entry_price=_dec(entry_price),
+                stop_loss=_dec(stop_loss),
+                take_profit=_dec(take_profit),
+                risk_reward_ratio=_dec(risk_reward_ratio) if risk_reward_ratio else None,
+                status=LondonSignalStatus.PENDING,
+                metadata_=metadata or {},
+            )
+            session.add(row)
+            session.flush()
+            return str(row.id)
+    except Exception:  # noqa: BLE001
+        log.exception("create_london_signal failed")
+        return None
+
+
+def mark_london_signal(
+    signal_id: str,
+    *,
+    status: str,
+    execution_timestamp: datetime | None = None,
+) -> bool:
+    if not db_enabled() or not signal_id:
+        return False
+    try:
+        with session_scope() as session:
+            row = session.get(LondonSignal, uuid.UUID(signal_id))
+            if row is None:
+                return False
+            row.status = LondonSignalStatus(status)
+            if execution_timestamp:
+                row.execution_timestamp = execution_timestamp
+            return True
+    except Exception:  # noqa: BLE001
+        log.exception("mark_london_signal failed")
+        return False
+

@@ -74,6 +74,43 @@ async def db_strategies(active_only: bool = False) -> dict:
     return {"ok": True, "configured": True, "strategies": rows}
 
 
+@router.get("/london")
+async def london_desk() -> dict:
+    """London Judas session board: Asian range + window + pending kill."""
+    from app.engine.london_engine import LondonEngine
+    from app.strategies.london_session import (
+        LONDON_ENTRY_END_UTC,
+        LONDON_OPEN_UTC,
+        PENDING_KILL_UTC,
+    )
+
+    engine = get_engine()
+    bars = engine.signal_candles.closed_history(engine.settings.symbols[0], 240)
+    ts = engine.last_tick_at or utcnow()
+    snap = LondonEngine().snapshot(bars, ts)
+    pending = []
+    if not engine.using_mt():
+        pending = [o.model_dump(mode="json") for o in engine.paper.pending_orders()]
+    return {
+        "ok": True,
+        "strategy": "London_Judas_Sweep",
+        "windows": {
+            "asia_utc": "00:00–06:00",
+            "london_entry_utc": f"{LONDON_OPEN_UTC.strftime('%H:%M')}–{LONDON_ENTRY_END_UTC.strftime('%H:%M')}",
+            "kill_pending_utc": PENDING_KILL_UTC.strftime("%H:%M"),
+            "ph_note": "London 07–16 UTC ≈ 15:00–00:00 PH",
+        },
+        "in_entry_window": snap.in_entry_window,
+        "past_kill": snap.past_kill,
+        "asian_range": snap.asian_range,
+        "pending_note": snap.pending_note,
+        "pending_orders": pending,
+        "active_strategy": engine.status().active_strategy,
+        "checklist": getattr(engine.strategy, "last_checklist", []),
+        "last_block_reason": getattr(engine.strategy, "last_block_reason", None),
+    }
+
+
 @router.post("/db/seed")
 async def db_seed() -> dict:
     from app.db.seed import seed_strategies
@@ -171,7 +208,7 @@ async def desk() -> dict:
     return {
         "symbol": "XAUUSD",
         "mode": "scalp_desk",
-        "recommended_strategy": "EMA_RSI_Scalp",
+        "recommended_strategy": "London_Judas_Sweep",
         "recommended_now": engine.recommended_now(),
         "active_strategy": engine.status().active_strategy,
         "auto": engine.auto_status(),
@@ -192,23 +229,23 @@ async def desk() -> dict:
         "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
         "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
         "entry_rules": [
+            "London_Judas_Sweep — Asia 00-06 UTC box · sweep 07-09 · FVG50 LIMIT · kill 12:00",
             "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 40-50/50-60 · engulf/pin",
             "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
             "Manual BUY/SELL with auto SL/TP always available",
-            "Signals persist to Postgres when JM_DATABASE_URL is set",
         ],
         "recommended_asia": "EMA_RSI_Scalp",
-        "recommended_london": "EMA_RSI_Scalp",
+        "recommended_london": "London_Judas_Sweep",
         "recommended_overlap": "Liquidity_Sweep_SMC",
         "recommended_ny": "EMA_RSI_Scalp",
         "recommended_sr_scalp": "Liquidity_Sweep_SMC",
         "asia_desk_only": settings.asia_desk_only,
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
+            "London Judas: Asian High/Low + ChoCH + FVG 50% limit",
             "EMA 200 / 20 / 50 + RSI 14",
             "Engulfing + pin bar confirmation",
-            "Asia high/low · PDH/PDL liquidity",
-            "FVG + Order Block retest (SMC)",
+            "Spread > 30 pips ($0.30) blocked · UK/EUR news −15m",
         ],
         "entry_checklist": getattr(strategy, "last_checklist", []),
         "asia_range": getattr(strategy, "last_range", None),

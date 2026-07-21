@@ -15,7 +15,12 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar'
 import * as Linking from 'expo-linking'
 import { api, defaultApiBase, getApiBase, setApiBase } from './src/api'
 
-const STRATEGIES = ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']
+const STRATEGIES = [
+  'manual_only',
+  'London_Judas_Sweep',
+  'EMA_RSI_Scalp',
+  'Liquidity_Sweep_SMC',
+]
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {

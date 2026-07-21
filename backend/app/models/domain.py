@@ -23,6 +23,7 @@ class Side(str, Enum):
 
 class OrderType(str, Enum):
     MARKET = "MARKET"
+    LIMIT = "LIMIT"
 
 
 class OrderStatus(str, Enum):
@@ -68,6 +69,10 @@ class Signal(BaseModel):
     take_profit: Optional[float] = None
     stop_loss_pips: Optional[float] = None
     take_profit_pips: Optional[float] = None
+    order_type: OrderType = OrderType.MARKET
+    limit_price: Optional[float] = None
+    expire_at: Optional[datetime] = None
+    sweep_price: Optional[float] = None
     timestamp: datetime = Field(default_factory=utcnow)
 
 
@@ -82,6 +87,8 @@ class OrderRequest(BaseModel):
     comment: str = ""
     # When True (default), fill missing SL/TP from desk defaults at execute time.
     attach_stops: bool = True
+    limit_price: Optional[float] = None
+    expire_at: Optional[datetime] = None
 
 
 class Order(BaseModel):
@@ -98,6 +105,8 @@ class Order(BaseModel):
     strategy: Optional[str] = None
     comment: str = ""
     reject_reason: Optional[str] = None
+    limit_price: Optional[float] = None
+    expire_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=utcnow)
     filled_at: Optional[datetime] = None
 

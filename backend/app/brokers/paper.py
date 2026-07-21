@@ -7,6 +7,7 @@ from app.models.domain import (
     Order,
     OrderRequest,
     OrderStatus,
+    OrderType,
     Position,
     PositionStatus,
     Side,
@@ -33,6 +34,8 @@ class PaperBroker:
 
     def update_tick(self, tick: Tick) -> list[Position]:
         self._last_ticks[tick.symbol] = tick
+        # Fill pending LIMIT orders first
+        self._try_fill_limits(tick)
         closed: list[Position] = []
         for position in list(self.positions):
             if position.status != PositionStatus.OPEN:
@@ -63,6 +66,41 @@ class PaperBroker:
                 closed.append(self.close_position(position.id, exit_price, "take_profit"))
         return [c for c in closed if c is not None]
 
+    def _try_fill_limits(self, tick: Tick) -> None:
+        now = tick.timestamp
+        for order in self.orders:
+            if order.status != OrderStatus.PENDING or order.order_type != OrderType.LIMIT:
+                continue
+            if order.symbol != tick.symbol or order.limit_price is None:
+                continue
+            if order.expire_at is not None and now >= order.expire_at:
+                order.status = OrderStatus.CANCELLED
+                order.reject_reason = "Limit expired (London 12:00 UTC kill switch)"
+                continue
+            hit = False
+            if order.side == Side.BUY and tick.ask <= order.limit_price:
+                hit = True
+                fill = min(tick.ask, order.limit_price)
+            elif order.side == Side.SELL and tick.bid >= order.limit_price:
+                hit = True
+                fill = max(tick.bid, order.limit_price)
+            if not hit:
+                continue
+            order.fill_price = fill
+            order.status = OrderStatus.FILLED
+            order.filled_at = utcnow()
+            self.positions.append(
+                Position(
+                    symbol=order.symbol,
+                    side=order.side,
+                    lots=order.lots,
+                    entry_price=fill,
+                    stop_loss=order.stop_loss,
+                    take_profit=order.take_profit,
+                    strategy=order.strategy,
+                )
+            )
+
     def place_order(self, request: OrderRequest) -> Order:
         tick = self._last_ticks.get(request.symbol)
         order = Order(
@@ -74,11 +112,61 @@ class PaperBroker:
             take_profit=request.take_profit,
             strategy=request.strategy,
             comment=request.comment,
+            limit_price=request.limit_price,
+            expire_at=request.expire_at,
+            requested_price=request.limit_price,
         )
 
         if tick is None:
             order.status = OrderStatus.REJECTED
             order.reject_reason = f"No market data for {request.symbol}"
+            self.orders.append(order)
+            return order
+
+        if request.order_type == OrderType.LIMIT:
+            if request.limit_price is None:
+                order.status = OrderStatus.REJECTED
+                order.reject_reason = "LIMIT order requires limit_price"
+                self.orders.append(order)
+                return order
+            # Immediate fill if already through price
+            if request.side == Side.BUY and tick.ask <= request.limit_price:
+                fill = tick.ask
+                order.fill_price = fill
+                order.status = OrderStatus.FILLED
+                order.filled_at = utcnow()
+                self.orders.append(order)
+                self.positions.append(
+                    Position(
+                        symbol=request.symbol,
+                        side=request.side,
+                        lots=request.lots,
+                        entry_price=fill,
+                        stop_loss=request.stop_loss,
+                        take_profit=request.take_profit,
+                        strategy=request.strategy,
+                    )
+                )
+                return order
+            if request.side == Side.SELL and tick.bid >= request.limit_price:
+                fill = tick.bid
+                order.fill_price = fill
+                order.status = OrderStatus.FILLED
+                order.filled_at = utcnow()
+                self.orders.append(order)
+                self.positions.append(
+                    Position(
+                        symbol=request.symbol,
+                        side=request.side,
+                        lots=request.lots,
+                        entry_price=fill,
+                        stop_loss=request.stop_loss,
+                        take_profit=request.take_profit,
+                        strategy=request.strategy,
+                    )
+                )
+                return order
+            order.status = OrderStatus.PENDING
             self.orders.append(order)
             return order
 
@@ -100,6 +188,22 @@ class PaperBroker:
         )
         self.positions.append(position)
         return order
+
+    def pending_orders(self) -> list[Order]:
+        return [
+            deepcopy(o)
+            for o in self.orders
+            if o.status == OrderStatus.PENDING and o.order_type == OrderType.LIMIT
+        ]
+
+    def cancel_pending(self, *, reason: str = "cancelled") -> list[Order]:
+        out: list[Order] = []
+        for order in self.orders:
+            if order.status == OrderStatus.PENDING:
+                order.status = OrderStatus.CANCELLED
+                order.reject_reason = reason
+                out.append(deepcopy(order))
+        return out
 
     def set_stops(
         self,

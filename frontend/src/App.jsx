@@ -335,7 +335,7 @@ export default function App() {
             onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']).map((name) => (
+            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC', 'London_Judas_Sweep']).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
                   ? 'manual_only (no auto signals)'
@@ -343,7 +343,9 @@ export default function App() {
                     ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
                     : name === 'Liquidity_Sweep_SMC'
                       ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                      : name}
+                      : name === 'London_Judas_Sweep'
+                        ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
+                        : name}
               </option>
             ))}
           </select>
@@ -420,7 +422,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: EMA_RSI_Scalp · Liquidity_Sweep_SMC · manual_only
+              Strategies: London_Judas_Sweep · EMA_RSI · SMC · manual
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||

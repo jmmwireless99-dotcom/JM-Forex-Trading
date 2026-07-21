@@ -42,6 +42,26 @@ SEED_STRATEGIES: list[dict] = [
             "signal_tf": "M5",
         },
     },
+    {
+        "name": "London_Judas_Sweep",
+        "timeframe": "M5",
+        "description": "London Judas Swing: Asia 00-06 range · sweep 07-09 · FVG50 limit · kill 12:00 UTC",
+        "parameters": {
+            "asia_utc": ["00:00", "06:00"],
+            "london_entry_utc": ["07:00", "11:00"],
+            "sweep_window_utc": ["07:00", "09:00"],
+            "kill_pending_utc": "12:00",
+            "min_sweep_pips": 5,
+            "max_sweep_pips": 15,
+            "sl_buffer_pips": 12,
+            "max_spread_pips": 30,
+            "pip_size": 0.01,
+            "entry": "FVG_50_LIMIT",
+            "reward_r": 3.0,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
 ]
 
 

@@ -174,3 +174,38 @@ DROP TRIGGER IF EXISTS trg_trades_updated ON trades;
 CREATE TRIGGER trg_trades_updated
     BEFORE UPDATE ON trades
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- London Judas Swing tables (Alembic 002_london_judas)
+DO $$ BEGIN
+    CREATE TYPE london_signal_status AS ENUM (
+        'PENDING', 'EXECUTED', 'INVALIDATED', 'CLOSED_TP', 'CLOSED_SL', 'CANCELLED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS london_session_ranges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    date DATE NOT NULL UNIQUE,
+    asian_high NUMERIC(14,5) NOT NULL,
+    asian_low NUMERIC(14,5) NOT NULL,
+    asian_range_pips NUMERIC(12,2) NOT NULL,
+    is_swept_high BOOLEAN NOT NULL DEFAULT FALSE,
+    is_swept_low BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS london_signals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES london_session_ranges(id) ON DELETE SET NULL,
+    signal_type signal_side NOT NULL,
+    sweep_price NUMERIC(14,5) NOT NULL,
+    entry_price NUMERIC(14,5) NOT NULL,
+    stop_loss NUMERIC(14,5) NOT NULL,
+    take_profit NUMERIC(14,5) NOT NULL,
+    risk_reward_ratio NUMERIC(8,3),
+    status london_signal_status NOT NULL DEFAULT 'PENDING',
+    execution_timestamp TIMESTAMPTZ,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_london_signals_status ON london_signals (status);

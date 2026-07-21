@@ -21,6 +21,7 @@ from app.models.domain import (
     Order,
     OrderRequest,
     OrderStatus,
+    OrderType,
     Position,
     PositionStatus,
     Side,
@@ -91,6 +92,8 @@ class TradingEngine:
         self._entry_cooldown_until: float = 0.0
         self._last_session_slot: str | None = None
         self._last_transfer_note: str | None = None
+        self._journaled_limit_ids: set[str] = set()
+        self._london_signal_ids: dict[str, str] = {}  # order.id -> london_signal uuid
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -312,6 +315,92 @@ class TradingEngine:
             self.settings.entry_cooldown_seconds
         )
 
+    async def _london_kill_switch(self, tick: Tick) -> None:
+        from app.strategies.london_session import is_past_pending_kill
+
+        if self.using_mt() or not is_past_pending_kill(tick.timestamp):
+            return
+        cancelled = self.paper.cancel_pending(
+            reason="London kill switch 12:00 UTC — unfilled limit cancelled"
+        )
+        for order in cancelled:
+            lid = self._london_signal_ids.get(order.id)
+            if lid:
+                try:
+                    from app.db.repository import mark_london_signal
+
+                    mark_london_signal(lid, status="CANCELLED")
+                except Exception:
+                    pass
+            await self._emit("order", order.model_dump(mode="json"))
+
+    async def _sync_limit_fills(self) -> None:
+        """Journal LIMIT orders that filled on tick (pending → filled)."""
+        for order in self.paper.orders:
+            if (
+                order.order_type == OrderType.LIMIT
+                and order.status == OrderStatus.FILLED
+                and order.id not in self._journaled_limit_ids
+            ):
+                pos = self._latest_open(order.symbol, order.side)
+                await self._journal_fill(
+                    order,
+                    pos,
+                    signal_db_id=None,
+                )
+                self._journaled_limit_ids.add(order.id)
+                lid = self._london_signal_ids.get(order.id)
+                if lid:
+                    try:
+                        from app.db.repository import mark_london_signal
+                        from app.models.domain import utcnow as _utcnow
+
+                        mark_london_signal(
+                            lid, status="EXECUTED", execution_timestamp=_utcnow()
+                        )
+                    except Exception:
+                        pass
+                await self._emit("order", order.model_dump(mode="json"))
+
+    async def _persist_london(self, signal: Signal) -> str | None:
+        try:
+            from app.db.repository import create_london_signal, upsert_london_range
+            from app.db.session import db_enabled
+            from app.strategies.london_session import calculate_asian_range
+
+            if not db_enabled() or signal.strategy != "London_Judas_Sweep":
+                return None
+            bars = self.signal_candles.closed_history(signal.symbol, 200)
+            asian = calculate_asian_range(bars, as_of=signal.timestamp)
+            session_id = None
+            if asian:
+                swept_h = signal.side.value == "SELL"
+                swept_l = signal.side.value == "BUY"
+                session_id = upsert_london_range(
+                    session_date=asian.session_date,
+                    asian_high=asian.high,
+                    asian_low=asian.low,
+                    asian_range_pips=asian.range_pips,
+                    is_swept_high=swept_h,
+                    is_swept_low=swept_l,
+                )
+            entry = signal.limit_price or 0
+            risk = abs((signal.stop_loss or 0) - entry)
+            reward = abs(entry - (signal.take_profit or 0))
+            rr = round(reward / risk, 3) if risk else None
+            return create_london_signal(
+                session_id=session_id,
+                signal_type=signal.side.value,
+                sweep_price=float(signal.sweep_price or entry),
+                entry_price=float(entry),
+                stop_loss=float(signal.stop_loss or 0),
+                take_profit=float(signal.take_profit or 0),
+                risk_reward_ratio=rr,
+                metadata={"reason": signal.reason},
+            )
+        except Exception:
+            return None
+
     async def _persist_candle(self, candle: Candle, *, timeframe: str) -> None:
         try:
             from app.db.repository import upsert_candle
@@ -472,6 +561,10 @@ class TradingEngine:
         *,
         signal_db_id: str | None = None,
     ) -> None:
+        if order.status == OrderStatus.PENDING:
+            # LIMIT resting — journal when filled via _sync_limit_fills
+            await self._emit("order", order.model_dump(mode="json"))
+            return
         if order.status == OrderStatus.REJECTED:
             row = self.journal.record_order(order, mode=self.mode)
             await self._emit("trade", row.model_dump(mode="json"))
@@ -614,6 +707,8 @@ class TradingEngine:
                         await self._journal_close(position)
                         await self._emit("position_closed", position.model_dump(mode="json"))
                     self.journal.update_open_pnl(self.paper.open_positions())
+                    await self._sync_limit_fills()
+                    await self._london_kill_switch(tick)
 
                 closed_candle, forming = self.candles.update(tick)
                 if closed_candle is not None:
@@ -637,12 +732,20 @@ class TradingEngine:
                                 strat.set_structure_bars(
                                     self.signal_candles.closed_history(tick.symbol, 200)
                                 )
+                            if hasattr(strat, "set_m1_bars"):
+                                strat.set_m1_bars(
+                                    self.candles.closed_history(tick.symbol, 240)
+                                )
                         else:
                             strat.feed(tick)
                     allow_entries = await self._apply_auto_router(tick)
                     if allow_entries and not uses_m3_entry:
                         bars = self.signal_candles.closed_history(tick.symbol, 200)
                         if getattr(self.strategy, "candle_driven", False):
+                            if hasattr(self.strategy, "set_m1_bars"):
+                                self.strategy.set_m1_bars(
+                                    self.candles.closed_history(tick.symbol, 240)
+                                )
                             signal = self.strategy.on_bar(bars, tick)
                         else:
                             signal = self.strategy.evaluate(tick)
@@ -676,7 +779,13 @@ class TradingEngine:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
                     signal_db_id = await self._persist_signal(signal)
-                    await self._handle_signal(signal, tick, signal_db_id=signal_db_id)
+                    london_id = await self._persist_london(signal)
+                    await self._handle_signal(
+                        signal,
+                        tick,
+                        signal_db_id=signal_db_id,
+                        london_signal_id=london_id,
+                    )
 
                 await self._emit("tick", tick.model_dump(mode="json"))
 
@@ -690,7 +799,12 @@ class TradingEngine:
                 await self._emit("auto", self.auto_status())
 
     async def _handle_signal(
-        self, signal: Signal, tick: Tick, *, signal_db_id: str | None = None
+        self,
+        signal: Signal,
+        tick: Tick,
+        *,
+        signal_db_id: str | None = None,
+        london_signal_id: str | None = None,
     ) -> None:
         for position in self.open_positions():
             if position.symbol == signal.symbol and position.side != signal.side:
@@ -707,6 +821,14 @@ class TradingEngine:
             if position.symbol == signal.symbol and position.side == signal.side:
                 return
 
+        # One pending London limit at a time
+        if (
+            signal.order_type == OrderType.LIMIT
+            and not self.using_mt()
+            and self.paper.pending_orders()
+        ):
+            return
+
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
@@ -715,6 +837,10 @@ class TradingEngine:
             comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
+            order_type=signal.order_type or OrderType.MARKET,
+            limit_price=signal.limit_price,
+            expire_at=signal.expire_at,
+            attach_stops=signal.order_type != OrderType.LIMIT,
         )
         if request.stop_loss is None and signal.stop_loss_pips and tick:
             pip = self.risk.pip_size(signal.symbol)
@@ -727,7 +853,25 @@ class TradingEngine:
                 request.stop_loss = entry + signal.stop_loss_pips * pip
                 if signal.take_profit_pips:
                     request.take_profit = entry - signal.take_profit_pips * pip
-        await self._execute(request, tick=tick, signal_db_id=signal_db_id)
+        order = await self._execute(
+            request, tick=tick, signal_db_id=signal_db_id
+        )
+        if london_signal_id and order:
+            self._london_signal_ids[order.id] = london_signal_id
+            if order.status == OrderStatus.PENDING:
+                self._journaled_limit_ids.discard(order.id)
+            elif order.status == OrderStatus.FILLED:
+                self._journaled_limit_ids.add(order.id)
+                try:
+                    from app.db.repository import mark_london_signal
+
+                    mark_london_signal(
+                        london_signal_id,
+                        status="EXECUTED",
+                        execution_timestamp=order.filled_at,
+                    )
+                except Exception:
+                    pass
 
     async def _execute(
         self,

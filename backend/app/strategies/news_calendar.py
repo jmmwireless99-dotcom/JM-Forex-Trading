@@ -67,6 +67,14 @@ USD_GOLD_EVENTS: list[NewsEvent] = [
     ),
 ]
 
+# High-impact UK / EUR red-folder style windows (London morning risk)
+LONDON_RED_FOLDER: list[NewsEvent] = [
+    NewsEvent("UK CPI / GDP proxy", NewsImpact.HIGH, utc_hour=6, utc_minute=0),
+    NewsEvent("UK BOE / Labour proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=30),
+    NewsEvent("EUR CPI / GDP proxy", NewsImpact.HIGH, utc_hour=9, utc_minute=0),
+    NewsEvent("ECB rate decision proxy", NewsImpact.HIGH, utc_hour=12, utc_minute=15, weekday=3),
+]
+
 
 @dataclass(frozen=True)
 class NewsBlackout:
@@ -175,5 +183,43 @@ def check_news_blackout(
         blocked=True,
         event=event.name,
         reason=f"News blackout: {event.name} (±{before_minutes}/{after_minutes}m)",
+        minutes_to_event=nearest[0],
+    )
+
+
+def check_london_news_blackout(
+    ts: datetime,
+    *,
+    before_minutes: int = 15,
+    after_minutes: int = 10,
+) -> NewsBlackout:
+    """Pause London Judas entries 15m before UK/EUR red-folder style events."""
+    ts = ts.astimezone(timezone.utc)
+    if ts.weekday() >= 5:
+        return NewsBlackout(False, reason="Weekend")
+
+    nearest: tuple[int, NewsEvent] | None = None
+    for day in (ts - timedelta(days=1), ts, ts + timedelta(days=1)):
+        for event in LONDON_RED_FOLDER:
+            for when in _event_occurrences(event, day):
+                delta_min = int((when - ts).total_seconds() // 60)
+                if -before_minutes <= delta_min <= after_minutes:
+                    abs_delta = abs(delta_min)
+                    if nearest is None or abs_delta < nearest[0]:
+                        nearest = (abs_delta, event)
+
+    # Also respect USD high-impact during London window
+    usd = check_news_blackout(ts, before_minutes=before_minutes, after_minutes=after_minutes)
+    if usd.blocked:
+        return usd
+
+    if nearest is None:
+        return NewsBlackout(False, reason="No UK/EUR red-folder blackout")
+
+    _, event = nearest
+    return NewsBlackout(
+        blocked=True,
+        event=event.name,
+        reason=f"London news pause: {event.name} (−{before_minutes}m)",
         minutes_to_event=nearest[0],
     )
