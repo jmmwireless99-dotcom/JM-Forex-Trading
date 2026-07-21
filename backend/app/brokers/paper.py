@@ -33,25 +33,24 @@ class PaperBroker:
         self.positions: list[Position] = []
         self._last_ticks: dict[str, Tick] = {}
 
-    def set_deposit(self, amount: float, *, close_positions: bool = True) -> None:
-        """Reset paper capital to a client-selected deposit (demo / trial)."""
+    def set_deposit(self, amount: float, *, close_positions: bool = True) -> list[Position]:
+        """Set paper capital. Closes opens if requested; keeps closed trade history."""
         amount = float(amount)
         if amount < 50:
             raise ValueError("Minimum paper deposit is $50")
         if amount > 1_000_000:
             raise ValueError("Maximum paper deposit is $1,000,000")
+        closed: list[Position] = []
         if close_positions:
             for position in list(self.positions):
                 if position.status == PositionStatus.OPEN:
-                    self.close_position(position.id, reason="deposit_reset")
-            for order in self.orders:
-                if order.status == OrderStatus.PENDING:
-                    order.status = OrderStatus.CANCELLED
-                    order.reject_reason = "Cancelled — paper deposit reset"
-            self.positions = []
-            self.orders = []
+                    row = self.close_position(position.id, reason="deposit_reset")
+                    if row is not None:
+                        closed.append(row)
+            self.cancel_pending(reason="Cancelled — paper deposit reset")
         self.deposit = round(amount, 2)
         self.balance = round(amount, 2)
+        return closed
 
     def update_tick(self, tick: Tick) -> list[Position]:
         self._last_ticks[tick.symbol] = tick

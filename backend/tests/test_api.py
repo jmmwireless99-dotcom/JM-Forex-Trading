@@ -113,6 +113,37 @@ async def test_paper_deposit_changes_capital(client):
 
 
 @pytest.mark.asyncio
+async def test_paper_deposit_keeps_trade_history(client):
+    # Seed a manual trade into the journal via paper deposit cycle
+    await client.post("/api/engine/start")
+    # Place a tiny manual order after a tick has arrived
+    import asyncio
+
+    await asyncio.sleep(0.15)
+    order = await client.post(
+        "/api/orders",
+        json={
+            "symbol": "XAUUSD",
+            "side": "BUY",
+            "lots": 0.01,
+            "auto_stops": True,
+            "comment": "deposit-history-test",
+        },
+    )
+    assert order.status_code == 200
+    before = await client.get("/api/trades?limit=50")
+    before_n = before.json()["summary"]["total"]
+    assert before_n >= 1
+
+    res = await client.post("/api/account/deposit", json={"amount": 2500, "reset": True})
+    assert res.status_code == 200
+    assert res.json()["account"]["deposit"] == 2500.0
+    # History must remain (and any open may be closed into the log)
+    after = await client.get("/api/trades?limit=50")
+    assert after.json()["summary"]["total"] >= before_n
+
+
+@pytest.mark.asyncio
 async def test_apply_strategy_switches(client):
     res = await client.post("/api/strategies/active", json={"name": "EMA_RSI_Scalp"})
     assert res.status_code == 200

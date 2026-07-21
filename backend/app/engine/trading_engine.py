@@ -696,16 +696,21 @@ class TradingEngine:
         }
 
     async def set_paper_deposit(self, amount: float, *, reset: bool = True) -> dict:
-        """Set fake deposit / starting capital for paper trials."""
+        """Set fake deposit / starting capital for paper trials.
+
+        Trade log history is always kept. When reset=True, open positions are
+        closed (and journaled) then balance is set to the new deposit.
+        """
         if self.using_mt():
             raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
         async with self._lock:
-            self.paper.set_deposit(float(amount), close_positions=reset)
+            closed = self.paper.set_deposit(float(amount), close_positions=reset)
+            for position in closed:
+                await self._journal_close(position)
             self.risk.reset_daily(self.paper.balance)
-            if reset:
-                self.journal.clear()
-                self._journaled_limit_ids.clear()
-                self._london_signal_ids.clear()
+            # Keep trade log history — do not clear journal
+            self._journaled_limit_ids.clear()
+            self._london_signal_ids.clear()
             snap = self.paper.snapshot()
             capital = self.capital_preview()
             await self._emit("account", snap.model_dump(mode="json"))
@@ -714,6 +719,7 @@ class TradingEngine:
                 "ok": True,
                 "account": snap.model_dump(mode="json"),
                 "capital": capital,
+                "trades": self._trades_payload(),
                 "message": f"Paper deposit set to ${capital['deposit']:,.2f}",
             }
 

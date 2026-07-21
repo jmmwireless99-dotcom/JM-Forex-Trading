@@ -272,10 +272,16 @@ export default function App() {
       if (res?.account) setAccount(res.account)
       if (res?.capital) setCapital(res.capital)
       setDepositInput(String(res?.capital?.deposit ?? value))
+      if (res?.trades?.trades) setTrades(res.trades.trades)
+      if (res?.trades?.summary) setTradeSummary(res.trades.summary)
+      else {
+        const tradeInfo = await api.trades(100)
+        setTrades(tradeInfo.trades || [])
+        setTradeSummary(tradeInfo.summary || null)
+      }
+      const pos = await api.positions()
+      setPositions(pos.open || [])
       setOrderNote(res?.message || `Paper deposit set to $${value}`)
-      setPositions([])
-      setTrades([])
-      setTradeSummary({ total: 0, open: 0, closed: 0, wins: 0, losses: 0, net_pnl: 0 })
       return res
     })
   }
