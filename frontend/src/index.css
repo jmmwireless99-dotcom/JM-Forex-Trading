@@ -610,6 +610,14 @@ select {
   width: 1rem;
 }
 
+.schedule-bottom {
+  margin-top: 0.25rem;
+}
+
+.schedule-bottom .entry-rules {
+  margin-bottom: 0.85rem;
+}
+
 .auto-schedule {
   list-style: none;
   margin: 0.75rem 0 0;

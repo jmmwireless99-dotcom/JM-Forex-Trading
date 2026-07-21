@@ -621,14 +621,6 @@ export default function App() {
                 ? ` · ADX ${Number(autoInfo.decision.adx).toFixed(1)}`
                 : ''}
             </div>
-            <div className="entry-rules">
-              <strong>Kailan papasok</strong>
-              <ul>
-                {(desk?.entry_rules || []).map((rule) => (
-                  <li key={rule}>{rule}</li>
-                ))}
-              </ul>
-            </div>
             {desk?.asia_range ? (
               <div className="meta" style={{ marginTop: '0.55rem' }}>
                 Asia range: {desk.asia_range.low} – {desk.asia_range.high} · mid{' '}
@@ -644,18 +636,6 @@ export default function App() {
                 ))}
               </ul>
             ) : null}
-            <ul className="auto-schedule">
-              {(autoInfo?.schedule || []).map((row) => (
-                <li key={`${row.slot}-${row.utc}`}>
-                  <span>
-                    {row.days} {row.utc}
-                  </span>
-                  <span>
-                    <strong>{row.slot}</strong> — {row.strategies}
-                  </span>
-                </li>
-              ))}
-            </ul>
             {desk?.last_block_reason ? (
               <div className="meta" style={{ color: '#ffb4b4', marginTop: '0.65rem' }}>
                 Last block: {desk.last_block_reason}
@@ -821,6 +801,30 @@ export default function App() {
               </table>
             </div>
           )}
+        </section>
+
+        <section className="panel schedule-bottom" style={{ gridColumn: '1 / -1' }}>
+          <h2>Kailan papasok · Weekly schedule</h2>
+          <div className="entry-rules">
+            <strong>Entry rules</strong>
+            <ul>
+              {(desk?.entry_rules || []).map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </div>
+          <ul className="auto-schedule">
+            {(autoInfo?.schedule || []).map((row) => (
+              <li key={`${row.slot}-${row.utc}`}>
+                <span>
+                  {row.days} {row.utc}
+                </span>
+                <span>
+                  <strong>{row.slot}</strong> — {row.strategies}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
 
