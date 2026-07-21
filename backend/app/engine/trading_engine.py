@@ -720,7 +720,10 @@ class TradingEngine:
                 "account": snap.model_dump(mode="json"),
                 "capital": capital,
                 "trades": self._trades_payload(),
-                "message": f"Paper deposit set to ${capital['deposit']:,.2f}",
+                "message": (
+                    f"Paper deposit set to ${capital['deposit']:,.2f} "
+                    f"(trade history kept · {self.journal.summary()['total']} logged)"
+                ),
             }
 
     def open_positions(self) -> list[Position]:

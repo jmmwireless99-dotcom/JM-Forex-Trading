@@ -521,7 +521,8 @@ export default function App() {
           <div>
             <h2>Paper deposit · trial capital</h2>
             <p className="meta">
-              Fake money for client demos — try different amounts and see risk / lot sizing change.
+              Fake money for client demos — try different amounts and see risk / lot sizing
+              change. Trade log history is kept; open positions close into the log.
             </p>
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
