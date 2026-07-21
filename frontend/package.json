@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "JM_BASE=/fx/ vite build",
+    "build:root": "JM_BASE=/ vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
