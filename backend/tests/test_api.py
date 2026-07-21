@@ -131,3 +131,4 @@ async def test_auto_transfer_session_follow(client):
         "Liquidity_Sweep_SMC",
     }
     assert body["active_strategy"] == body["to"]
+    assert "message" in body

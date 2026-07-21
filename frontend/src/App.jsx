@@ -249,7 +249,11 @@ export default function App() {
   }
 
   async function autoTransferBySession() {
-    await run(async () => api.autoTransfer())
+    await run(async () => {
+      const res = await api.autoTransfer()
+      if (res?.message) setOrderNote(res.message)
+      return res
+    })
   }
 
   async function onClose(id) {

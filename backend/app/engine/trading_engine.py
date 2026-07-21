@@ -177,10 +177,11 @@ class TradingEngine:
         if self.auto_enabled:
             rec = self.recommended_now()
             target = rec.get("transfer_to") or rec.get("strategy")
+            note = f"Boot session auto-follow ({rec.get('session')})"
+            if not target:
+                target, note = self._stand_aside_park_target(utcnow())
             if target and target in STRATEGY_REGISTRY:
-                self._park_strategy(
-                    target, note=f"Boot session auto-follow ({rec.get('session')})"
-                )
+                self._park_strategy(target, note=note)
                 self._last_session_slot = rec.get("session")
         self.running = True
         self._started_at = time.time()
@@ -305,17 +306,40 @@ class TradingEngine:
         self._last_transfer_note = note
         return True
 
+    def _stand_aside_park_target(self, ts) -> tuple[str, str]:
+        """During avoid slots, arm the next session strategy (not idle manual)."""
+        from app.strategies.session import next_session_hint
+
+        nxt = next_session_hint(ts)
+        target = nxt.get("strategy")
+        if target and target in STRATEGY_REGISTRY:
+            hour = nxt.get("hour_utc")
+            slot = nxt.get("session")
+            note = f"Stand aside now — armed {target} for {slot} @ {hour}:00 UTC"
+            return target, note
+        return "manual_only", "Stand aside — no tradeable session soon"
+
     async def auto_transfer(self, *, start_engine: bool = True) -> dict:
-        """Enable session-follow and transfer to current recommended strategy."""
+        """Enable session-follow and transfer to current (or next) recommended strategy."""
         self.auto_enabled = True
         rec = self.recommended_now()
         target = rec.get("transfer_to") or rec.get("strategy")
+        note = f"Auto session transfer ({rec.get('session')})"
+        stand_aside = False
+        if not target:
+            stand_aside = True
+            ts = self.last_tick_at or utcnow()
+            target, note = self._stand_aside_park_target(ts)
+            rec = {
+                **rec,
+                "armed_for_next": True,
+                "transfer_to": target if target != "manual_only" else None,
+                "stand_aside_note": note,
+            }
         switched = False
         previous = self.active_name
         if target and target in STRATEGY_REGISTRY:
-            switched = self._park_strategy(
-                target, note=f"Auto session transfer ({rec.get('session')})"
-            )
+            switched = self._park_strategy(target, note=note)
             self._last_session_slot = rec.get("session")
         if start_engine and not self.running:
             await self.start()
@@ -323,6 +347,17 @@ class TradingEngine:
         auto = self.auto_status()
         await self._emit("engine", status)
         await self._emit("auto", auto)
+        if stand_aside and target != "manual_only":
+            message = (
+                f"Kill/stand-aside hour — auto ON, armed {target} for next session "
+                f"(no new entries until then)"
+            )
+        elif stand_aside:
+            message = "Stand aside — auto ON, waiting for next tradeable session"
+        elif switched:
+            message = f"Session-follow: {previous} → {self.active_name}"
+        else:
+            message = f"Session-follow active: stay on {self.active_name}"
         return {
             "ok": True,
             "transferred": switched,
@@ -332,11 +367,8 @@ class TradingEngine:
             "recommended": rec,
             "status": status,
             "auto": auto,
-            "message": (
-                f"Session-follow active: {previous} -> {self.active_name}"
-                if switched
-                else f"Session-follow active: stay on {self.active_name}"
-            ),
+            "message": message,
+            "stand_aside": stand_aside,
             **status,
         }
 
@@ -555,11 +587,10 @@ class TradingEngine:
                 await self._emit("engine", self.status().model_dump(mode="json"))
                 await self._emit("auto", self.auto_status())
         elif self.auto_enabled and not decision.allow_trading:
-            # Stand-aside slots (london_close / off-hours) → park manual
-            if self.active_name != "manual_only":
-                switched = self._park_strategy(
-                    "manual_only", note=f"Stand aside ({decision.slot})"
-                )
+            # Stand-aside: arm next session strategy (entries still blocked)
+            park, note = self._stand_aside_park_target(tick.timestamp)
+            if self.active_name != park:
+                switched = self._park_strategy(park, note=note)
                 if switched:
                     self._last_session_slot = decision.slot
                     await self._emit("engine", self.status().model_dump(mode="json"))
