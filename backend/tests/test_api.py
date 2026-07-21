@@ -54,6 +54,10 @@ async def test_desk_endpoint(client):
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
+    assert len(data["strategy_details"]) == 4
+    london = next(s for s in data["strategy_details"] if s["id"] == "London_Judas_Sweep")
+    assert london["order_type"] == "LIMIT"
+    assert len(london["entry_rules"]) >= 4
 
 
 @pytest.mark.asyncio

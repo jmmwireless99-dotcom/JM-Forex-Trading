@@ -10,6 +10,7 @@ from app.brokers.mt_bridge import resolve_mt_bridge
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
 from app.strategies import STRATEGY_REGISTRY, list_strategy_names
+from app.strategies.catalog import entry_rules_short, strategy_catalog
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import classify_session
 
@@ -228,12 +229,8 @@ async def desk() -> dict:
         },
         "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
         "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
-        "entry_rules": [
-            "London_Judas_Sweep — Asia 00-06 UTC box · sweep 07-09 · FVG50 LIMIT · kill 12:00",
-            "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 40-50/50-60 · engulf/pin",
-            "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
-            "Manual BUY/SELL with auto SL/TP always available",
-        ],
+        "entry_rules": entry_rules_short(),
+        "strategy_details": strategy_catalog(),
         "recommended_asia": "EMA_RSI_Scalp",
         "recommended_london": "London_Judas_Sweep",
         "recommended_overlap": "Liquidity_Sweep_SMC",
