@@ -40,9 +40,9 @@ async def test_session_change_transfers_strategy():
     asia = _tick(datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc))
     await engine._apply_auto_router(asia)
     assert engine._last_session_slot == "asia"
-    assert engine.active_name == "asia_m3m5_sr_scalp"
+    assert engine.active_name == "asia_m5_sr_scalp"
 
-    # After PH 5PM → London — leave asia_m3m5_sr_scalp
+    # After PH 5PM → London — leave asia_m5_sr_scalp
     london = _tick(datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc))
     for i in range(40):
         engine._strategies["gold_confluence"].feed(
@@ -50,14 +50,14 @@ async def test_session_change_transfers_strategy():
         )
     await engine._apply_auto_router(london)
     assert engine._last_session_slot == "london"
-    assert engine.active_name != "asia_m3m5_sr_scalp"
+    assert engine.active_name != "asia_m5_sr_scalp"
     assert engine.active_name in {"gold_confluence", "gold_atr_trend", "gold_sr_scalp"}
 
     # Back to Asia
     asia2 = _tick(datetime(2026, 7, 22, 2, 30, tzinfo=timezone.utc))
     await engine._apply_auto_router(asia2)
     assert engine._last_session_slot == "asia"
-    assert engine.active_name == "asia_m3m5_sr_scalp"
+    assert engine.active_name == "asia_m5_sr_scalp"
 
     await engine.stop()
     reset_engine(Settings())

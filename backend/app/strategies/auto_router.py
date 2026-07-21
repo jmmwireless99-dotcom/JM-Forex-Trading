@@ -44,7 +44,7 @@ class AutoStrategyRouter:
     """Pick gold strategy automatically from day + session + market regime.
 
     Default full desk (JM_ASIA_DESK_ONLY=false):
-      Asia PH 7AM–5PM (UTC 23–09) → asia_m3m5_sr_scalp (M3 entry / M5 S/R)
+      Asia PH 7AM–5PM (UTC 23–09) → asia_m5_sr_scalp (M5 Support/Resistance)
       London UTC 09–13            → gold_confluence (BEST next after Asia)
       Overlap UTC 13–16           → gold_atr_trend (BEST liquidity)
       NY UTC 16–20                → gold_atr_trend / confluence
@@ -111,7 +111,7 @@ class AutoStrategyRouter:
             self.last_decision = decision
             return decision
 
-        # Asia scalp desk — BEST: M3 entry on M5 Support/Resistance (PH 7AM–5PM)
+        # Asia scalp desk — BEST: pure M5 Support/Resistance (PH 7AM–5PM)
         if session.tier == SessionTier.ASIA:
             if regime == Regime.VOLATILE:
                 decision = AutoDecision(
@@ -130,14 +130,14 @@ class AutoStrategyRouter:
             else:
                 decision = AutoDecision(
                     True,
-                    "asia_m3m5_sr_scalp",
+                    "asia_m5_sr_scalp",
                     regime,
                     session.label,
                     day,
                     utc.weekday(),
                     hour,
                     session.tier.value,
-                    "Asia BEST: M3/M5 S/R scalp (asia_m3m5_sr_scalp) PH 7AM–5PM",
+                    "Asia BEST: M5 Support/Resistance scalp (asia_m5_sr_scalp) PH 7AM–5PM",
                     adx_v,
                     atr_v,
                 )
@@ -279,13 +279,13 @@ class AutoStrategyRouter:
                 "tier": session.tier.value,
                 "day": day,
                 "hour_utc": hour,
-                "strategy": "asia_m3m5_sr_scalp",
+                "strategy": "asia_m5_sr_scalp",
                 "mode": "auto_transfer",
                 "recommended": True,
                 "next_session": nxt,
                 "reason": (
-                    "Asia BEST (PH 7AM–5PM): asia_m3m5_sr_scalp — "
-                    "M3 entry / M5 S/R · "
+                    "Asia BEST (PH 7AM–5PM): asia_m5_sr_scalp — "
+                    "M5 Support/Resistance · "
                     f"Next: {nxt.get('strategy')} ({nxt.get('session')})"
                 ),
             }
@@ -376,7 +376,7 @@ class AutoStrategyRouter:
                     "utc": "23:00–09:00 (PH 7:00AM–5:00PM)",
                     "slot": "Asia scalp desk",
                     "strategies": (
-                        "BEST: asia_m3m5_sr_scalp — M3 entry / M5 S/R · "
+                        "BEST: asia_m5_sr_scalp — M5 Support/Resistance · "
                         "FLAT if volatile"
                     ),
                 },
@@ -404,7 +404,7 @@ class AutoStrategyRouter:
                 "days": "Mon–Fri",
                 "utc": "23:00–09:00 (PH 7AM–5PM)",
                 "slot": "Asia",
-                "strategies": "BEST: asia_m3m5_sr_scalp — M3 entry / M5 S/R fade",
+                "strategies": "BEST: asia_m5_sr_scalp — M5 Support/Resistance fade",
             },
             {
                 "days": "Mon–Fri",

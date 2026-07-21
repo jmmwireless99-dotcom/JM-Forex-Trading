@@ -38,13 +38,13 @@ def test_asia_window_ph_7_to_5():
     assert classify_session(datetime(2026, 7, 21, 9, 0, tzinfo=timezone.utc)).label == "london"
 
 
-def test_auto_router_picks_m3m5():
+def test_auto_router_picks_asia_m5_now():
     router = AutoStrategyRouter(news_filter=False)
     ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
     prices = [2350.0 + ((i % 4) - 1.5) * 0.05 for i in range(120)]
     d = router.decide(ts, prices)
     assert d.allow_trading is True
-    assert d.strategy == "asia_m3m5_sr_scalp"
+    assert d.strategy == "asia_m5_sr_scalp"
 
 
 def test_strategy_blocks_after_5pm_ph():

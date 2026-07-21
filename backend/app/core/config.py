@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = Asia PH 7AM–7PM only (flat after). false = full map (Asia → London → NY)
+    # true = Asia PH 7AM–5PM only (flat after). false = full map (Asia → London → NY)
     # JM_ASIA_DESK_ONLY=false
     asia_desk_only: bool = False
 

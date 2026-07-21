@@ -44,7 +44,7 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–5:00PM) — M3/M5 Support/Resistance",
+            "Asia scalp desk (PH 7:00AM–5:00PM) — M5 Support/Resistance",
         )
     return SessionWindow(
         SessionTier.AVOID,
@@ -70,7 +70,7 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (PH 7:00AM–5:00PM) — M3/M5 S/R scalping",
+            "Asia session (PH 7:00AM–5:00PM) — M5 S/R scalping",
         )
 
     # After Asia close → London → overlap → NY
@@ -149,7 +149,7 @@ def next_session_hint(ts: datetime) -> dict:
 
 def _recommended_for_label(label: str, hour_utc: int) -> str | None:
     if label == "asia":
-        return "asia_m3m5_sr_scalp"
+        return "asia_m5_sr_scalp"
     if label == "london":
         return "gold_confluence"
     if label == "london_ny_overlap":
@@ -161,7 +161,7 @@ def _recommended_for_label(label: str, hour_utc: int) -> str | None:
 
 def _recommend_reason(label: str) -> str:
     return {
-        "asia": "Asia BEST: asia_m3m5_sr_scalp — M3 entry / M5 S/R (PH 7AM–5PM)",
+        "asia": "Asia BEST: asia_m5_sr_scalp — M5 Support/Resistance (PH 7AM–5PM)",
         "london": "Next BEST: gold_confluence — London pullback/continuation",
         "london_ny_overlap": "Next BEST: gold_atr_trend — prime liquidity trend",
         "new_york": "Next BEST: gold_atr_trend — NY continuation (confluence if late)",

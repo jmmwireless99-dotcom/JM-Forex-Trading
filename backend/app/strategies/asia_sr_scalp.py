@@ -1,11 +1,9 @@
-"""Asia M5 support/resistance scalp — recommended Asia desk strategy.
+"""Asia M5 support/resistance scalp (legacy alias of asia_m5_sr_scalp style).
 
-Why this is the Asia recommendation (PH 7AM–7PM):
-  - Gold in Asia usually chops between clear M5 levels, not clean trends
-  - Edge: fade Support (buy) / Resistance (sell) on closed M5 rejection
+Prefer asia_m5_sr_scalp for the Asia desk (PH 7AM–5PM):
+  - Fade Support (buy) / Resistance (sell) on closed M5 rejection
   - Major levels = swing S/R + Asia session range high/low
   - SL beyond the level + ATR pad; TP opposite S/R or ~1.1R scalp
-  - Stand aside if ADX wakes up (breakout / London prep risk)
 """
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 from app.strategies.asia_m3m5_sr_scalp import AsiaM3M5SrScalpStrategy
+from app.strategies.asia_m5_sr_scalp import AsiaM5SrScalpStrategy
 from app.strategies.asia_range_scalp import AsiaRangeScalpStrategy
 from app.strategies.asia_sr_scalp import AsiaSrScalpStrategy
 from app.strategies.auto_router import AutoStrategyRouter
@@ -13,6 +14,7 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     GoldConfluenceStrategy.name: GoldConfluenceStrategy,
     GoldAtrTrendStrategy.name: GoldAtrTrendStrategy,
     GoldSrScalpStrategy.name: GoldSrScalpStrategy,
+    AsiaM5SrScalpStrategy.name: AsiaM5SrScalpStrategy,
     AsiaM3M5SrScalpStrategy.name: AsiaM3M5SrScalpStrategy,
     AsiaSrScalpStrategy.name: AsiaSrScalpStrategy,
     AsiaRangeScalpStrategy.name: AsiaRangeScalpStrategy,
@@ -68,6 +70,7 @@ def create_strategy(name: str, **kwargs) -> Strategy:
     if name in {
         AsiaRangeScalpStrategy.name,
         AsiaSrScalpStrategy.name,
+        AsiaM5SrScalpStrategy.name,
         AsiaM3M5SrScalpStrategy.name,
     } and managed_by_auto:
         # Router already gated Asia + news; strategy keeps asia_only for safety.
@@ -79,6 +82,7 @@ __all__ = [
     "STRATEGY_REGISTRY",
     "META_STRATEGIES",
     "AsiaM3M5SrScalpStrategy",
+    "AsiaM5SrScalpStrategy",
     "AsiaRangeScalpStrategy",
     "AsiaSrScalpStrategy",
     "AutoStrategyRouter",

@@ -31,7 +31,7 @@ async def test_strategies_and_status(client):
     assert "auto_gold" in names
     assert "gold_confluence" in names
     assert "gold_atr_trend" in names
-    assert "asia_m3m5_sr_scalp" in names
+    assert "asia_m5_sr_scalp" in names
     assert "asia_sr_scalp" in names
     assert "asia_range_scalp" in names
     assert "gold_sr_scalp" in names
@@ -51,7 +51,7 @@ async def test_desk_endpoint(client):
     assert res.status_code == 200
     data = res.json()
     assert data["recommended_strategy"] == "auto_gold"
-    assert data["recommended_asia"] == "asia_m3m5_sr_scalp"
+    assert data["recommended_asia"] == "asia_m5_sr_scalp"
     assert data["recommended_london"] == "gold_confluence"
     assert data["recommended_overlap"] == "gold_atr_trend"
     assert data["symbol"] == "XAUUSD"
@@ -124,7 +124,7 @@ async def test_auto_transfer_enables_session_strategy(client):
         "gold_confluence",
         "gold_atr_trend",
         "gold_sr_scalp",
-        "asia_m3m5_sr_scalp",
+        "asia_m5_sr_scalp",
         "asia_sr_scalp",
         "asia_range_scalp",
     }
