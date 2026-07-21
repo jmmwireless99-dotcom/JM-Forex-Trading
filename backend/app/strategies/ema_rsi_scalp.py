@@ -100,6 +100,9 @@ class EmaRsiScalpStrategy(Strategy):
 
         bull_pat = bullish_engulfing(prev, cur) or bullish_pin_bar(cur)
         bear_pat = bearish_engulfing(prev, cur) or bearish_pin_bar(cur)
+        # Soft confirm: directional close when RSI+zone already aligned
+        bull_soft = cur.close > cur.open and cur.close >= prev.close
+        bear_soft = cur.close < cur.open and cur.close <= prev.close
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
@@ -110,28 +113,30 @@ class EmaRsiScalpStrategy(Strategy):
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
             f"RSI={rsi_v:.1f} ATR={atr:.2f}",
             f"zone={zone_lo:.2f}-{zone_hi:.2f} in_zone={in_zone}",
-            f"pattern bull={bull_pat} bear={bear_pat}",
+            f"pattern bull={bull_pat}/{bull_soft} bear={bear_pat}/{bear_soft}",
         ]
 
         side: Side | None = None
         reason = ""
-        if uptrend and (in_zone or touched_fast) and buy_rsi and bull_pat:
+        if uptrend and (in_zone or touched_fast) and buy_rsi and (bull_pat or bull_soft):
             side = Side.BUY
+            tag = "engulf" if bullish_engulfing(prev, cur) else "pin" if bullish_pin_bar(cur) else "soft"
             reason = (
                 f"EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · "
-                f"RSI {rsi_v:.0f} · {'engulf' if bullish_engulfing(prev, cur) else 'pin'}"
+                f"RSI {rsi_v:.0f} · {tag}"
             )
-        elif downtrend and (in_zone or touched_fast) and sell_rsi and bear_pat:
+        elif downtrend and (in_zone or touched_fast) and sell_rsi and (bear_pat or bear_soft):
             side = Side.SELL
+            tag = "engulf" if bearish_engulfing(prev, cur) else "pin" if bearish_pin_bar(cur) else "soft"
             reason = (
                 f"EMA_RSI SELL · trend<EMA200 · retest EMA20/50 · "
-                f"RSI {rsi_v:.0f} · {'engulf' if bearish_engulfing(prev, cur) else 'pin'}"
+                f"RSI {rsi_v:.0f} · {tag}"
             )
         else:
             self.last_block_reason = (
                 "No confluence "
                 f"(trend={'up' if uptrend else 'down' if downtrend else 'flat'} "
-                f"rsi={rsi_v:.0f} zone={in_zone} pat={bull_pat or bear_pat})"
+                f"rsi={rsi_v:.0f} zone={in_zone} pat={bull_pat or bear_pat or bull_soft or bear_soft})"
             )
             return None
 

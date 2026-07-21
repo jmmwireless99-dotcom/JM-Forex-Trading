@@ -89,17 +89,23 @@ class MarketDataSimulator:
             state.asia_high = max(state.asia_high or state.mid, state.mid)
             state.asia_low = min(state.asia_low or state.mid, state.mid)
             return
-        # London sweep window: occasionally inject Judas-style spike + reject
-        if 7 <= hour < 11 and self._step % 420 == 0:
+        # London sweep window: inject Judas-style spike + reject more often on paper
+        if 7 <= hour < 11 and self._step % 180 == 0:
             if state.asia_high is None:
                 state.asia_high = state.mid + 1.2
                 state.asia_low = state.mid - 1.2
-            # Alternate sell-side then buy-side Judas
-            state.scenario = "judas_sell" if (self._step // 420) % 2 == 0 else "judas_buy"
+            state.scenario = "judas_sell" if (self._step // 180) % 2 == 0 else "judas_buy"
             state.scenario_step = 0
-        # Overlap: occasional PDH-style sweep stub
-        elif 13 <= hour < 16 and self._step % 480 == 0:
-            state.scenario = "smc_sweep_sell" if (self._step // 480) % 2 == 0 else "smc_sweep_buy"
+        # Overlap: SMC-style liquidity grab
+        elif 13 <= hour < 16 and self._step % 150 == 0:
+            if state.asia_high is None:
+                state.asia_high = state.mid + 1.5
+                state.asia_low = state.mid - 1.5
+            state.scenario = "smc_sweep_sell" if (self._step // 150) % 2 == 0 else "smc_sweep_buy"
+            state.scenario_step = 0
+        # Asia / NY: mild EMA pullback impulse
+        elif (0 <= hour < 7 or 16 <= hour < 20) and self._step % 240 == 0:
+            state.scenario = "ema_pullback_buy" if (self._step // 240) % 2 == 0 else "ema_pullback_sell"
             state.scenario_step = 0
 
     def _scenario_delta(self, state: SymbolState, now) -> float | None:
@@ -134,18 +140,41 @@ class MarketDataSimulator:
             return None
 
         if state.scenario == "smc_sweep_sell":
-            if step < 6:
-                return 0.08 + abs(random.gauss(0, vol * 0.2))
-            if step < 18:
-                return -0.07 - abs(random.gauss(0, vol * 0.2))
+            # Grab above recent high (~$1.0), reject, then bearish follow-through
+            target = (state.asia_high or state.mid) + 1.0
+            if step < 8:
+                return max(0.1, (target - state.mid) * 0.45) + random.gauss(0, vol * 0.15)
+            if step < 20:
+                return -0.14 - abs(random.gauss(0, vol * 0.2))
+            if step < 35:
+                return -0.05 + random.gauss(0, vol * 0.12)
             state.scenario = None
             return None
 
         if state.scenario == "smc_sweep_buy":
-            if step < 6:
-                return -0.08 - abs(random.gauss(0, vol * 0.2))
-            if step < 18:
-                return 0.07 + abs(random.gauss(0, vol * 0.2))
+            target = (state.asia_low or state.mid) - 1.0
+            if step < 8:
+                return min(-0.1, (target - state.mid) * 0.45) + random.gauss(0, vol * 0.15)
+            if step < 20:
+                return 0.14 + abs(random.gauss(0, vol * 0.2))
+            if step < 35:
+                return 0.05 + random.gauss(0, vol * 0.12)
+            state.scenario = None
+            return None
+
+        if state.scenario == "ema_pullback_buy":
+            if step < 12:
+                return -0.06 + random.gauss(0, vol * 0.15)
+            if step < 28:
+                return 0.08 + abs(random.gauss(0, vol * 0.12))
+            state.scenario = None
+            return None
+
+        if state.scenario == "ema_pullback_sell":
+            if step < 12:
+                return 0.06 + random.gauss(0, vol * 0.15)
+            if step < 28:
+                return -0.08 - abs(random.gauss(0, vol * 0.12))
             state.scenario = None
             return None
 

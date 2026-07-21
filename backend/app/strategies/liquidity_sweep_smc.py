@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
@@ -20,6 +20,15 @@ class Zone:
     low: float
     swept: bool = False
     side_bias: str | None = None  # BUY after low sweep, SELL after high sweep
+
+
+@dataclass
+class SweepMemory:
+    bias: str
+    label: str
+    level: float
+    swept_at: datetime
+    session_day: date
 
 
 def _swing_high(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> bool:
@@ -41,18 +50,14 @@ def _swing_low(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> boo
 
 
 def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
-    """Candles in today's Asia box (UTC 23:00 previous → 07:00, approx PH morning)."""
+    """Candles in today's Asia box UTC 00:00–07:00."""
     utc = now.astimezone(timezone.utc)
-    # Asia PH 7AM–3PM-ish liquidity often formed overnight UTC
-    # Use UTC 00:00–07:00 of current UTC day as Asia range builder
     start = utc.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(hours=7)
     if utc.hour < 7:
-        # Still inside Asia — use previous day's 00–07 as completed box if thin
         start = start - timedelta(days=1)
         end = start + timedelta(hours=7)
-    out = [c for c in bars if start <= c.timestamp.astimezone(timezone.utc) < end]
-    return out
+    return [c for c in bars if start <= c.timestamp.astimezone(timezone.utc) < end]
 
 
 def _prev_day_bars(bars: list[Candle], now: datetime) -> list[Candle]:
@@ -63,26 +68,33 @@ def _prev_day_bars(bars: list[Candle], now: datetime) -> list[Candle]:
 
 
 def _find_fvg(bars: list[Candle]) -> Zone | None:
-    """3-candle Fair Value Gap on most recent structure."""
     if len(bars) < 3:
         return None
-    a, b, c = bars[-3], bars[-2], bars[-1]
-    # Bullish FVG: candle1 high < candle3 low
+    a, _, c = bars[-3], bars[-2], bars[-1]
     if a.high < c.low:
         return Zone("FVG", high=c.low, low=a.high, side_bias="BUY")
-    # Bearish FVG: candle1 low > candle3 high
     if a.low > c.high:
         return Zone("FVG", high=a.low, low=c.high, side_bias="SELL")
     return None
 
 
+def _find_recent_fvg(bars: list[Candle], bias: str, *, lookback: int = 12) -> Zone | None:
+    if len(bars) < 3:
+        return None
+    start = max(3, len(bars) - lookback)
+    best: Zone | None = None
+    for end in range(start, len(bars) + 1):
+        fvg = _find_fvg(bars[:end])
+        if fvg is not None and (fvg.side_bias is None or fvg.side_bias == bias):
+            best = fvg
+    return best
+
+
 def _find_order_block(bars: list[Candle], bias: str) -> Zone | None:
-    """Last opposing candle before impulsive move."""
     if len(bars) < 6:
         return None
     window = bars[-8:-1]
     if bias == "BUY":
-        # Last bearish candle before up move
         for c in reversed(window):
             if c.close < c.open:
                 return Zone("ORDER_BLOCK", high=c.high, low=c.low, side_bias="BUY")
@@ -116,11 +128,79 @@ class LiquiditySweepSmcStrategy(Strategy):
         self.last_block_reason: str | None = None
         self.last_zones: list[dict] = []
         self._structure_bars: list[Candle] = []
+        self._sweep: SweepMemory | None = None
+        self._fired_keys: set[str] = set()
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
 
     def evaluate(self, tick: Tick) -> Signal | None:
+        return None
+
+    def _liquidity_zones(
+        self, bars: list[Candle], now: datetime
+    ) -> tuple[list[Zone], list[Candle], list[Candle]]:
+        asia = _asia_window_bars(bars, now)
+        prev_day = _prev_day_bars(bars, now)
+        zones: list[Zone] = []
+        if asia:
+            hi = max(c.high for c in asia)
+            lo = min(c.low for c in asia)
+            zones.append(Zone("ASIAN_HIGH", high=hi, low=hi))
+            zones.append(Zone("ASIAN_LOW", high=lo, low=lo))
+        if prev_day:
+            hi = max(c.high for c in prev_day)
+            lo = min(c.low for c in prev_day)
+            zones.append(Zone("PDH", high=hi, low=hi))
+            zones.append(Zone("PDL", high=lo, low=lo))
+        return zones, asia, prev_day
+
+    def _scan_sweep_on_bar(
+        self, bar: Candle, zones: list[Zone], pad: float, day: date
+    ) -> SweepMemory | None:
+        for z in zones:
+            if z.kind in {"ASIAN_HIGH", "PDH"}:
+                if bar.high > z.high + pad and bar.close < z.high:
+                    z.swept = True
+                    return SweepMemory("SELL", f"{z.kind} sweep", z.high, bar.timestamp, day)
+            if z.kind in {"ASIAN_LOW", "PDL"}:
+                if bar.low < z.low - pad and bar.close > z.low:
+                    z.swept = True
+                    return SweepMemory("BUY", f"{z.kind} sweep", z.low, bar.timestamp, day)
+        return None
+
+    def _refresh_sweep(
+        self, bars: list[Candle], zones: list[Zone], pad: float, day: date
+    ) -> None:
+        if self._sweep is not None and self._sweep.session_day != day:
+            self._sweep = None
+        newest: SweepMemory | None = None
+        for bar in bars[-24:]:
+            ev = self._scan_sweep_on_bar(bar, zones, pad, day)
+            if ev is not None:
+                newest = ev
+        if newest is not None:
+            self._sweep = newest
+
+    def _mss_bias(self, bars: list[Candle]) -> str | None:
+        if len(bars) < 10:
+            return None
+        recent = bars[-20:]
+        cur = recent[-1]
+        swing_highs = [recent[i].high for i in range(len(recent)) if _swing_high(recent, i)]
+        swing_lows = [recent[i].low for i in range(len(recent)) if _swing_low(recent, i)]
+        buy = bool(
+            swing_highs
+            and cur.close > max(swing_highs[-2:] if len(swing_highs) >= 2 else swing_highs)
+        )
+        sell = bool(
+            swing_lows
+            and cur.close < min(swing_lows[-2:] if len(swing_lows) >= 2 else swing_lows)
+        )
+        if buy and not sell:
+            return "BUY"
+        if sell and not buy:
+            return "SELL"
         return None
 
     def on_bar(self, candles: list[Candle], tick: Tick) -> Signal | None:
@@ -151,56 +231,24 @@ class LiquiditySweepSmcStrategy(Strategy):
             return None
 
         now = tick.timestamp
-        asia = _asia_window_bars(bars, now)
-        prev_day = _prev_day_bars(bars, now)
-        zones: list[Zone] = []
-        if asia:
-            zones.append(
-                Zone("ASIAN_HIGH", high=max(c.high for c in asia), low=max(c.high for c in asia))
-            )
-            zones.append(
-                Zone("ASIAN_LOW", high=min(c.low for c in asia), low=min(c.low for c in asia))
-            )
-        if prev_day:
-            zones.append(
-                Zone("PDH", high=max(c.high for c in prev_day), low=max(c.high for c in prev_day))
-            )
-            zones.append(
-                Zone("PDL", high=min(c.low for c in prev_day), low=min(c.low for c in prev_day))
-            )
+        day = now.astimezone(timezone.utc).date()
+        zones, asia, prev_day = self._liquidity_zones(bars, now)
+        if not zones:
+            self.last_block_reason = "No Asia/PDH-PDL liquidity levels yet"
+            return None
 
         cur = bars[-1]
-        pad = 0.1 * atr
+        pad = max(0.08 * atr, 0.15)
+        self._refresh_sweep(bars, zones, pad, day)
+        sweep = self._sweep
 
-        # Detect sweeps: wick beyond liquidity then close back inside
-        swept_bias: str | None = None
-        sweep_label = ""
-        for z in zones:
-            if z.kind in {"ASIAN_HIGH", "PDH"}:
-                if cur.high > z.high + pad and cur.close < z.high:
-                    z.swept = True
-                    swept_bias = "SELL"
-                    sweep_label = f"{z.kind} sweep"
-            elif z.kind in {"ASIAN_LOW", "PDL"}:
-                if cur.low < z.low - pad and cur.close > z.low:
-                    z.swept = True
-                    swept_bias = "BUY"
-                    sweep_label = f"{z.kind} sweep"
+        mss_bias = self._mss_bias(bars)
+        bias = (sweep.bias if sweep else None) or mss_bias
 
-        # Market structure shift / change of character around last swings
-        mss_bias: str | None = None
-        recent = bars[-20:]
-        swing_highs = [recent[i].high for i in range(len(recent)) if _swing_high(recent, i)]
-        swing_lows = [recent[i].low for i in range(len(recent)) if _swing_low(recent, i)]
-        if swing_highs and cur.close > max(swing_highs[-2:] if len(swing_highs) >= 2 else swing_highs):
-            mss_bias = "BUY"
-        if swing_lows and cur.close < min(swing_lows[-2:] if len(swing_lows) >= 2 else swing_lows):
-            mss_bias = "SELL"
-
-        fvg = _find_fvg(bars)
+        fvg = _find_recent_fvg(bars, bias or "BUY", lookback=12) if bias else _find_fvg(bars)
         if fvg:
             zones.append(fvg)
-        ob = _find_order_block(bars, swept_bias or mss_bias or "BUY")
+        ob = _find_order_block(bars, bias or "BUY")
         if ob:
             zones.append(ob)
 
@@ -209,25 +257,26 @@ class LiquiditySweepSmcStrategy(Strategy):
                 "zone_type": z.kind,
                 "price_high": round(z.high, 2),
                 "price_low": round(z.low, 2),
-                "is_swept": z.swept,
+                "is_swept": z.swept or (bool(sweep) and z.kind in sweep.label),
             }
             for z in zones
         ]
 
-        bias = swept_bias or mss_bias
-        if self.require_sweep and swept_bias is None:
+        self.last_checklist = [
+            f"asia_bars={len(asia)} prev_day={len(prev_day)} zones={len(zones)}",
+            f"sweep={sweep.label if sweep else 'none'} mss={mss_bias}",
+            f"ATR={atr:.2f} pad={pad:.2f}",
+        ]
+
+        if self.require_sweep and sweep is None:
             self.last_block_reason = "Waiting for Asia/PDH-PDL liquidity sweep"
-            self.last_checklist = [
-                f"zones={len(zones)} mss={mss_bias}",
-                f"asia_bars={len(asia)} prev_day={len(prev_day)}",
-            ]
             return None
 
         if bias is None:
-            self.last_block_reason = "No MSS/ChoCH after sweep"
+            self.last_block_reason = "Sweep locked — waiting MSS/ChoCH"
             return None
 
-        # Entry: price retesting FVG or OB aligned with bias
+        # Prefer FVG/OB retest; else momentum candle after sweep+structure
         entry_zone = None
         for z in zones:
             if z.kind not in {"FVG", "ORDER_BLOCK"}:
@@ -245,25 +294,32 @@ class LiquiditySweepSmcStrategy(Strategy):
                 break
 
         if entry_zone is None:
-            # Soft entry: after sweep + MSS, allow confirmation candle in direction
-            if bias == "BUY" and cur.close > cur.open and mss_bias == "BUY":
+            bullish = cur.close > cur.open
+            bearish = cur.close < cur.open
+            if bias == "BUY" and bullish and (mss_bias == "BUY" or sweep is not None):
                 entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="BUY")
-            elif bias == "SELL" and cur.close < cur.open and mss_bias == "SELL":
+            elif bias == "SELL" and bearish and (mss_bias == "SELL" or sweep is not None):
                 entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="SELL")
             else:
-                self.last_block_reason = f"Sweep ok ({sweep_label}) — waiting FVG/OB retest"
+                self.last_block_reason = (
+                    f"Sweep ok ({sweep.label if sweep else 'structure'}) — waiting FVG/OB/momentum"
+                )
                 return None
+
+        key = f"{bias}-{day}-{round(entry_zone.low, 1)}-{round(entry_zone.high, 1)}"
+        if key in self._fired_keys:
+            self.last_block_reason = "Already taken this SMC zone today"
+            return None
+        self._fired_keys.add(key)
 
         side = Side.BUY if bias == "BUY" else Side.SELL
         reason = (
-            f"SMC {side.value} · {sweep_label or 'structure'} · "
-            f"{'MSS' if mss_bias else 'ChoCH'} · {entry_zone.kind} retest"
+            f"SMC {side.value} · {sweep.label if sweep else 'structure'} · "
+            f"{'MSS' if mss_bias else 'ChoCH'} · {entry_zone.kind} entry"
         )
-        self.last_checklist = [
-            f"sweep={sweep_label or 'none'} mss={mss_bias}",
-            f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}",
-            f"ATR={atr:.2f}",
-        ]
+        self.last_checklist.append(
+            f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"
+        )
 
         levels = structure_levels(
             side,
