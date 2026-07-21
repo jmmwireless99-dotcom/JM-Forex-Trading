@@ -15,7 +15,7 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar'
 import * as Linking from 'expo-linking'
 import { api, defaultApiBase, getApiBase, setApiBase } from './src/api'
 
-const STRATEGIES = ['manual_only']
+const STRATEGIES = ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
@@ -209,16 +209,17 @@ export default function App() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.section}>Clean slate</Text>
-          <Text style={styles.recommend}>manual_only</Text>
+          <Text style={styles.section}>Scalp strategies</Text>
+          <Text style={styles.recommend}>
+            {status?.active_strategy || 'manual_only'}
+          </Text>
           <Text style={styles.meta}>
-            {rec?.reason || 'Auto strategies wiped — build new ones next'}
+            {rec?.reason || 'EMA_RSI_Scalp · Liquidity_Sweep_SMC · manual'}
           </Text>
           <View style={styles.actions}>
             <Text style={styles.meta}>
               Active now:{' '}
               {(rec?.session || desk?.session?.label || '—').replace(/_/g, ' ')} session
-              {' · no auto follow'}
             </Text>
           </View>
         </View>

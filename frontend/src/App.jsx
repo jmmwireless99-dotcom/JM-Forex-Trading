@@ -312,8 +312,8 @@ export default function App() {
           </div>
         </div>
         <p>
-          Clean slate — lahat ng auto strategy na-wipe. Manual Buy/Sell with
-          auto SL/TP. Magbuo tayo ng bagong strategy after.
+          XAUUSD scalp desk — EMA+RSI momentum or SMC liquidity sweep.
+          Manual Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
           <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
@@ -333,11 +333,15 @@ export default function App() {
             onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length ? strategies : ['manual_only']).map((name) => (
+            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
-                  ? 'manual_only (clean slate · no auto signals)'
-                  : name}
+                  ? 'manual_only (no auto signals)'
+                  : name === 'EMA_RSI_Scalp'
+                    ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
+                    : name === 'Liquidity_Sweep_SMC'
+                      ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
+                      : name}
               </option>
             ))}
           </select>
@@ -347,7 +351,7 @@ export default function App() {
             onClick={() => applyStrategy()}
             title="Apply selected strategy without restarting"
           >
-            Apply (manual only)
+            Apply strategy
           </button>
           <button
             className="btn-ghost"
@@ -408,17 +412,17 @@ export default function App() {
                 '—'
           return (
           <div className="recommend-box">
-            <strong>Clean slate</strong>
+            <strong>Active session</strong>
             <span>
               {sessionLabel(activeSession)} ·{' '}
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Auto strategies wiped — manual Buy/Sell only
+              Strategies: EMA_RSI_Scalp · Liquidity_Sweep_SMC · manual_only
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
-                'Waiting for new strategy build'}
+                'Pick a strategy and Apply'}
             </span>
             {autoInfo?.last_transfer ? (
               <span className="meta">Note: {autoInfo.last_transfer}</span>
@@ -728,7 +732,7 @@ export default function App() {
         </section>
 
         <section className="panel schedule-bottom" style={{ gridColumn: '1 / -1' }}>
-          <h2>Clean slate · Desk notes</h2>
+          <h2>Scalp desk · Entry rules</h2>
           <div className="entry-rules">
             <strong>Entry rules</strong>
             <ul>
@@ -758,7 +762,7 @@ export default function App() {
           JM TECH SOLUTION
         </a>
         {' '}
-        · paper / MT4 / MT5 · live candles · manual_only (clean slate)
+        · paper / MT4 / MT5 · live candles · EMA_RSI + SMC
       </p>
     </div>
   )

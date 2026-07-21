@@ -312,11 +312,127 @@ class TradingEngine:
             self.settings.entry_cooldown_seconds
         )
 
+    async def _persist_candle(self, candle: Candle, *, timeframe: str) -> None:
+        try:
+            from app.db.repository import upsert_candle
+            from app.db.session import db_enabled
+
+            if not db_enabled():
+                return
+            upsert_candle(
+                symbol=candle.symbol,
+                timeframe=timeframe,
+                timestamp=candle.open_time or candle.timestamp,
+                open_=candle.open,
+                high=candle.high,
+                low=candle.low,
+                close=candle.close,
+                volume=int(candle.volume or 0),
+            )
+        except Exception:
+            pass
+
+    async def _persist_signal(self, signal: Signal) -> str | None:
+        try:
+            from app.db.repository import create_signal
+            from app.db.session import db_enabled
+
+            if not db_enabled():
+                return None
+            if signal.stop_loss is None or signal.take_profit is None:
+                return None
+            entry = (
+                self._recent_ticks.get(signal.symbol).mid
+                if signal.symbol in self._recent_ticks
+                else signal.stop_loss
+            )
+            tick = self._recent_ticks.get(signal.symbol)
+            if tick:
+                entry = tick.ask if signal.side.value == "BUY" else tick.bid
+            return create_signal(
+                strategy_name=signal.strategy,
+                symbol=signal.symbol,
+                signal_type=signal.side.value,
+                entry_price=float(entry),
+                stop_loss=float(signal.stop_loss),
+                take_profit=float(signal.take_profit),
+                timeframe="M5",
+                metadata={"reason": signal.reason, "strength": signal.strength},
+            )
+        except Exception:
+            return None
+
+    async def _persist_trade_open(
+        self, order: Order, position: Position | None, *, signal_db_id: str | None
+    ) -> None:
+        try:
+            from app.db.repository import create_trade
+            from app.db.session import db_enabled
+
+            if not db_enabled() or order.status != OrderStatus.FILLED:
+                return
+            create_trade(
+                symbol=order.symbol,
+                order_type=order.side.value,
+                lot_size=order.lots,
+                open_price=float(order.fill_price or 0),
+                stop_loss=order.stop_loss,
+                take_profit=order.take_profit,
+                signal_id=signal_db_id,
+                strategy_name=order.strategy,
+                ticket=position.id if position else order.id,
+                mode=self.mode,
+                metadata={"comment": order.comment},
+            )
+        except Exception:
+            pass
+
+    async def _persist_trade_close(self, position: Position) -> None:
+        try:
+            from app.db.repository import close_trade
+            from app.db.session import db_enabled
+
+            if not db_enabled():
+                return
+            reason = (position.close_reason or "").lower()
+            status = "CLOSED_MANUAL"
+            if "tp" in reason or "take" in reason:
+                status = "CLOSED_TP"
+            elif "sl" in reason or "stop" in reason:
+                status = "CLOSED_SL"
+            close_trade(
+                ticket=position.id,
+                close_price=float(position.close_price or 0),
+                pnl_amount=float(position.realized_pnl),
+                status=status,
+            )
+            # Persist SMC zones snapshot if present
+            zones = getattr(self.strategy, "last_zones", None)
+            if zones:
+                from app.db.repository import upsert_zone
+
+                for z in zones[:8]:
+                    upsert_zone(
+                        symbol=position.symbol,
+                        zone_type=z.get("zone_type", "FVG"),
+                        price_high=float(z["price_high"]),
+                        price_low=float(z["price_low"]),
+                        metadata={"is_swept": z.get("is_swept", False)},
+                    )
+        except Exception:
+            pass
+
     async def _apply_auto_router(self, tick: Tick) -> bool:
-        """No auto strategy pool — allow manual path only via cooldown gate."""
-        # Keep decision fresh for UI, but never auto-enter.
+        """Allow candle strategies to fire; manual_only stays idle."""
         prices = self._signal_prices(tick.symbol)
         self.auto_router.decide(tick.timestamp, prices)
+
+        if self.active_name == "manual_only":
+            return False
+        if time.time() < self._entry_cooldown_until:
+            return False
+        if getattr(self.strategy, "candle_driven", False) or self.active_name in STRATEGY_REGISTRY:
+            return True
         return False
 
     def recent_signals(self) -> list[Signal]:
@@ -345,10 +461,17 @@ class TradingEngine:
         row = self.journal.record_close(position)
         if row:
             self._arm_entry_cooldown()
+            await self._persist_trade_close(position)
             await self._emit("trade", row.model_dump(mode="json"))
             await self._emit("trades", self._trades_payload())
 
-    async def _journal_fill(self, order: Order, position: Position | None = None) -> None:
+    async def _journal_fill(
+        self,
+        order: Order,
+        position: Position | None = None,
+        *,
+        signal_db_id: str | None = None,
+    ) -> None:
         if order.status == OrderStatus.REJECTED:
             row = self.journal.record_order(order, mode=self.mode)
             await self._emit("trade", row.model_dump(mode="json"))
@@ -357,6 +480,7 @@ class TradingEngine:
         if position is not None:
             row = self.journal.record_open_position(position, mode=self.mode)
             self._arm_entry_cooldown()
+            await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
         else:
             row = self.journal.record_order(order, mode=self.mode)
         await self._emit("trade", row.model_dump(mode="json"))
@@ -505,6 +629,7 @@ class TradingEngine:
 
                 if closed_signal is not None:
                     # Feed M5 closes into strategies — structure / standard entries.
+                    await self._persist_candle(closed_signal, timeframe="M5")
                     for strat in self._strategies.values():
                         if getattr(strat, "candle_driven", False):
                             strat.feed_bar(closed_signal)
@@ -550,7 +675,8 @@ class TradingEngine:
                 if signal:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
-                    await self._handle_signal(signal, tick)
+                    signal_db_id = await self._persist_signal(signal)
+                    await self._handle_signal(signal, tick, signal_db_id=signal_db_id)
 
                 await self._emit("tick", tick.model_dump(mode="json"))
 
@@ -563,7 +689,9 @@ class TradingEngine:
             if self.auto_enabled:
                 await self._emit("auto", self.auto_status())
 
-    async def _handle_signal(self, signal: Signal, tick: Tick) -> None:
+    async def _handle_signal(
+        self, signal: Signal, tick: Tick, *, signal_db_id: str | None = None
+    ) -> None:
         for position in self.open_positions():
             if position.symbol == signal.symbol and position.side != signal.side:
                 if self.using_mt():
@@ -582,7 +710,7 @@ class TradingEngine:
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
-            lots=0.10,
+            lots=0.01,
             strategy=signal.strategy,
             comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
@@ -599,9 +727,15 @@ class TradingEngine:
                 request.stop_loss = entry + signal.stop_loss_pips * pip
                 if signal.take_profit_pips:
                     request.take_profit = entry - signal.take_profit_pips * pip
-        await self._execute(request, tick=tick)
+        await self._execute(request, tick=tick, signal_db_id=signal_db_id)
 
-    async def _execute(self, request: OrderRequest, tick: Tick | None = None) -> Order:
+    async def _execute(
+        self,
+        request: OrderRequest,
+        tick: Tick | None = None,
+        *,
+        signal_db_id: str | None = None,
+    ) -> Order:
         tick = tick or self._recent_ticks.get(request.symbol)
         decision = self.risk.evaluate(
             request,
@@ -621,7 +755,7 @@ class TradingEngine:
                 stop_loss=request.stop_loss,
                 take_profit=request.take_profit,
             )
-            await self._journal_fill(rejected)
+            await self._journal_fill(rejected, signal_db_id=signal_db_id)
             await self._emit("order", rejected.model_dump(mode="json"))
             return rejected
 
@@ -635,7 +769,7 @@ class TradingEngine:
         if self.using_mt():
             order = self.mt.place_order(request)
             pos = self._latest_open(request.symbol, request.side) if order.status == OrderStatus.FILLED else None
-            await self._journal_fill(order, pos)
+            await self._journal_fill(order, pos, signal_db_id=signal_db_id)
         else:
             if self.mode in {"mt4", "mt5"} and not self.mt_online():
                 rejected = Order(
@@ -649,7 +783,7 @@ class TradingEngine:
                     stop_loss=request.stop_loss,
                     take_profit=request.take_profit,
                 )
-                await self._journal_fill(rejected)
+                await self._journal_fill(rejected, signal_db_id=signal_db_id)
                 await self._emit("order", rejected.model_dump(mode="json"))
                 return rejected
             order = self.paper.place_order(request)
@@ -664,7 +798,7 @@ class TradingEngine:
                     ):
                         pos = p
                         break
-            await self._journal_fill(order, pos)
+            await self._journal_fill(order, pos, signal_db_id=signal_db_id)
 
         await self._emit("order", order.model_dump(mode="json"))
         await self._emit("account", self.account_snapshot().model_dump(mode="json"))
