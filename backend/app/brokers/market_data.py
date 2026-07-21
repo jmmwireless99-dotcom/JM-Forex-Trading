@@ -110,26 +110,26 @@ class MarketDataSimulator:
         vol = state.volatility
 
         if state.scenario == "judas_sell":
-            # Spike above Asia high (~8–12 pips), then reject back inside
-            target_hi = (state.asia_high or state.mid) + 0.10
-            if step < 8:
-                return max(0.04, (target_hi - state.mid) * 0.35) + random.gauss(0, vol * 0.2)
-            if step < 20:
-                return -0.06 - abs(random.gauss(0, vol * 0.25))
-            if step < 35:
-                # Build bearish imbalance / lower close for ChoCH-ish move
-                return -0.03 + random.gauss(0, vol * 0.15)
+            # Spike ~$1.20 above Asia high (~120 pips @ 0.01), then reject inside
+            target_hi = (state.asia_high or state.mid) + 1.20
+            if step < 10:
+                return max(0.08, (target_hi - state.mid) * 0.4) + random.gauss(0, vol * 0.15)
+            if step < 25:
+                return -0.12 - abs(random.gauss(0, vol * 0.2))
+            if step < 45:
+                # Displacement + room for bearish FVG / ChoCH
+                return -0.05 + random.gauss(0, vol * 0.12)
             state.scenario = None
             return None
 
         if state.scenario == "judas_buy":
-            target_lo = (state.asia_low or state.mid) - 0.10
-            if step < 8:
-                return min(-0.04, (target_lo - state.mid) * 0.35) + random.gauss(0, vol * 0.2)
-            if step < 20:
-                return 0.06 + abs(random.gauss(0, vol * 0.25))
-            if step < 35:
-                return 0.03 + random.gauss(0, vol * 0.15)
+            target_lo = (state.asia_low or state.mid) - 1.20
+            if step < 10:
+                return min(-0.08, (target_lo - state.mid) * 0.4) + random.gauss(0, vol * 0.15)
+            if step < 25:
+                return 0.12 + abs(random.gauss(0, vol * 0.2))
+            if step < 45:
+                return 0.05 + random.gauss(0, vol * 0.12)
             state.scenario = None
             return None
 

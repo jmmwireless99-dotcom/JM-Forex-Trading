@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 
 from app.models.domain import Candle, OrderType, Side, Signal, Tick
 from app.strategies.base import Strategy
@@ -23,6 +24,19 @@ class FVG:
     low: float
     mid: float
     bias: str  # BUY | SELL
+
+
+@dataclass
+class SweepMemory:
+    """Judas sweep remembered for later ChoCH + FVG entry (not same-bar only)."""
+
+    bias: str  # SELL after Asia high, BUY after Asia low
+    sweep_price: float
+    asia_high: float
+    asia_low: float
+    session_date: date
+    swept_at: datetime
+    sweep_pips: float
 
 
 def _swing_low_broken(bars: list[Candle], lookback: int = 8) -> bool:
@@ -62,8 +76,26 @@ def find_bullish_fvg(bars: list[Candle]) -> FVG | None:
     return None
 
 
+def find_recent_fvg(bars: list[Candle], bias: str, *, lookback: int = 16) -> FVG | None:
+    """Most recent FVG of the given bias within the last `lookback` closes."""
+    if len(bars) < 3:
+        return None
+    start = max(3, len(bars) - lookback)
+    best: FVG | None = None
+    for end in range(start, len(bars) + 1):
+        window = bars[:end]
+        fvg = find_bearish_fvg(window) if bias == "SELL" else find_bullish_fvg(window)
+        if fvg is not None:
+            best = fvg
+    return best
+
+
 class LondonJudasSweepStrategy(Strategy):
-    """London 07–11 UTC Judas Swing: sweep Asia H/L → ChoCH → FVG 50% limit."""
+    """London 07–11 UTC Judas Swing: sweep Asia H/L → ChoCH → FVG 50% limit.
+
+    Sweep is remembered for the session so entry can fire on a later bar once
+    ChoCH + FVG form (classic Judas flow — not same-candle only).
+    """
 
     name = "London_Judas_Sweep"
     candle_driven = True
@@ -72,10 +104,11 @@ class LondonJudasSweepStrategy(Strategy):
         self,
         lookback: int = 240,
         *,
-        min_sweep_pips: float = 5.0,
-        max_sweep_pips: float = 15.0,
-        sl_buffer_pips: float = 12.0,
-        max_spread_pips: float = 30.0,
+        # pip = $0.01 → 50–350 pips = $0.50–$3.50 (realistic XAUUSD Judas wicks)
+        min_sweep_pips: float = 50.0,
+        max_sweep_pips: float = 350.0,
+        sl_buffer_pips: float = 80.0,
+        max_spread_pips: float = 40.0,
         news_filter: bool = True,
         reward_r: float = 3.0,
     ) -> None:
@@ -93,6 +126,7 @@ class LondonJudasSweepStrategy(Strategy):
         self._structure_bars: list[Candle] = []
         self._m1_bars: list[Candle] = []
         self._fired_keys: set[str] = set()
+        self._sweep: SweepMemory | None = None
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -102,6 +136,113 @@ class LondonJudasSweepStrategy(Strategy):
 
     def evaluate(self, tick: Tick) -> Signal | None:
         return None
+
+    def _reset_session_memory(self, session_date: date) -> None:
+        if self._sweep is not None and self._sweep.session_date != session_date:
+            self._sweep = None
+        # Drop fired keys from other days
+        stale = [k for k in self._fired_keys if not k.endswith(str(session_date))]
+        for k in stale:
+            self._fired_keys.discard(k)
+
+    def _detect_sweep_on_bar(
+        self,
+        bar: Candle,
+        *,
+        asia_high: float,
+        asia_low: float,
+        session_date: date,
+        min_sweep: float,
+        max_sweep: float,
+    ) -> SweepMemory | None:
+        """Rejecting wick beyond Asia H/L within configured pip band."""
+        if not (
+            is_london_sweep_window(bar.timestamp) or is_london_entry_window(bar.timestamp)
+        ):
+            return None
+
+        sweep_high = bar.high - asia_high
+        if min_sweep <= sweep_high <= max_sweep and bar.close <= asia_high:
+            return SweepMemory(
+                bias="SELL",
+                sweep_price=bar.high,
+                asia_high=asia_high,
+                asia_low=asia_low,
+                session_date=session_date,
+                swept_at=bar.timestamp,
+                sweep_pips=round(sweep_high / LONDON_PIP, 1),
+            )
+
+        sweep_low = asia_low - bar.low
+        if min_sweep <= sweep_low <= max_sweep and bar.close >= asia_low:
+            return SweepMemory(
+                bias="BUY",
+                sweep_price=bar.low,
+                asia_high=asia_high,
+                asia_low=asia_low,
+                session_date=session_date,
+                swept_at=bar.timestamp,
+                sweep_pips=round(sweep_low / LONDON_PIP, 1),
+            )
+        return None
+
+    def _refresh_sweep_memory(
+        self,
+        bars: list[Candle],
+        *,
+        asia_high: float,
+        asia_low: float,
+        session_date: date,
+        min_sweep: float,
+        max_sweep: float,
+    ) -> None:
+        """Scan recent London bars; keep newest valid sweep (prefer 07–09)."""
+        primary: SweepMemory | None = None
+        any_win: SweepMemory | None = None
+        for bar in bars[-36:]:  # ~3h of M5
+            ev = self._detect_sweep_on_bar(
+                bar,
+                asia_high=asia_high,
+                asia_low=asia_low,
+                session_date=session_date,
+                min_sweep=min_sweep,
+                max_sweep=max_sweep,
+            )
+            if ev is None:
+                continue
+            any_win = ev
+            if is_london_sweep_window(bar.timestamp):
+                primary = ev
+        chosen = primary or any_win
+        if chosen is None:
+            return
+        # Keep existing if same bias and later/equal; replace if newer or primary upgrade
+        if self._sweep is None:
+            self._sweep = chosen
+            return
+        if self._sweep.session_date != session_date:
+            self._sweep = chosen
+            return
+        if chosen.swept_at >= self._sweep.swept_at:
+            self._sweep = chosen
+
+    def _structure_confirm(self, bars: list[Candle], sweep: SweepMemory) -> bool:
+        """ChoCH after sweep, or displacement back through Asia mid."""
+        post = [c for c in bars if c.timestamp >= sweep.swept_at]
+        if not post:
+            return False
+        cur = post[-1]
+        if sweep.bias == "SELL":
+            choch = _swing_low_broken(bars)
+            displacement = cur.close < sweep.asia_high and cur.close <= (
+                (sweep.asia_high + sweep.asia_low) / 2
+            )
+            return choch or displacement
+        choch = _swing_high_broken(bars)
+        displacement = cur.close > sweep.asia_low and cur.close >= (
+            (sweep.asia_high + sweep.asia_low) / 2
+        )
+        return choch or displacement
 
     def on_bar(self, candles: list[Candle], tick: Tick) -> Signal | None:
         bars = self._structure_bars or candles
@@ -133,6 +274,8 @@ class LondonJudasSweepStrategy(Strategy):
             self.last_block_reason = "Asian range not ready (need 00:00–06:00 UTC bars)"
             return None
 
+        self._reset_session_memory(asian.session_date)
+
         self.last_range = {
             "date": asian.session_date.isoformat(),
             "high": asian.high,
@@ -141,121 +284,125 @@ class LondonJudasSweepStrategy(Strategy):
             "range_pips": asian.range_pips,
             "adx": None,
         }
+
+        min_sweep = price_from_pips(self.min_sweep_pips)
+        max_sweep = price_from_pips(self.max_sweep_pips)
+        sl_buf = price_from_pips(self.sl_buffer_pips)
+
+        self._refresh_sweep_memory(
+            bars,
+            asia_high=asian.high,
+            asia_low=asian.low,
+            session_date=asian.session_date,
+            min_sweep=min_sweep,
+            max_sweep=max_sweep,
+        )
+
+        sweep = self._sweep
         self.last_zones = [
             {
                 "zone_type": "ASIAN_HIGH",
                 "price_high": asian.high,
                 "price_low": asian.high,
-                "is_swept": False,
+                "is_swept": bool(sweep and sweep.bias == "SELL"),
             },
             {
                 "zone_type": "ASIAN_LOW",
                 "price_high": asian.low,
                 "price_low": asian.low,
-                "is_swept": False,
+                "is_swept": bool(sweep and sweep.bias == "BUY"),
             },
         ]
 
-        cur = bars[-1]
-        min_sweep = price_from_pips(self.min_sweep_pips)
-        max_sweep = price_from_pips(self.max_sweep_pips)
-        sl_buf = price_from_pips(self.sl_buffer_pips)
-
-        # Prefer M5 ChoCH; fall back to M1 if provided
-        choch_bars = bars
-        if self._m1_bars and len(self._m1_bars) >= 20:
-            choch_bars = self._m1_bars
-
-        # --- Bearish Judas (SELL) ---
-        sweep_high = cur.high - asian.high
-        if (
-            is_london_sweep_window(tick.timestamp) or is_london_entry_window(tick.timestamp)
-        ) and min_sweep <= sweep_high <= max_sweep:
-            rejected = cur.close <= asian.high
-            choch = _swing_low_broken(choch_bars)
-            fvg = find_bearish_fvg(bars)
+        if sweep is None:
+            self.last_block_reason = (
+                f"Waiting Asia H/L sweep ({self.min_sweep_pips:.0f}–"
+                f"{self.max_sweep_pips:.0f} pips / "
+                f"${self.min_sweep_pips * LONDON_PIP:.2f}–"
+                f"${self.max_sweep_pips * LONDON_PIP:.2f})"
+            )
             self.last_checklist = [
-                {"name": "Asia High sweep", "ok": True, "detail": f"+{sweep_high / LONDON_PIP:.1f}p"},
-                {"name": "Reject back inside", "ok": rejected, "detail": f"close={cur.close}"},
-                {"name": "ChoCH lower-low", "ok": choch, "detail": "M5/M1"},
-                {"name": "Bearish FVG", "ok": fvg is not None, "detail": str(fvg.mid if fvg else "—")},
+                {"name": "Asia range", "ok": True, "detail": f"{asian.low}-{asian.high}"},
+                {"name": "Judas sweep", "ok": False, "detail": "not yet"},
             ]
-            if rejected and choch and fvg and fvg.bias == "SELL":
-                key = f"SELL-{asian.session_date}-{round(fvg.mid, 1)}"
-                if key not in self._fired_keys:
-                    self._fired_keys.add(key)
-                    self.last_zones[0]["is_swept"] = True
-                    sweep_px = cur.high
-                    entry = fvg.mid
-                    sl = round(sweep_px + sl_buf, 2)
-                    risk = abs(sl - entry)
-                    tp_asia = asian.low
-                    tp_rrr = round(entry - self.reward_r * risk, 2)
-                    # Prefer Asia low if it offers ≥ ~1R, else RRR target
-                    tp = tp_asia if (entry - tp_asia) >= risk * 0.9 else tp_rrr
-                    rr = round((entry - tp) / risk, 2) if risk else self.reward_r
-                    return Signal(
-                        strategy=self.name,
-                        symbol=tick.symbol,
-                        side=Side.SELL,
-                        strength=0.92,
-                        reason=(
-                            f"London Judas SELL · AsiaH {asian.high} swept "
-                            f"→ ChoCH → FVG50 {entry} · SL {sl} · TP {tp}"
-                        ),
-                        stop_loss=sl,
-                        take_profit=tp,
-                        order_type=OrderType.LIMIT,
-                        limit_price=entry,
-                        expire_at=pending_expire_at(tick.timestamp),
-                        sweep_price=sweep_px,
-                        timestamp=tick.timestamp,
-                    )
+            return None
 
-        # --- Bullish Judas (BUY) ---
-        sweep_low = asian.low - cur.low
-        if (
-            is_london_sweep_window(tick.timestamp) or is_london_entry_window(tick.timestamp)
-        ) and min_sweep <= sweep_low <= max_sweep:
-            rejected = cur.close >= asian.low
-            choch = _swing_high_broken(choch_bars)
-            fvg = find_bullish_fvg(bars)
-            self.last_checklist = [
-                {"name": "Asia Low sweep", "ok": True, "detail": f"+{sweep_low / LONDON_PIP:.1f}p"},
-                {"name": "Reject back inside", "ok": rejected, "detail": f"close={cur.close}"},
-                {"name": "ChoCH higher-high", "ok": choch, "detail": "M5/M1"},
-                {"name": "Bullish FVG", "ok": fvg is not None, "detail": str(fvg.mid if fvg else "—")},
-            ]
-            if rejected and choch and fvg and fvg.bias == "BUY":
-                key = f"BUY-{asian.session_date}-{round(fvg.mid, 1)}"
-                if key not in self._fired_keys:
-                    self._fired_keys.add(key)
-                    self.last_zones[1]["is_swept"] = True
-                    sweep_px = cur.low
-                    entry = fvg.mid
-                    sl = round(sweep_px - sl_buf, 2)
-                    risk = abs(entry - sl)
-                    tp_asia = asian.high
-                    tp_rrr = round(entry + self.reward_r * risk, 2)
-                    tp = tp_asia if (tp_asia - entry) >= risk * 0.9 else tp_rrr
-                    return Signal(
-                        strategy=self.name,
-                        symbol=tick.symbol,
-                        side=Side.BUY,
-                        strength=0.92,
-                        reason=(
-                            f"London Judas BUY · AsiaL {asian.low} swept "
-                            f"→ ChoCH → FVG50 {entry} · SL {sl} · TP {tp}"
-                        ),
-                        stop_loss=sl,
-                        take_profit=tp,
-                        order_type=OrderType.LIMIT,
-                        limit_price=entry,
-                        expire_at=pending_expire_at(tick.timestamp),
-                        sweep_price=sweep_px,
-                        timestamp=tick.timestamp,
-                    )
+        confirm = self._structure_confirm(bars, sweep)
+        fvg = find_recent_fvg(bars, sweep.bias, lookback=16)
+        self.last_checklist = [
+            {
+                "name": f"Asia {'High' if sweep.bias == 'SELL' else 'Low'} sweep",
+                "ok": True,
+                "detail": f"+{sweep.sweep_pips}p @ {sweep.sweep_price}",
+            },
+            {
+                "name": "ChoCH / displacement",
+                "ok": confirm,
+                "detail": "M5 after sweep",
+            },
+            {
+                "name": f"{'Bearish' if sweep.bias == 'SELL' else 'Bullish'} FVG",
+                "ok": fvg is not None,
+                "detail": str(fvg.mid if fvg else "—"),
+            },
+        ]
 
-        if not self.last_block_reason:
-            self.last_block_reason = "No Judas sweep + ChoCH + FVG confluence yet"
-        return None
+        if not confirm:
+            self.last_block_reason = (
+                f"Sweep locked ({sweep.bias}) — waiting ChoCH/displacement"
+            )
+            return None
+        if fvg is None:
+            self.last_block_reason = f"Sweep+structure ok ({sweep.bias}) — waiting FVG"
+            return None
+
+        key = f"{sweep.bias}-{asian.session_date}-{round(fvg.mid, 1)}"
+        if key in self._fired_keys:
+            self.last_block_reason = "Already fired this FVG level today"
+            return None
+        self._fired_keys.add(key)
+
+        entry = fvg.mid
+        if sweep.bias == "SELL":
+            sl = round(sweep.sweep_price + sl_buf, 2)
+            risk = abs(sl - entry)
+            if risk <= 0:
+                self.last_block_reason = "Invalid risk distance"
+                return None
+            tp_asia = asian.low
+            tp_rrr = round(entry - self.reward_r * risk, 2)
+            tp = tp_asia if (entry - tp_asia) >= risk * 0.9 else tp_rrr
+            side = Side.SELL
+            reason = (
+                f"London Judas SELL · AsiaH {asian.high} swept "
+                f"→ structure → FVG50 {entry} · SL {sl} · TP {tp}"
+            )
+        else:
+            sl = round(sweep.sweep_price - sl_buf, 2)
+            risk = abs(entry - sl)
+            if risk <= 0:
+                self.last_block_reason = "Invalid risk distance"
+                return None
+            tp_asia = asian.high
+            tp_rrr = round(entry + self.reward_r * risk, 2)
+            tp = tp_asia if (tp_asia - entry) >= risk * 0.9 else tp_rrr
+            side = Side.BUY
+            reason = (
+                f"London Judas BUY · AsiaL {asian.low} swept "
+                f"→ structure → FVG50 {entry} · SL {sl} · TP {tp}"
+            )
+
+        return Signal(
+            strategy=self.name,
+            symbol=tick.symbol,
+            side=side,
+            strength=0.92,
+            reason=reason,
+            stop_loss=sl,
+            take_profit=tp,
+            order_type=OrderType.LIMIT,
+            limit_price=entry,
+            expire_at=pending_expire_at(tick.timestamp),
+            sweep_price=sweep.sweep_price,
+            timestamp=tick.timestamp,
+        )

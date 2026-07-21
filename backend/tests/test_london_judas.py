@@ -84,6 +84,46 @@ def test_strategy_blocks_outside_london():
     assert "Outside London" in (strat.last_block_reason or "")
 
 
+def test_multi_bar_judas_sell_after_remembered_sweep():
+    """Sweep on bar A, ChoCH+FVG on later bars → LIMIT SELL (not same-candle only)."""
+    strat = LondonJudasSweepStrategy(news_filter=False)
+    bars: list[Candle] = []
+    # Asia 00:00–06:00 — tight box 2350–2352
+    for h in range(0, 6):
+        for m in (0, 30):
+            ts = datetime(2026, 7, 21, h, m, tzinfo=timezone.utc)
+            bars.append(_candle(ts, 2351, 2352, 2350, 2351))
+
+    t = datetime(2026, 7, 21, 7, 0, tzinfo=timezone.utc)
+    bars.append(_candle(t, 2351, 2352.2, 2350.5, 2351.2))
+    bars.append(_candle(t + timedelta(minutes=5), 2351.2, 2352.0, 2350.8, 2351.0))
+
+    # Sweep bar 07:15 — wick +$1.20 above Asia high (2352), close back inside
+    sweep_ts = t + timedelta(minutes=15)
+    bars.append(_candle(sweep_ts, 2351.5, 2353.2, 2351.0, 2351.8))
+
+    # Later bars: displacement + bearish FVG (a.low 2351.5 > c.high 2350.5)
+    bars.append(_candle(sweep_ts + timedelta(minutes=5), 2351.8, 2352.0, 2351.5, 2351.6))
+    bars.append(_candle(sweep_ts + timedelta(minutes=10), 2351.6, 2351.7, 2349.0, 2349.2))
+    bars.append(_candle(sweep_ts + timedelta(minutes=15), 2349.2, 2350.5, 2348.0, 2348.5))
+
+    tick = Tick(
+        symbol="XAUUSD",
+        bid=2348.4,
+        ask=2348.6,
+        mid=2348.5,
+        timestamp=sweep_ts + timedelta(minutes=15),
+    )
+    strat.set_structure_bars(bars)
+    sig = strat.on_bar(bars, tick)
+    assert sig is not None
+    assert sig.side == Side.SELL
+    assert sig.order_type == OrderType.LIMIT
+    assert sig.limit_price == 2351.0
+    assert sig.sweep_price == 2353.2
+    assert sig.expire_at is not None and sig.expire_at.hour == 12
+
+
 def test_paper_limit_order_and_kill():
     broker = PaperBroker(1000)
     tick = Tick(

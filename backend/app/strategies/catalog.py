@@ -61,19 +61,20 @@ def strategy_catalog() -> list[dict]:
             "entry_rules": [
                 "Build Asian box 00:00–06:00 UTC (high / low / mid).",
                 "Active London strategy window 07:00–11:59 UTC (sweep+entry).",
-                "Sweep: wick beyond Asia H/L by 5–15 pips, then reject inside.",
-                "Require ChoCH (break of recent swing high/low on M5 or M1).",
+                "Sweep: wick beyond Asia H/L by 50–350 pips ($0.50–$3.50), then reject inside.",
+                "Remember the sweep — ChoCH/displacement + FVG can form on later M5 bars.",
+                "Require ChoCH or displacement back through Asia mid after the sweep.",
                 "Place LIMIT at bearish/bullish FVG 50% equilibrium (mid).",
                 "Cancel pending limits at 12:00 UTC (kill switch).",
             ],
             "entry_flow": [
-                "Asia H swept + close back inside → SELL limit at bearish FVG mid.",
-                "Asia L swept + close back inside → BUY limit at bullish FVG mid.",
-                "SL beyond sweep wick + 12 pip buffer; TP Asia opposite side or 3R.",
+                "Sweep Asia H/L (remembered) → later ChoCH/displacement → FVG 50% LIMIT.",
+                "SELL after Asia high sweep; BUY after Asia low sweep.",
+                "SL beyond sweep wick + 80 pip ($0.80) buffer; TP Asia opposite side or 3R.",
             ],
             "parameters": _seed_params("London_Judas_Sweep"),
             "safety": [
-                "Block if spread > 30 pips ($0.30 on XAUUSD).",
+                "Block if spread > 40 pips ($0.40 on XAUUSD).",
                 "UK/EUR high-impact news blackout −15 minutes.",
                 "Only fires once per session per FVG level.",
             ],
@@ -153,7 +154,7 @@ def strategy_catalog() -> list[dict]:
 def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
-        "London_Judas_Sweep — Asia 00-06 UTC box · sweep 07-09 · FVG50 LIMIT · kill 12:00",
+        "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · engulf/pin",
         "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
         "Manual BUY/SELL with auto SL/TP always available",
