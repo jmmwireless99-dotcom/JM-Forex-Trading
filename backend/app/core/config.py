@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     mt4_symbol: str = "XAUUSD"
     mt_symbol: str = "XAUUSD"
 
+    # Postgres persistence (empty = in-memory only, desk still works)
+    # JM_DATABASE_URL=postgresql+psycopg://jm:jm@127.0.0.1:5432/jm_forex
+    database_url: str = ""
+    database_auto_migrate: bool = True
+    database_seed_on_boot: bool = True
+
     @property
     def symbols(self) -> list[str]:
         return [s.strip().upper() for s in self.default_symbols.split(",") if s.strip()]

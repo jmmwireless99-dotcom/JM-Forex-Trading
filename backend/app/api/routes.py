@@ -56,6 +56,34 @@ async def health() -> dict:
     return {"status": "ok", "service": "JM Forex"}
 
 
+@router.get("/db/health")
+async def db_health() -> dict:
+    from app.db.session import ping_db
+
+    return ping_db()
+
+
+@router.get("/db/strategies")
+async def db_strategies(active_only: bool = False) -> dict:
+    from app.db.repository import list_strategies
+    from app.db.session import db_enabled
+
+    if not db_enabled():
+        return {"ok": False, "configured": False, "strategies": []}
+    rows = list_strategies(active_only=active_only)
+    return {"ok": True, "configured": True, "strategies": rows}
+
+
+@router.post("/db/seed")
+async def db_seed() -> dict:
+    from app.db.seed import seed_strategies
+    from app.db.session import db_enabled
+
+    if not db_enabled():
+        raise HTTPException(status_code=400, detail="JM_DATABASE_URL not set")
+    return seed_strategies(force_update=True)
+
+
 @router.get("/status")
 async def status() -> dict:
     engine = get_engine()

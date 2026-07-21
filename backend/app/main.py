@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,9 +12,42 @@ from app.api.deps import get_engine
 from app.api.routes import router
 from app.core.config import get_settings
 
+log = logging.getLogger(__name__)
+
+
+def _bootstrap_database() -> None:
+    """Optional Postgres migrate + seed — never blocks desk if DB is down."""
+    settings = get_settings()
+    if not (settings.database_url or "").strip():
+        return
+    try:
+        from app.db.session import ping_db
+
+        health = ping_db()
+        if not health.get("ok"):
+            log.warning("database not reachable: %s", health.get("error"))
+            return
+        if settings.database_auto_migrate:
+            from alembic import command
+            from alembic.config import Config
+            from pathlib import Path as P
+
+            ini = P(__file__).resolve().parents[1] / "alembic.ini"
+            cfg = Config(str(ini))
+            command.upgrade(cfg, "head")
+            log.info("alembic upgrade head OK")
+        if settings.database_seed_on_boot:
+            from app.db.seed import seed_strategies
+
+            result = seed_strategies()
+            log.info("strategy seed: %s", result)
+    except Exception:  # noqa: BLE001
+        log.exception("database bootstrap failed — continuing without DB")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _bootstrap_database()
     # Auto-start paper engine so the dashboard has live data immediately
     engine = get_engine()
     await engine.start()
