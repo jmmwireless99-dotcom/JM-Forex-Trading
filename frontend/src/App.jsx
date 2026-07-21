@@ -360,7 +360,7 @@ export default function App() {
                 {name === 'auto_gold'
                   ? 'auto_gold (session follow)'
                   : name === 'asia_m5_sr_scalp'
-                    ? 'asia_m5_sr_scalp (BEST Asia · M5 S/R · 7AM–5PM)'
+                    ? 'asia_m5_sr_scalp (BEST Asia · M5 box fade · 7AM–5PM)'
                     : name === 'asia_m3m5_sr_scalp'
                       ? 'asia_m3m5_sr_scalp (Asia M3 entry / M5 S/R)'
                       : name === 'asia_sr_scalp'

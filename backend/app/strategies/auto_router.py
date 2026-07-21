@@ -137,7 +137,7 @@ class AutoStrategyRouter:
                     utc.weekday(),
                     hour,
                     session.tier.value,
-                    "Asia BEST: M5 Support/Resistance scalp (asia_m5_sr_scalp) PH 7AM–5PM",
+                    "Asia BEST: M5 Asia-box fade scalp (asia_m5_sr_scalp) PH 7AM–5PM",
                     adx_v,
                     atr_v,
                 )
@@ -285,7 +285,7 @@ class AutoStrategyRouter:
                 "next_session": nxt,
                 "reason": (
                     "Asia BEST (PH 7AM–5PM): asia_m5_sr_scalp — "
-                    "M5 Support/Resistance · "
+                    "fade Asia box edges → mid · "
                     f"Next: {nxt.get('strategy')} ({nxt.get('session')})"
                 ),
             }

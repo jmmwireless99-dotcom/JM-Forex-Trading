@@ -1,20 +1,27 @@
-"""Asia M5 Support/Resistance scalp — PH 7:00AM–5:00PM.
+"""Asia M5 range-fade scalp — tuned to PH 7:00AM–5:00PM gold behavior.
 
-Dedicated Asia daytime strategy:
-  - Timeframe: closed M5 candles only
-  - Edge: fade Support (buy) / Resistance (sell) with rejection confirm
-  - Levels: M5 swing S/R + Asia session range high/low
-  - Window: Philippines 7:00–17:00 (stops before late London push)
-  - SL beyond level + ATR pad · TP opposite S/R or ~1.0R scalp
-  - Flat if ADX wakes up / news / outside Asia hours
+Observed Asia (Manila daytime) tape on XAUUSD:
+  - Mostly range / chop — not clean trends
+  - Stretch candles often reverse next (mean reversion)
+  - Best edge: fade Asia session box high/low after rejection wick
+  - Breakouts during Asia are frequently false — do not chase
+  - Scalp TP toward box mid; stop new entries near London (after PH 4:30)
+
+Rules:
+  1. Closed M5 only · PH 7:00–17:00 (hard) · soft cutoff 16:30
+  2. Build Asia box = high/low of M5 bars since PH 7:00 today
+  3. BUY only near box low + bullish rejection · SELL near box high + bearish rejection
+  4. Close must reclaim inside box (liquidity sweep fade)
+  5. SL beyond box edge + ATR pad · TP at box mid (~Asia scalp)
+  6. Flat if ADX high, box too thin/wide, news, or breakout acceptance
 """
 
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from app.models.domain import Candle, Side, Signal, Tick
-from app.strategies.asia_sr_scalp import AsiaSrScalpStrategy
+from app.strategies.base import Strategy
 from app.strategies.entry_setup import bearish_confirm, bullish_confirm, true_atr
 from app.strategies.indicators import adx
 from app.strategies.news_calendar import check_news_blackout
@@ -22,10 +29,11 @@ from app.strategies.session import SessionTier, classify_session, ph_hour
 
 SIGNAL_COOLDOWN_SECONDS = 600  # 2× M5
 M5_SECONDS = 300
+PH = timezone(timedelta(hours=8))
 
 
-class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
-    """Pure M5 S/R fade scalp for Asia session PH 7AM–5PM."""
+class AsiaM5SrScalpStrategy(Strategy):
+    """Asia box fade scalp for Manila 7AM–5PM gold."""
 
     name = "asia_m5_sr_scalp"
     SYMBOL = "XAUUSD"
@@ -33,47 +41,91 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
 
     def __init__(
         self,
-        swing_lookback: int = 3,
-        zone_lookback: int = 40,
-        range_lookback: int = 28,
         atr_period: int = 14,
         adx_period: int = 14,
-        max_adx: float = 22.0,
-        zone_atr_width: float = 0.28,
-        touch_atr: float = 0.20,
-        sl_pad_atr: float = 0.22,
-        reward_r: float = 1.0,
-        min_zone_age: int = 2,
-        max_zones: int = 8,
+        max_adx: float = 20.0,
+        edge_frac: float = 0.18,
+        min_reject_wick: float = 0.35,
+        min_box_atr: float = 2.0,
+        max_box_atr: float = 18.0,
+        sl_pad_atr: float = 0.20,
+        min_reward_r: float = 0.85,
         news_filter: bool = True,
         asia_only: bool = True,
         ph_start_hour: int = 7,
         ph_end_hour: int = 17,
+        ph_soft_cutoff_hour: int = 16,
+        ph_soft_cutoff_minute: int = 30,
         signal_cooldown_seconds: int = SIGNAL_COOLDOWN_SECONDS,
     ) -> None:
-        super().__init__(
-            swing_lookback=swing_lookback,
-            zone_lookback=zone_lookback,
-            range_lookback=range_lookback,
-            atr_period=atr_period,
-            adx_period=adx_period,
-            max_adx=max_adx,
-            zone_atr_width=zone_atr_width,
-            touch_atr=touch_atr,
-            sl_pad_atr=sl_pad_atr,
-            reward_r=reward_r,
-            min_zone_age=min_zone_age,
-            max_zones=max_zones,
-            news_filter=news_filter,
-            asia_only=asia_only,
-            signal_cooldown_seconds=signal_cooldown_seconds,
-        )
+        super().__init__(lookback=max(80, atr_period * 3 + 40))
+        self.atr_period = atr_period
+        self.adx_period = adx_period
+        self.max_adx = max_adx
+        self.edge_frac = edge_frac
+        self.min_reject_wick = min_reject_wick
+        self.min_box_atr = min_box_atr
+        self.max_box_atr = max_box_atr
+        self.sl_pad_atr = sl_pad_atr
+        self.min_reward_r = min_reward_r
+        self.news_filter = news_filter
+        self.asia_only = asia_only
         self.ph_start_hour = ph_start_hour
         self.ph_end_hour = ph_end_hour
+        self.ph_soft_cutoff_hour = ph_soft_cutoff_hour
+        self.ph_soft_cutoff_minute = ph_soft_cutoff_minute
+        self.signal_cooldown_seconds = signal_cooldown_seconds
+        self._last_signal_at: dict[str, float] = {}
+        self.last_block_reason: str | None = None
+        self.last_checklist: list[dict] = []
+        self.last_zones: list[dict] = []
+        self.last_range: dict | None = None
+        self.last_session_label: str | None = None
 
-    def _in_asia_hours(self, ts) -> bool:
-        ph = ph_hour(ts.astimezone(timezone.utc))
-        return self.ph_start_hour <= ph < self.ph_end_hour
+    def evaluate(self, tick: Tick) -> Signal | None:
+        return None
+
+    def _ph(self, ts: datetime) -> datetime:
+        return ts.astimezone(PH)
+
+    def _in_asia_hours(self, ts: datetime) -> bool:
+        ph = self._ph(ts)
+        return self.ph_start_hour <= ph.hour < self.ph_end_hour
+
+    def _past_soft_cutoff(self, ts: datetime) -> bool:
+        """No new Asia scalps after PH 16:30 — London risk rises."""
+        ph = self._ph(ts)
+        return (ph.hour, ph.minute) >= (
+            self.ph_soft_cutoff_hour,
+            self.ph_soft_cutoff_minute,
+        )
+
+    def _asia_box(self, candles: list[Candle], ts: datetime) -> tuple[float, float, list[Candle]] | None:
+        """High/low of today's Asia M5 bars from PH session open."""
+        ph_now = self._ph(ts)
+        day = ph_now.date()
+        session_bars: list[Candle] = []
+        for c in candles:
+            ph = self._ph(c.open_time)
+            if ph.date() != day:
+                continue
+            if self.ph_start_hour <= ph.hour < self.ph_end_hour:
+                session_bars.append(c)
+        if len(session_bars) < 6:
+            return None
+        hi = max(c.high for c in session_bars)
+        lo = min(c.low for c in session_bars)
+        if hi <= lo:
+            return None
+        return hi, lo, session_bars
+
+    def _wick_fracs(self, bar: Candle) -> tuple[float, float]:
+        rng = bar.high - bar.low
+        if rng <= 0:
+            return 0.0, 0.0
+        upper = (bar.high - max(bar.open, bar.close)) / rng
+        lower = (min(bar.open, bar.close) - bar.low) / rng
+        return upper, lower
 
     def on_bar(self, candles: list[Candle], tick: Tick) -> Signal | None:
         if tick.symbol.upper() != self.SYMBOL:
@@ -85,14 +137,21 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
             checks.append({"name": name, "ok": ok, "detail": detail})
             return ok
 
-        # Hard PH 7AM–5PM gate (in addition to session tier)
-        hours_ok = self._in_asia_hours(tick.timestamp)
         if not gate(
             "asia_hours",
-            hours_ok,
+            self._in_asia_hours(tick.timestamp),
             f"PH {self.ph_start_hour}:00–{self.ph_end_hour}:00 only",
         ):
             self.last_block_reason = "Outside Asia M5 scalp hours (PH 7AM–5PM)"
+            self.last_checklist = checks
+            return None
+
+        if not gate(
+            "pre_london",
+            not self._past_soft_cutoff(tick.timestamp),
+            f"Soft cutoff PH {self.ph_soft_cutoff_hour}:{self.ph_soft_cutoff_minute:02d}",
+        ):
+            self.last_block_reason = "Near London open — no new Asia scalps after PH 4:30"
             self.last_checklist = checks
             return None
 
@@ -104,7 +163,7 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
             self.last_checklist = checks
             return None
 
-        need = max(self.zone_lookback, self.range_lookback) + self.atr_period + 5
+        need = self.atr_period + 20
         if len(candles) < need:
             self.last_block_reason = f"Waiting for {need} M5 bars"
             self.last_checklist = checks
@@ -139,31 +198,66 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
         if not gate(
             "ranging_ok",
             strength <= self.max_adx,
-            f"ADX={strength:.1f} (max {self.max_adx})",
+            f"ADX={strength:.1f} (max {self.max_adx} — Asia fade only)",
         ):
-            self.last_block_reason = "ADX rising — no Asia M5 S/R fade"
+            self.last_block_reason = "ADX rising — Asia breakout risk, no fade"
             self.last_checklist = checks
             return None
 
-        range_zones, range_info = self._session_range_zones(candles, vol)
-        range_info["atr"] = round(vol, 2)
-        range_info["adx"] = round(strength, 1)
-        self.last_range = range_info
+        box = self._asia_box(candles, tick.timestamp)
+        if box is None:
+            self.last_block_reason = "Asia box warming (need ≥6 M5 bars since PH 7AM)"
+            self.last_checklist = checks
+            self.last_range = None
+            self.last_zones = []
+            return None
+        box_hi, box_lo, session_bars = box
+        width = box_hi - box_lo
+        mid = (box_hi + box_lo) / 2.0
 
-        zones = self._merge_zones(range_zones + self._swing_zones(candles, vol), vol)
+        self.last_range = {
+            "high": round(box_hi, 2),
+            "low": round(box_lo, 2),
+            "mid": round(mid, 2),
+            "width": round(width, 2),
+            "atr": round(vol, 2),
+            "adx": round(strength, 1),
+            "bars": len(session_bars),
+            "mode": "asia_box_fade",
+        }
         self.last_zones = [
             {
-                "kind": z.kind,
-                "top": round(z.top, 2),
-                "bottom": round(z.bottom, 2),
-                "mid": round(z.mid, 2),
-                "strength": round(z.strength, 2),
-                "source": z.source,
-            }
-            for z in zones
+                "kind": "resistance",
+                "top": round(box_hi, 2),
+                "bottom": round(box_hi - 0.25 * vol, 2),
+                "mid": round(box_hi, 2),
+                "strength": 2.5,
+                "source": "asia_box",
+            },
+            {
+                "kind": "support",
+                "top": round(box_lo + 0.25 * vol, 2),
+                "bottom": round(box_lo, 2),
+                "mid": round(box_lo, 2),
+                "strength": 2.5,
+                "source": "asia_box",
+            },
         ]
-        if not gate("sr_levels", bool(zones), f"{len(zones)} M5 S/R levels"):
-            self.last_block_reason = "No M5 support/resistance levels"
+
+        width_ok = self.min_box_atr * vol <= width <= self.max_box_atr * vol
+        if not gate(
+            "box_width",
+            width_ok,
+            f"Asia box={width:.2f} vs ATR={vol:.2f}",
+        ):
+            self.last_block_reason = "Asia box too tight or too wide for scalp"
+            self.last_checklist = checks
+            return None
+
+        # Breakout acceptance — close clearly outside box → do not fade
+        outside = bar.close > box_hi + 0.15 * vol or bar.close < box_lo - 0.15 * vol
+        if not gate("inside_box", not outside, "Close accepted outside Asia box"):
+            self.last_block_reason = "Breakout acceptance — stand aside (no chase)"
             self.last_checklist = checks
             return None
 
@@ -174,66 +268,76 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
             self.last_checklist = checks
             return None
 
-        support_hits = [
-            z for z in zones if z.kind == "support" and self._touching(bar, z, vol)
-        ]
-        resist_hits = [
-            z for z in zones if z.kind == "resistance" and self._touching(bar, z, vol)
-        ]
-        buy_ok = bool(support_hits) and bullish_confirm(bar) and bar.close > bar.open
-        sell_ok = bool(resist_hits) and bearish_confirm(bar) and bar.close < bar.open
+        edge = self.edge_frac * width
+        near_low = bar.low <= box_lo + edge or min(bar.open, bar.close) <= box_lo + edge
+        near_high = bar.high >= box_hi - edge or max(bar.open, bar.close) >= box_hi - edge
+        upper_wick, lower_wick = self._wick_fracs(bar)
 
-        gate("at_level", bool(support_hits or resist_hits), "Price at M5 S/R")
+        # Liquidity-sweep style: wick through edge, close back inside toward mid
+        buy_reject = (
+            near_low
+            and lower_wick >= self.min_reject_wick
+            and bar.close > bar.open
+            and bar.close > box_lo
+            and bar.close < mid
+            and bullish_confirm(bar)
+        )
+        sell_reject = (
+            near_high
+            and upper_wick >= self.min_reject_wick
+            and bar.close < bar.open
+            and bar.close < box_hi
+            and bar.close > mid
+            and bearish_confirm(bar)
+        )
+
+        gate("at_edge", near_low or near_high, "Price at Asia box edge")
         gate(
-            "reject",
-            (bullish_confirm(bar) if support_hits else False)
-            or (bearish_confirm(bar) if resist_hits else False),
-            "M5 rejection at support/resistance",
+            "reject_wick",
+            (lower_wick >= self.min_reject_wick and near_low)
+            or (upper_wick >= self.min_reject_wick and near_high),
+            f"wick L={lower_wick:.2f} U={upper_wick:.2f}",
         )
         self.last_checklist = checks
 
-        if not (buy_ok or sell_ok):
-            self.last_block_reason = "No M5 S/R revisit + rejection"
+        if not (buy_reject or sell_reject):
+            self.last_block_reason = "No Asia box edge fade (need sweep + rejection)"
             return None
 
-        if buy_ok and sell_ok:
-            s = min(support_hits, key=lambda z: abs(bar.close - z.mid))
-            r = min(resist_hits, key=lambda z: abs(bar.close - z.mid))
-            if abs(bar.close - s.mid) <= abs(bar.close - r.mid):
-                sell_ok = False
+        if buy_reject and sell_reject:
+            # Prefer closer edge
+            if abs(bar.close - box_lo) <= abs(bar.close - box_hi):
+                sell_reject = False
             else:
-                buy_ok = False
+                buy_reject = False
 
-        side = Side.BUY if buy_ok else Side.SELL
-        zone = (
-            min(support_hits, key=lambda z: abs(bar.close - z.mid))
-            if side == Side.BUY
-            else min(resist_hits, key=lambda z: abs(bar.close - z.mid))
-        )
+        side = Side.BUY if buy_reject else Side.SELL
         entry = tick.ask if side == Side.BUY else tick.bid
 
         if side == Side.BUY:
-            sl = zone.bottom - self.sl_pad_atr * vol
+            sl = box_lo - self.sl_pad_atr * vol
             risk = entry - sl
             if risk <= 0:
                 self.last_block_reason = "Invalid BUY risk"
                 return None
-            r_tp = entry + self.reward_r * risk
-            opp = self._opposite_target(side, entry, zones, vol)
-            tp = min(opp, r_tp) if opp is not None and opp > entry else r_tp
+            tp = mid
+            min_tp = entry + self.min_reward_r * risk
+            if tp < min_tp:
+                tp = min(min_tp, box_hi - 0.1 * vol)
         else:
-            sl = zone.top + self.sl_pad_atr * vol
+            sl = box_hi + self.sl_pad_atr * vol
             risk = sl - entry
             if risk <= 0:
                 self.last_block_reason = "Invalid SELL risk"
                 return None
-            r_tp = entry - self.reward_r * risk
-            opp = self._opposite_target(side, entry, zones, vol)
-            tp = max(opp, r_tp) if opp is not None and opp < entry else r_tp
+            tp = mid
+            min_tp = entry - self.min_reward_r * risk
+            if tp > min_tp:
+                tp = max(min_tp, box_lo + 0.1 * vol)
 
         reward = abs(tp - entry)
         rr = reward / risk if risk else 0.0
-        if rr < self.reward_r * 0.85:
+        if rr < self.min_reward_r * 0.80:
             self.last_block_reason = f"R:R too small ({rr:.2f})"
             return None
 
@@ -243,12 +347,12 @@ class AsiaM5SrScalpStrategy(AsiaSrScalpStrategy):
             strategy=self.name,
             symbol=self.SYMBOL,
             side=side,
-            strength=round(min(1.0, 0.5 + 0.15 * zone.strength), 3),
+            strength=round(min(1.0, (self.max_adx - strength) / self.max_adx + 0.4), 3),
             reason=(
-                f"M5 Asia S/R scalp {side.value} (PH 7–5): "
-                f"{zone.kind} ({zone.source}) {zone.bottom:.2f}-{zone.top:.2f} · "
-                f"reject · ADX={strength:.1f} · "
-                f"SL beyond level · TP opp/S/R or {self.reward_r}R · R={rr:.2f}"
+                f"M5 Asia box fade {side.value} (PH 7–5): "
+                f"box {box_lo:.2f}-{box_hi:.2f} mid={mid:.2f} · "
+                f"edge sweep+reject · ADX={strength:.1f} · "
+                f"SL beyond box · TP mid · R={rr:.2f}"
             ),
             stop_loss=round(sl, 2),
             take_profit=round(tp, 2),
