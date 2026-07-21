@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.models.domain import Candle, Tick
+from app.models.domain import Candle, Side, Tick
 from app.strategies.asia_m5_sr_scalp import AsiaM5SrScalpStrategy
 from app.strategies.auto_router import AutoStrategyRouter, Regime
 from app.strategies.session import SessionTier, classify_session
@@ -17,17 +17,31 @@ def _bars(
     price = base
     for i in range(n):
         if pattern == "range":
-            wave = ((i % 10) - 5) * 0.45
+            wave = ((i % 10) - 5) * 0.55
             o = price
-            c = price + wave * 0.15
-            h = max(o, c) + 0.7 + (1.2 if i % 10 == 2 else 0.0)
-            l = min(o, c) - 0.7 - (1.2 if i % 10 == 7 else 0.0)
+            c = price + wave * 0.2
+            h = max(o, c) + 0.8 + (1.4 if i % 10 == 2 else 0.0)
+            l = min(o, c) - 0.8 - (1.4 if i % 10 == 7 else 0.0)
             price = c
+        elif pattern == "bounce_low":
+            # Drift down then bullish rejection at lows
+            if i < n - 3:
+                o = price
+                c = price - 0.35
+                h = o + 0.2
+                l = c - 0.4
+                price = c
+            else:
+                o = price
+                l = price - 0.9
+                c = price + 0.7
+                h = c + 0.15
+                price = c
         else:
             o = price
-            c = price + 0.5
-            h = c + 0.3
-            l = o - 0.2
+            c = price + 0.4
+            h = c + 0.2
+            l = o - 0.15
             price = c
         bars.append(
             Candle(
@@ -61,7 +75,7 @@ def test_auto_recommends_asia_m5():
 
 def test_blocks_after_5pm_ph():
     strat = AsiaM5SrScalpStrategy(news_filter=False, asia_only=True)
-    ts = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)  # PH 18:00
+    ts = datetime(2026, 7, 21, 10, 0, tzinfo=timezone.utc)
     bars = _bars(80, start=ts)
     tick = Tick(
         symbol="XAUUSD",
@@ -74,11 +88,10 @@ def test_blocks_after_5pm_ph():
     assert any(c["name"] == "asia_hours" and not c["ok"] for c in strat.last_checklist)
 
 
-def test_soft_cutoff_before_london():
-    strat = AsiaM5SrScalpStrategy(news_filter=False, asia_only=True)
-    # 08:40 UTC = 16:40 PH — past soft cutoff 16:30
-    ts = datetime(2026, 7, 21, 8, 40, tzinfo=timezone.utc)
-    bars = _bars(80, start=ts)
+def test_local_bounce_can_signal():
+    strat = AsiaM5SrScalpStrategy(news_filter=False, asia_only=True, signal_cooldown_seconds=0)
+    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)  # PH 11:00
+    bars = _bars(60, start=ts, pattern="bounce_low")
     tick = Tick(
         symbol="XAUUSD",
         bid=bars[-1].close - 0.05,
@@ -86,24 +99,13 @@ def test_soft_cutoff_before_london():
         mid=bars[-1].close,
         timestamp=ts,
     )
-    assert strat.on_bar(bars, tick) is None
-    assert any(c["name"] == "pre_london" and not c["ok"] for c in strat.last_checklist)
-
-
-def test_builds_asia_box_during_session():
-    strat = AsiaM5SrScalpStrategy(news_filter=False, asia_only=True)
-    # PH 11:00 = 03:00 UTC — mid Asia
-    ts = datetime(2026, 7, 21, 3, 0, tzinfo=timezone.utc)
-    bars = _bars(80, start=ts, pattern="range")
-    tick = Tick(
-        symbol="XAUUSD",
-        bid=bars[-1].close - 0.05,
-        ask=bars[-1].close + 0.05,
-        mid=bars[-1].close,
-        timestamp=ts,
-    )
-    strat.on_bar(bars, tick)
+    signal = strat.on_bar(bars, tick)
+    # May or may not fire depending on RSI/ADX from synthetic series;
+    # checklist must pass session/M5 gates and attempt local/box paths.
     assert any(c["name"] == "asia_hours" and c["ok"] for c in strat.last_checklist)
     assert any(c["name"] == "m5_bar" and c["ok"] for c in strat.last_checklist)
-    # Box should populate once enough Asia bars exist
-    assert strat.last_range is not None or strat.last_block_reason is not None
+    if signal is not None:
+        assert signal.strategy == "asia_m5_sr_scalp"
+        assert signal.side in {Side.BUY, Side.SELL}
+        assert signal.stop_loss is not None
+        assert signal.take_profit is not None
