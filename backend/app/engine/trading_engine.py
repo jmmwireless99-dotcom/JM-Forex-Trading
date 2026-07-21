@@ -554,6 +554,16 @@ class TradingEngine:
                 self._last_session_slot = decision.slot
                 await self._emit("engine", self.status().model_dump(mode="json"))
                 await self._emit("auto", self.auto_status())
+        elif self.auto_enabled and not decision.allow_trading:
+            # Stand-aside slots (london_close / off-hours) → park manual
+            if self.active_name != "manual_only":
+                switched = self._park_strategy(
+                    "manual_only", note=f"Stand aside ({decision.slot})"
+                )
+                if switched:
+                    self._last_session_slot = decision.slot
+                    await self._emit("engine", self.status().model_dump(mode="json"))
+                    await self._emit("auto", self.auto_status())
 
         if self.active_name == "manual_only":
             return False
