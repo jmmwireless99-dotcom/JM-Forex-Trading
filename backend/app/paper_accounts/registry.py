@@ -43,6 +43,8 @@ class PaperAccount:
     created_at: datetime = field(default_factory=utcnow)
     password_hash: str | None = None
     avatar: str | None = None  # data-URL logo
+    # When set, strategy auto-fills (incl. London Judas) use this lot size exactly.
+    fixed_lots: float | None = None
 
     def profile_public(self) -> dict:
         """Safe profile fields (no token / password)."""
@@ -53,6 +55,7 @@ class PaperAccount:
             "avatar": self.avatar or None,
             "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
+            "fixed_lots": self.fixed_lots,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -71,6 +74,7 @@ class PaperAccount:
             "equity": snap.equity,
             "open_positions": snap.open_positions,
             "trades_logged": self.journal.summary().get("total", 0),
+            "fixed_lots": self.fixed_lots,
         }
 
     def snapshot_payload(self) -> dict:
@@ -253,6 +257,19 @@ class PaperAccountRegistry:
             self._save()
             return account.token
 
+    def set_fixed_lots(self, account: PaperAccount, lots: float | None) -> PaperAccount:
+        """Set manual lot size for strategy fills. Does not touch trade history."""
+        with self._lock:
+            if lots is None:
+                account.fixed_lots = None
+            else:
+                value = float(lots)
+                if value < 0.01 or value > 10:
+                    raise ValueError("Lots must be between 0.01 and 10")
+                account.fixed_lots = round(value, 2)
+            self._save()
+        return account
+
     def list_public(self) -> list[dict]:
         with self._lock:
             return [a.public_info() for a in self._accounts.values() if not a.is_desk]
@@ -293,6 +310,7 @@ class PaperAccountRegistry:
                         "token": acc.token,
                         "password_hash": acc.password_hash,
                         "avatar": acc.avatar,
+                        "fixed_lots": acc.fixed_lots,
                         "follow_auto": acc.follow_auto,
                         "is_desk": False,
                         "created_at": acc.created_at.isoformat(),
@@ -423,6 +441,11 @@ class PaperAccountRegistry:
                     created_at=created_at,
                     password_hash=row.get("password_hash") or None,
                     avatar=row.get("avatar") or None,
+                    fixed_lots=(
+                        float(row["fixed_lots"])
+                        if row.get("fixed_lots") is not None
+                        else None
+                    ),
                 )
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc

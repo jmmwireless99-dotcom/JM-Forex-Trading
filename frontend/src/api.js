@@ -139,6 +139,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ amount: Number(amount), reset }),
     }),
+  setTradeSettings: (body) =>
+    request('/account/settings', { method: 'POST', body: JSON.stringify(body) }),
   positions: () => request('/positions'),
   orders: () => request('/orders'),
   trades: (limit = 100) => request(`/trades?limit=${limit}`),

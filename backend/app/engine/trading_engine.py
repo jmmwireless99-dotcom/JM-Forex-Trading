@@ -192,6 +192,28 @@ class TradingEngine:
             "message": "Password updated — trade history unchanged.",
         }
 
+    def set_client_trade_settings(
+        self,
+        account: PaperAccount,
+        *,
+        fixed_lots: float | None = ...,  # type: ignore[assignment]
+    ) -> dict[str, Any]:
+        """Manual lot size for strategy fills (London Judas, etc.). Keeps history."""
+        if fixed_lots is not ...:
+            self.accounts.set_fixed_lots(account, fixed_lots)
+        return {
+            "ok": True,
+            "account": self.account_payload(account),
+            "fixed_lots": account.fixed_lots,
+            "capital": self.capital_preview(account=account),
+            "message": (
+                f"Manual lots set to {account.fixed_lots:.2f} — used by London Judas "
+                f"/ strategy fills (trade history unchanged)."
+                if account.fixed_lots is not None
+                else "Manual lots cleared — back to risk-based sizing."
+            ),
+        }
+
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if account is None and self.using_mt():
             return self.mt.snapshot()
@@ -1223,10 +1245,17 @@ class TradingEngine:
         ):
             return
 
+        # Prefer per-account manual lot size (desk "Manual settings"); else micro 0.01.
+        signal_lots = (
+            float(account.fixed_lots)
+            if account.fixed_lots is not None
+            else 0.01
+        )
+        signal_lots = max(0.01, min(round(signal_lots, 2), 10.0))
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
-            lots=0.01,
+            lots=signal_lots,
             strategy=signal.strategy,
             comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
@@ -1284,11 +1313,15 @@ class TradingEngine:
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
         if tick is not None and not self.using_mt():
             acct.broker._last_ticks[tick.symbol] = tick
+        honor_lots = bool(acct.fixed_lots is not None) or (
+            (request.strategy or "").lower() == "manual"
+        )
         decision = acct.risk.evaluate(
             request,
             balance=self._balance(acct),
             open_positions=self.open_positions(acct),
             tick=tick,
+            honor_requested_lots=honor_lots,
         )
         if not decision.approved:
             rejected = Order(

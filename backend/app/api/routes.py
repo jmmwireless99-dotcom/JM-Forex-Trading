@@ -50,6 +50,12 @@ class PasswordChangeBody(BaseModel):
     current_password: str | None = Field(default=None, max_length=128)
 
 
+class TradeSettingsBody(BaseModel):
+    """Manual trade settings — lot size for strategy fills (e.g. London Judas)."""
+
+    fixed_lots: float | None = Field(default=None, ge=0.01, le=10)
+
+
 class StartRequest(BaseModel):
     strategy: str | None = None
 
@@ -471,6 +477,22 @@ async def account(account: PaperAccount = Depends(require_paper_account)) -> dic
         **engine.account_payload(account),
         "capital": engine.capital_preview(account=account),
     }
+
+
+@router.post("/account/settings")
+async def account_trade_settings(
+    body: TradeSettingsBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Set manual lot size for auto strategy fills (London Judas included)."""
+    engine = get_engine()
+    try:
+        kwargs: dict = {}
+        if "fixed_lots" in body.model_fields_set:
+            kwargs["fixed_lots"] = body.fixed_lots
+        return engine.set_client_trade_settings(account, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/account/capital")

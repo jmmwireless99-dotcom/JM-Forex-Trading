@@ -155,6 +155,7 @@ export default function App() {
         setCapital(acc.capital || null)
         if (acc.deposit != null) setDepositInput(String(acc.deposit))
         else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+        if (acc.fixed_lots != null) setManualLots(String(acc.fixed_lots))
         setAccountMeta((prev) => ({
           ...(prev || {}),
           id: acc.account_id || prev?.id,
@@ -350,7 +351,46 @@ export default function App() {
   }
 
   async function applyStrategy() {
-    await run(async () => api.setStrategy(strategy))
+    await run(async () => {
+      const res = await api.setStrategy(strategy)
+      setOrderNote(
+        strategy === 'London_Judas_Sweep'
+          ? 'London Judas locked (manual) — session auto-follow OFF. Entries 07:00–11:00 UTC only.'
+          : res?.message || `Strategy set to ${strategy} (session auto-follow OFF)`,
+      )
+      return res
+    })
+  }
+
+  async function lockLondonJudas() {
+    markStrategyChoice('London_Judas_Sweep')
+    await run(async () => {
+      const res = await api.setStrategy('London_Judas_Sweep')
+      try {
+        await api.start('London_Judas_Sweep')
+      } catch {
+        /* engine may already be running */
+      }
+      setOrderNote(
+        'London Judas locked · manual mode. Use your lot size below for Judas fills. Window 07:00–11:00 UTC.',
+      )
+      return res
+    })
+  }
+
+  async function saveManualLots() {
+    const value = Number(manualLots)
+    if (!Number.isFinite(value) || value < 0.01 || value > 10) {
+      setError('Lots must be between 0.01 and 10')
+      return
+    }
+    await run(async () => {
+      const res = await api.setTradeSettings({ fixed_lots: value })
+      if (res?.account) setAccount(res.account)
+      setManualLots(String(res?.fixed_lots ?? value))
+      setOrderNote(res?.message || `Manual lots ${value}`)
+      return res
+    })
   }
 
   async function autoTransferBySession() {
@@ -525,15 +565,23 @@ export default function App() {
             className="btn-ghost"
             disabled={busy}
             onClick={() => applyStrategy()}
-            title="Apply selected strategy without restarting"
+            title="Lock selected strategy and turn OFF session auto-follow"
           >
-            Apply strategy
+            Apply strategy (manual)
           </button>
           <button
             className="btn-primary"
             disabled={busy}
+            onClick={() => lockLondonJudas()}
+            title="Lock London Judas Sweep — manual mode, your lot size"
+          >
+            Lock London Judas
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={busy}
             onClick={() => autoTransferBySession()}
-            title="Auto follow by session time"
+            title="Auto follow by session time (overrides manual lock)"
           >
             Auto transfer (session)
           </button>
@@ -743,11 +791,58 @@ export default function App() {
         ) : null}
       </section>
 
+      <section className="panel manual-settings" aria-label="Manual strategy settings">
+        <div className="deposit-head">
+          <div>
+            <h2>Manual settings · London Judas + lots</h2>
+            <p className="meta">
+              <strong>Lock London Judas</strong> = strategy fixed, session auto-follow OFF.
+              Entries only 07:00–11:00 UTC. Your lot size below applies to Judas fills and
+              manual Buy/Sell (history not reset).
+            </p>
+          </div>
+          <span className={`badge ${!autoInfo?.enabled && appliedStrategy === 'London_Judas_Sweep' ? 'badge-live' : ''}`}>
+            {!autoInfo?.enabled && appliedStrategy === 'London_Judas_Sweep'
+              ? 'JUDAS MANUAL'
+              : autoInfo?.enabled
+                ? 'SESSION AUTO'
+                : appliedStrategy || '—'}
+          </span>
+        </div>
+        <div className="manual-controls">
+          <label className="lots-field">
+            Lot size
+            <input
+              type="number"
+              min="0.01"
+              max="10"
+              step="0.01"
+              value={manualLots}
+              disabled={busy}
+              onChange={(e) => setManualLots(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => saveManualLots()}>
+            Save lots for Judas
+          </button>
+          <button type="button" className="btn-ghost" disabled={busy} onClick={() => lockLondonJudas()}>
+            Lock London Judas
+          </button>
+          <span className="meta">
+            Saved lots:{' '}
+            {account.fixed_lots != null ? Number(account.fixed_lots).toFixed(2) : 'risk-based (not set)'}
+            {' · '}
+            Active: {status?.active_strategy || '—'}
+            {autoInfo?.enabled ? ' · auto ON' : ' · auto OFF'}
+          </span>
+        </div>
+      </section>
+
       <section className="manual-trade" aria-label="Manual buy sell">
         <div className="manual-trade-head">
           <strong>Manual trade</strong>
           <span className="meta">
-            XAUUSD · {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
+            XAUUSD · lots {manualLots} · {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
           </span>
         </div>
         <div className="manual-prices">

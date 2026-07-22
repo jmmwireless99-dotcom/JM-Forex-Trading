@@ -43,6 +43,7 @@ class RiskManager:
         balance: float,
         open_positions: list[Position],
         tick: Tick | None,
+        honor_requested_lots: bool = False,
     ) -> RiskDecision:
         opens = [p for p in open_positions if p.status == PositionStatus.OPEN]
 
@@ -69,6 +70,11 @@ class RiskManager:
                     False,
                     f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
                 )
+
+        # Manual lot lock (desk UI): use the exact size the trader set.
+        if honor_requested_lots:
+            lots = max(0.01, min(round(float(request.lots), 2), 10.0))
+            return RiskDecision(True, "Approved (manual lots)", adjusted_lots=lots)
 
         # Position sizing from risk % and stop distance
         stop_pips = self.settings.default_stop_loss_pips
