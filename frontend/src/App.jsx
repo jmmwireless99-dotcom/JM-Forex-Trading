@@ -486,7 +486,11 @@ export default function App() {
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
+  const maxOpen = Number(desk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
+  const atMaxOpen = positions.length >= maxOpen
+  const hasBuyOpen = positions.some((p) => p.side === 'BUY')
+  const hasSellOpen = positions.some((p) => p.side === 'SELL')
 
   if (!authReady) {
     return (
@@ -884,18 +888,30 @@ export default function App() {
           <button
             type="button"
             className="btn-sell"
-            disabled={busy || !gold || hasOpen}
+            disabled={busy || !gold || atMaxOpen || hasBuyOpen}
             onClick={() => manualTrade('SELL')}
-            title={hasOpen ? 'Close open position first' : 'Market SELL'}
+            title={
+              hasBuyOpen
+                ? 'BUY still open — no opposite flip'
+                : atMaxOpen
+                  ? `Max ${maxOpen} open positions`
+                  : 'Market SELL'
+            }
           >
             SELL {gold?.bid != null ? Number(gold.bid).toFixed(2) : ''}
           </button>
           <button
             type="button"
             className="btn-buy"
-            disabled={busy || !gold || hasOpen}
+            disabled={busy || !gold || atMaxOpen || hasSellOpen}
             onClick={() => manualTrade('BUY')}
-            title={hasOpen ? 'Close open position first' : 'Market BUY'}
+            title={
+              hasSellOpen
+                ? 'SELL still open — no opposite flip'
+                : atMaxOpen
+                  ? `Max ${maxOpen} open positions`
+                  : 'Market BUY'
+            }
           >
             BUY {gold?.ask != null ? Number(gold.ask).toFixed(2) : ''}
           </button>
@@ -903,7 +919,10 @@ export default function App() {
         {orderNote ? <div className="meta manual-note">{orderNote}</div> : null}
         {hasOpen ? (
           <div className="meta">
-            Flat first (1 position max) — Close open trade, or attach Auto SL/TP below.
+            Open {positions.length}/{maxOpen}
+            {atMaxOpen
+              ? ' — max reached. Close one to add another.'
+              : ' — same-direction adds OK when signal is clear; no opposite flip.'}
           </div>
         ) : null}
       </section>

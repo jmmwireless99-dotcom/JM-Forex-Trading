@@ -1231,11 +1231,19 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Do NOT reverse open trades on opposite signals — that was the main
-        # paper loss driver (EMA flip every M5). Hold until SL/TP / manual close.
-        for position in self.open_positions(account):
-            if position.symbol == signal.symbol:
-                # Same or opposite side: skip — one position at a time, no flip-close
+        # Multi-entry: allow more opens on a *clear* same-direction signal.
+        # Still never flip/reverse an opposite open (that was the big paper-loss driver).
+        opens = [
+            p for p in self.open_positions(account) if p.symbol == signal.symbol
+        ]
+        max_open = int(self.settings.max_open_positions)
+        if len(self.open_positions(account)) >= max_open:
+            return
+        if any(p.side != signal.side for p in opens):
+            return
+        if opens:
+            min_strength = float(getattr(self.settings, "pyramid_min_strength", 0.85))
+            if float(signal.strength or 0) < min_strength:
                 return
 
         if (
@@ -1243,6 +1251,7 @@ class TradingEngine:
             and not self.using_mt()
             and account.broker.pending_orders()
         ):
+            # One pending limit at a time; filled opens may already exist.
             return
 
         # Prefer per-account manual lot size (desk "Manual settings"); else micro 0.01.

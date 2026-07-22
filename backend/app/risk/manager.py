@@ -57,8 +57,14 @@ class RiskManager:
             )
 
         same_symbol = [p for p in opens if p.symbol == request.symbol]
-        if same_symbol:
-            return RiskDecision(False, f"Already have an open position on {request.symbol}")
+        opposite = [p for p in same_symbol if p.side != request.side]
+        if opposite:
+            # Keep no-flip rule — opposite signals must not reverse/stack against opens.
+            return RiskDecision(
+                False,
+                f"Opposite {opposite[0].side.value} position still open on {request.symbol}",
+            )
+        # Same-direction adds allowed until max_open_positions (clear pyramid / multi-entry).
 
         # Daily loss kill-switch (disabled when max_daily_loss_pct <= 0)
         if self.settings.max_daily_loss_pct > 0:

@@ -19,7 +19,10 @@ class Settings(BaseSettings):
 
     # Gold desk risk defaults — tighter than multi-pair FX
     max_risk_per_trade_pct: float = 0.5
-    max_open_positions: int = 1
+    # Allow stacking clear same-direction signals (not opposite flips).
+    max_open_positions: int = 3
+    # Min signal.strength to add another open trade on the same symbol/side.
+    pyramid_min_strength: float = 0.85
     max_daily_loss_pct: float = 0.0  # 0 = disabled (no daily loss kill-switch)
 
     # Fallback stops if a strategy does not supply ATR levels (gold points)
