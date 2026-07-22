@@ -130,9 +130,15 @@ class AutoStrategyRouter:
             },
             {
                 "days": "Mon-Fri",
-                "utc": "07:00-11:59",
+                "utc": "07:00-10:59",
                 "slot": "London",
                 "strategies": "London_Judas_Sweep",
+            },
+            {
+                "days": "Mon-Fri",
+                "utc": "11:00-11:59",
+                "slot": "London wind-down",
+                "strategies": "Stand aside (pre-kill)",
             },
             {
                 "days": "Mon-Fri",

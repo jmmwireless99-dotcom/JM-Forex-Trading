@@ -30,6 +30,15 @@ def test_london_judas_window():
     assert session_allows_entry(ts) is True
 
 
+def test_london_wind_down_before_kill():
+    # 11:30 UTC — strategy entry window closed; stand aside before 12:00 kill
+    ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "london_wind_down"
+    assert session_allows_entry(ts) is False
+
+
 def test_london_kill_hour_stand_aside():
     # 12:00 UTC — kill pending, no new strategy entries
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)

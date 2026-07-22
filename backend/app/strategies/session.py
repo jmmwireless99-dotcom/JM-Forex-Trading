@@ -57,7 +57,8 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
     Asia 00:00–06:59 — build Asia box + EMA_RSI
-    London 07:00–11:59 — Judas sweep/entry (matches strategy 07–11)
+    London 07:00–10:59 — Judas sweep/entry (strategy window ends 11:00)
+    London wind-down 11:00–11:59 — no new Judas entries (pre-kill)
     London close 12:00–12:59 — kill pending, no new entries
     Overlap 13:00–15:59 — SMC
     New York 16:00–19:59 — EMA_RSI
@@ -75,11 +76,17 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
             "asia",
             "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
         )
-    if 7 <= hour < 12:
+    if 7 <= hour < 11:
         return SessionWindow(
             SessionTier.ALLOWED,
             "london",
-            "London Judas window (UTC 07:00–11:59) — sweep + FVG limit",
+            "London Judas window (UTC 07:00–10:59) — sweep + FVG limit",
+        )
+    if 11 <= hour < 12:
+        return SessionWindow(
+            SessionTier.AVOID,
+            "london_wind_down",
+            "London wind-down (UTC 11:00–11:59) — no new Judas entries before kill",
         )
     if 12 <= hour < 13:
         return SessionWindow(

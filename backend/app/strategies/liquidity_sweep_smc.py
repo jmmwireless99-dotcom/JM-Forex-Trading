@@ -278,18 +278,10 @@ class LiquiditySweepSmcStrategy(Strategy):
         ]
 
         if self.require_sweep and sweep is None:
-            # Soft path: MSS alone can start a scalp when recent swing breaks
-            if mss_bias is None:
-                self.last_block_reason = "Waiting for Asia/PDH/swing liquidity sweep"
-                return None
-            bias = mss_bias
-            self.last_block_reason = None
-        elif bias is None:
-            self.last_block_reason = "Sweep locked — waiting MSS/ChoCH"
+            self.last_block_reason = "Waiting for Asia/PDH/swing liquidity sweep"
             return None
-
         if bias is None:
-            self.last_block_reason = "No SMC bias yet"
+            self.last_block_reason = "Sweep locked — waiting MSS"
             return None
 
         # Prefer FVG/OB retest; else momentum candle after sweep+structure
@@ -330,8 +322,8 @@ class LiquiditySweepSmcStrategy(Strategy):
 
         side = Side.BUY if bias == "BUY" else Side.SELL
         reason = (
-            f"SMC {side.value} · {sweep.label if sweep else 'structure'} · "
-            f"{'MSS' if mss_bias else 'ChoCH'} · {entry_zone.kind} entry"
+            f"SMC {side.value} · {sweep.label} · "
+            f"{'MSS' if mss_bias else 'sweep-bias'} · {entry_zone.kind} entry"
         )
         self.last_checklist.append(
             f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"

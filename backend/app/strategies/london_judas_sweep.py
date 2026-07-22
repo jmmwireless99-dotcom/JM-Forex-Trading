@@ -109,15 +109,19 @@ class LondonJudasSweepStrategy(Strategy):
         max_sweep_pips: float = 350.0,
         sl_buffer_pips: float = 80.0,
         max_spread_pips: float = 40.0,
-        news_filter: bool = True,
+        news_filter: bool | None = None,
         reward_r: float = 3.0,
     ) -> None:
+        from app.core.config import get_settings
+
         super().__init__(lookback=lookback)
         self.min_sweep_pips = min_sweep_pips
         self.max_sweep_pips = max_sweep_pips
         self.sl_buffer_pips = sl_buffer_pips
         self.max_spread_pips = max_spread_pips
-        self.news_filter = news_filter
+        self.news_filter = (
+            get_settings().news_filter if news_filter is None else news_filter
+        )
         self.reward_r = reward_r
         self.last_checklist: list[dict] = []
         self.last_block_reason: str | None = None
@@ -229,19 +233,18 @@ class LondonJudasSweepStrategy(Strategy):
     def _structure_confirm(self, bars: list[Candle], sweep: SweepMemory) -> bool:
         """ChoCH after sweep, or displacement back through Asia mid."""
         post = [c for c in bars if c.timestamp >= sweep.swept_at]
-        if not post:
+        if len(post) < 2:
             return False
         cur = post[-1]
+        mid = (sweep.asia_high + sweep.asia_low) / 2
         if sweep.bias == "SELL":
-            choch = _swing_low_broken(bars)
-            displacement = cur.close < sweep.asia_high and cur.close <= (
-                (sweep.asia_high + sweep.asia_low) / 2
-            )
+            # Prefer post-sweep structure; fall back to full series only if thin
+            choch = _swing_low_broken(post if len(post) >= 8 else bars)
+            # Must reclaim below Asia mid after the high sweep (not just still below high)
+            displacement = cur.close <= mid
             return choch or displacement
-        choch = _swing_high_broken(bars)
-        displacement = cur.close > sweep.asia_low and cur.close >= (
-            (sweep.asia_high + sweep.asia_low) / 2
-        )
+        choch = _swing_high_broken(post if len(post) >= 8 else bars)
+        displacement = cur.close >= mid
         return choch or displacement
 
     def on_bar(self, candles: list[Candle], tick: Tick) -> Signal | None:
@@ -360,7 +363,6 @@ class LondonJudasSweepStrategy(Strategy):
         if key in self._fired_keys:
             self.last_block_reason = "Already fired this FVG level today"
             return None
-        self._fired_keys.add(key)
 
         entry = fvg.mid
         if sweep.bias == "SELL":
@@ -392,6 +394,7 @@ class LondonJudasSweepStrategy(Strategy):
                 f"→ structure → FVG50 {entry} · SL {sl} · TP {tp}"
             )
 
+        self._fired_keys.add(key)
         return Signal(
             strategy=self.name,
             symbol=tick.symbol,
