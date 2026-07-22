@@ -59,12 +59,16 @@ class RiskManager:
         if same_symbol:
             return RiskDecision(False, f"Already have an open position on {request.symbol}")
 
-        max_daily_loss = self._starting_balance * (self.settings.max_daily_loss_pct / 100.0)
-        if self._daily_realized_pnl <= -max_daily_loss:
-            return RiskDecision(
-                False,
-                f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
+        # Daily loss kill-switch (disabled when max_daily_loss_pct <= 0)
+        if self.settings.max_daily_loss_pct > 0:
+            max_daily_loss = self._starting_balance * (
+                self.settings.max_daily_loss_pct / 100.0
             )
+            if self._daily_realized_pnl <= -max_daily_loss:
+                return RiskDecision(
+                    False,
+                    f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
+                )
 
         # Position sizing from risk % and stop distance
         stop_pips = self.settings.default_stop_loss_pips

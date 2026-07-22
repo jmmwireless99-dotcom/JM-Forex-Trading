@@ -766,7 +766,7 @@ class TradingEngine:
         stop_pips = float(self.settings.default_stop_loss_pips)
         tp_pips = float(self.settings.default_take_profit_pips)
         risk_usd = amount * (risk_pct / 100.0)
-        daily_usd = amount * (daily_pct / 100.0)
+        daily_usd = amount * (daily_pct / 100.0) if daily_pct > 0 else None
         pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
         suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
         suggested_lots = max(0.01, round(suggested, 2))
@@ -777,7 +777,8 @@ class TradingEngine:
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
-            "max_daily_loss_usd": round(daily_usd, 2),
+            "max_daily_loss_usd": round(daily_usd, 2) if daily_usd is not None else None,
+            "daily_loss_limit_enabled": daily_pct > 0,
             "default_stop_loss_pips": stop_pips,
             "default_take_profit_pips": tp_pips,
             "suggested_lots": suggested_lots,
@@ -1089,24 +1090,11 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
+        # Do NOT reverse open trades on opposite signals — that was the main
+        # paper loss driver (EMA flip every M5). Hold until SL/TP / manual close.
         for position in self.open_positions(account):
-            if position.symbol == signal.symbol and position.side != signal.side:
-                if self.using_mt():
-                    self.mt.close_all()
-                else:
-                    closed = account.broker.close_position(
-                        position.id, reason="signal_reverse"
-                    )
-                    if closed:
-                        account.risk.record_realized_pnl(closed.realized_pnl)
-                        await self._journal_close(closed, account)
-                        await self._emit(
-                            "position_closed",
-                            {**closed.model_dump(mode="json"), "account_id": account.id},
-                        )
-
-        for position in self.open_positions(account):
-            if position.symbol == signal.symbol and position.side == signal.side:
+            if position.symbol == signal.symbol:
+                # Same or opposite side: skip — one position at a time, no flip-close
                 return
 
         if (

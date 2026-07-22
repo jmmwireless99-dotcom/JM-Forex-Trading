@@ -109,15 +109,14 @@ class MarketDataSimulator:
                 state.asia_low = state.mid - 1.5
             state.scenario = "smc_sweep_sell" if (self._step // 150) % 2 == 0 else "smc_sweep_buy"
             state.scenario_step = 0
-        # Asia / NY: EMA pullback setups — fire often enough for paper demos
-        elif (0 <= hour < 7 or 16 <= hour < 20) and self._step % 90 == 0:
+        # Asia / NY: EMA pullback setups — less frequent to avoid churn losses
+        elif (0 <= hour < 7 or 16 <= hour < 20) and self._step % 300 == 0:
             state.scenario = (
-                "ema_pullback_buy" if (self._step // 90) % 2 == 0 else "ema_pullback_sell"
+                "ema_pullback_buy" if (self._step // 300) % 2 == 0 else "ema_pullback_sell"
             )
             state.scenario_step = 0
             if state.session_anchor is None:
                 state.session_anchor = state.mid
-            # Snap near the session anchor so EMA20 proximity is reachable on paper
             state.mid = float(state.session_anchor)
 
     def _scenario_delta(self, state: SymbolState, now) -> float | None:

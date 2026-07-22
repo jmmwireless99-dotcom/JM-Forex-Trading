@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     # Gold desk risk defaults — tighter than multi-pair FX
     max_risk_per_trade_pct: float = 0.5
     max_open_positions: int = 1
-    max_daily_loss_pct: float = 2.0
+    max_daily_loss_pct: float = 0.0  # 0 = disabled (no daily loss kill-switch)
+
     # Fallback stops if a strategy does not supply ATR levels (gold points)
     # pip=0.1 → 55 pips = $5.5 move on XAUUSD
     default_stop_loss_pips: float = 55.0

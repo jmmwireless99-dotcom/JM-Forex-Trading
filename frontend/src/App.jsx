@@ -616,8 +616,16 @@ export default function App() {
             <div>
               <label>Max daily loss</label>
               <strong>
-                ${money(capital.max_daily_loss_usd)}{' '}
-                <span className="meta">({capital.max_daily_loss_pct}%)</span>
+                {capital.daily_loss_limit_enabled === false ||
+                Number(capital.max_daily_loss_pct) <= 0
+                  ? 'Off'
+                  : `$${money(capital.max_daily_loss_usd)}`}{' '}
+                <span className="meta">
+                  {capital.daily_loss_limit_enabled === false ||
+                  Number(capital.max_daily_loss_pct) <= 0
+                    ? '(disabled)'
+                    : `(${capital.max_daily_loss_pct}%)`}
+                </span>
               </strong>
             </div>
             <div>

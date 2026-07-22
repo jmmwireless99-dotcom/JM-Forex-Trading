@@ -97,22 +97,24 @@ def strategy_catalog() -> list[dict]:
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
-                "RSI 35–55 for BUY; RSI 45–65 for SELL.",
+                "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
+                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (≈1R stop, target max(1.6R, 1.8×ATR)).",
+                "SL/TP from ATR structure (wider stops: ~1.4×ATR / ~2.2×ATR).",
             ],
             "parameters": _seed_params("EMA_RSI_Scalp"),
             "safety": [
                 "Auto router gates Asia/NY sessions; optional JM_SESSION_FILTER for avoid tiers.",
                 "News blackout when desk news filter is on.",
                 "Needs 205+ M5 bars for EMA200 warmup.",
+                "Daily loss kill-switch disabled by default (JM_MAX_DAILY_LOSS_PCT=0).",
             ],
             "order_type": "MARKET",
-            "reward_r": 1.6,
+            "reward_r": 1.8,
         },
         {
             "id": "Liquidity_Sweep_SMC",
@@ -155,7 +157,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 35-55/45-65 · engulf/pin/soft",
+        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

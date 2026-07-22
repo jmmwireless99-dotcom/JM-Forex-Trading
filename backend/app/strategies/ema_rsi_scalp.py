@@ -29,10 +29,11 @@ class EmaRsiScalpStrategy(Strategy):
         ema_fast: int = 20,
         ema_slow: int = 50,
         rsi_period: int = 14,
-        rsi_buy: tuple[float, float] = (35.0, 55.0),
-        rsi_sell: tuple[float, float] = (45.0, 65.0),
+        rsi_buy: tuple[float, float] = (38.0, 52.0),
+        rsi_sell: tuple[float, float] = (48.0, 62.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
+        min_bars_between_signals: int = 6,  # ≥30m on M5 — stop flip-flop losses
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend
@@ -41,6 +42,7 @@ class EmaRsiScalpStrategy(Strategy):
         self.rsi_period = rsi_period
         self.rsi_buy = rsi_buy
         self.rsi_sell = rsi_sell
+        self.min_bars_between_signals = min_bars_between_signals
         settings = get_settings()
         self.news_filter = settings.news_filter if news_filter is None else news_filter
         self.session_filter = (
@@ -49,6 +51,8 @@ class EmaRsiScalpStrategy(Strategy):
         self.last_checklist: list[str] = []
         self.last_block_reason: str | None = None
         self._structure_bars: list[Candle] = []
+        self._last_signal_bar_ts: object | None = None
+        self._last_signal_side: Side | None = None
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -90,9 +94,8 @@ class EmaRsiScalpStrategy(Strategy):
         cur = bars[-1]
         prev = bars[-2]
         price = cur.close
-        band = max(0.25 * atr, 0.5)
+        band = max(0.2 * atr, 0.4)
 
-        # Dynamic S/R zone between EMA20 and EMA50 (wider band so paper ATR doesn't starve entries)
         zone_lo = min(e20, e50)
         zone_hi = max(e20, e50)
         in_zone = zone_lo - band <= price <= zone_hi + band
@@ -101,35 +104,18 @@ class EmaRsiScalpStrategy(Strategy):
             or abs(cur.high - e20) <= band
             or abs(price - e20) <= band
         )
+        near_fast = in_zone or touched_fast
 
         bull_pat = bullish_engulfing(prev, cur) or bullish_pin_bar(cur)
         bear_pat = bearish_engulfing(prev, cur) or bearish_pin_bar(cur)
-        # Soft confirm: directional close when RSI+zone already aligned
+        # Soft confirm only when RSI already in band (not a free pass)
         bull_soft = cur.close > cur.open and cur.close >= prev.close
         bear_soft = cur.close < cur.open and cur.close <= prev.close
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
-        # Trend filter: price vs EMA200. EMA20/50 stack is preferred but not mandatory
-        # when they are nearly flat (common right after paper seed).
-        flat_stack = abs(e20 - e50) <= band
-        uptrend = price > e200 and (e20 >= e50 or flat_stack)
-        downtrend = price < e200 and (e20 <= e50 or flat_stack)
-
-        paper = get_settings().execution_mode == "paper"
-        # Paper tape rarely prints a perfect EMA retest; allow a wider proximity + RSI.
-        near_fast = in_zone or touched_fast or (
-            paper and abs(price - e20) <= max(5.0, 2.0 * atr)
-        )
-        buy_ok_rsi = buy_rsi or (paper and 30.0 <= rsi_v <= 62.0)
-        sell_ok_rsi = sell_rsi or (paper and 38.0 <= rsi_v <= 70.0)
-        # Extreme RSI continuation on paper when price is already hugging EMA20
-        if paper and near_fast:
-            buy_ok_rsi = buy_ok_rsi or (rsi_v < 45 and (bull_pat or bull_soft))
-            sell_ok_rsi = sell_ok_rsi or (rsi_v > 55 and (bear_pat or bear_soft))
-            # Also allow reclaim/reject at EMA with soft candle even if RSI still stretched
-            buy_ok_rsi = buy_ok_rsi or (bull_pat or bull_soft)
-            sell_ok_rsi = sell_ok_rsi or (bear_pat or bear_soft)
+        uptrend = price > e200 and e20 >= e50
+        downtrend = price < e200 and e20 <= e50
 
         self.last_checklist = [
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
@@ -138,18 +124,47 @@ class EmaRsiScalpStrategy(Strategy):
             f"pattern bull={bull_pat}/{bull_soft} bear={bear_pat}/{bear_soft}",
         ]
 
+        # Space entries — prevent every-M5 flip losses
+        if self._last_signal_bar_ts is not None:
+            try:
+                idx = next(
+                    i
+                    for i, b in enumerate(bars)
+                    if (b.open_time or b.timestamp) == self._last_signal_bar_ts
+                )
+                if len(bars) - 1 - idx < self.min_bars_between_signals:
+                    self.last_block_reason = (
+                        f"Cooldown cooldown ({self.min_bars_between_signals} M5 bars)"
+                    )
+                    return None
+            except StopIteration:
+                pass
+
         side: Side | None = None
         reason = ""
-        if uptrend and near_fast and buy_ok_rsi and (bull_pat or bull_soft):
+        # Prefer real patterns; soft only with RSI in band + zone touch
+        if uptrend and near_fast and buy_rsi and (bull_pat or bull_soft):
             side = Side.BUY
-            tag = "engulf" if bullish_engulfing(prev, cur) else "pin" if bullish_pin_bar(cur) else "soft"
+            tag = (
+                "engulf"
+                if bullish_engulfing(prev, cur)
+                else "pin"
+                if bullish_pin_bar(cur)
+                else "soft"
+            )
             reason = (
                 f"EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · "
                 f"RSI {rsi_v:.0f} · {tag}"
             )
-        elif downtrend and near_fast and sell_ok_rsi and (bear_pat or bear_soft):
+        elif downtrend and near_fast and sell_rsi and (bear_pat or bear_soft):
             side = Side.SELL
-            tag = "engulf" if bearish_engulfing(prev, cur) else "pin" if bearish_pin_bar(cur) else "soft"
+            tag = (
+                "engulf"
+                if bearish_engulfing(prev, cur)
+                else "pin"
+                if bearish_pin_bar(cur)
+                else "soft"
+            )
             reason = (
                 f"EMA_RSI SELL · trend<EMA200 · retest EMA20/50 · "
                 f"RSI {rsi_v:.0f} · {tag}"
@@ -163,15 +178,33 @@ class EmaRsiScalpStrategy(Strategy):
             )
             return None
 
+        # Block immediate opposite flip (same bar spacing already helps)
+        if self._last_signal_side is not None and side != self._last_signal_side:
+            # Require at least one extra bar beyond minimum before flipping bias
+            if self._last_signal_bar_ts is not None:
+                try:
+                    idx = next(
+                        i
+                        for i, b in enumerate(bars)
+                        if (b.open_time or b.timestamp) == self._last_signal_bar_ts
+                    )
+                    if len(bars) - 1 - idx < self.min_bars_between_signals + 2:
+                        self.last_block_reason = "Flip blocked — wait for setup to mature"
+                        return None
+                except StopIteration:
+                    pass
+
         levels = structure_levels(
             side,
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=1.6,
-            min_stop_atr=1.0,
-            min_tp_atr=1.8,
+            reward_r=1.8,
+            min_stop_atr=1.4,
+            min_tp_atr=2.2,
         )
+        self._last_signal_bar_ts = cur.open_time or cur.timestamp
+        self._last_signal_side = side
         return Signal(
             strategy=self.name,
             symbol=tick.symbol,
