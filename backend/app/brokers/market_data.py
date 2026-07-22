@@ -203,3 +203,13 @@ class MarketDataSimulator:
 
     def last_mids(self) -> dict[str, float]:
         return {s.symbol: round(s.mid, 5) for s in self._states.values()}
+
+    def sync_mid(self, symbol: str, mid: float) -> None:
+        """Align simulator mid (+ session anchor) to seeded candle close."""
+        state = self._states.get(symbol.upper())
+        if state is None:
+            return
+        state.mid = float(mid)
+        state.session_anchor = float(mid)
+        state.asia_high = float(mid) + 0.8
+        state.asia_low = float(mid) - 0.8

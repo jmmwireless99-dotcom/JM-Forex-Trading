@@ -215,20 +215,26 @@ class TradingEngine:
         now = utcnow()
         # EMA200 needs 205+ M5 closes — seed past that so Asia/EMA can fire after restart.
         signal_seed = max(220, int(self.settings.candle_history))
+        last_close = mid
         for period, agg, count in (
             (self.settings.signal_period_seconds, self.signal_candles, signal_seed),
             (180, self.m3_candles, max(160, signal_seed // 2)),
             (self.settings.candle_period_seconds, self.candles, signal_seed),
         ):
             bars: list[Candle] = []
-            price = mid - 8.0
+            # Oscillate around the live mid so EMA20/200 stay near current tape
+            price = mid
             for i in range(count):
-                drift = math.sin(i / 9.0) * 0.55 + 0.08
-                noise = random.uniform(-0.25, 0.25)
+                # Mean-revert to mid — last bars finish at the live price
+                target = mid + math.sin(i / 11.0) * 1.2
+                # Stronger pull on the final 30 bars so seed end ≈ live mid
+                if i >= count - 30:
+                    target = mid + math.sin(i / 7.0) * 0.25
+                delta = (target - price) * 0.35 + random.uniform(-0.12, 0.12)
                 o = price
-                c = price + drift + noise
-                h = max(o, c) + abs(noise) * 0.6
-                l = min(o, c) - abs(noise) * 0.6
+                c = price + delta
+                h = max(o, c) + abs(delta) * 0.35 + 0.05
+                l = min(o, c) - abs(delta) * 0.35 - 0.05
                 open_time = now - timedelta(seconds=period * (count - i))
                 bars.append(
                     Candle(
@@ -245,11 +251,14 @@ class TradingEngine:
                     )
                 )
                 price = c
+            last_close = price
             agg.seed_history(symbol, bars)
             for strat in self._strategies.values():
                 if getattr(strat, "candle_driven", False) and period == self.settings.signal_period_seconds:
                     for bar in bars:
                         strat.feed_bar(bar)
+        # Keep the live simulator glued to the seeded close (EMA proximity)
+        self.market.sync_mid(symbol, last_close)
 
     async def start(self) -> None:
         if self.running:

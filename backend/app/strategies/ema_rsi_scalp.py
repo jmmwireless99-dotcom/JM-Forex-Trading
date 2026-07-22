@@ -119,7 +119,7 @@ class EmaRsiScalpStrategy(Strategy):
         paper = get_settings().execution_mode == "paper"
         # Paper tape rarely prints a perfect EMA retest; allow a wider proximity + RSI.
         near_fast = in_zone or touched_fast or (
-            paper and abs(price - e20) <= max(2.5, 1.5 * atr)
+            paper and abs(price - e20) <= max(5.0, 2.0 * atr)
         )
         buy_ok_rsi = buy_rsi or (paper and 30.0 <= rsi_v <= 62.0)
         sell_ok_rsi = sell_rsi or (paper and 38.0 <= rsi_v <= 70.0)
