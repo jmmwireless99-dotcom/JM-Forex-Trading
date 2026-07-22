@@ -88,13 +88,13 @@ class MarketDataSimulator:
         if utc.weekday() >= 5:
             return
         hour = utc.hour
-        # Track Asia box roughly for later sweep
+        # Track Asia box roughly for later Judas/SMC sweeps.
+        # Do not return here — Asia session also needs EMA pullback demos below.
         if 0 <= hour < 7:
             if state.session_anchor is None:
                 state.session_anchor = state.mid
             state.asia_high = max(state.asia_high or state.mid, state.mid)
             state.asia_low = min(state.asia_low or state.mid, state.mid)
-            return
         # London sweep window: inject Judas-style spike + reject more often on paper
         if 7 <= hour < 11 and self._step % 180 == 0:
             if state.asia_high is None:
@@ -115,9 +115,8 @@ class MarketDataSimulator:
                 "ema_pullback_buy" if (self._step // 90) % 2 == 0 else "ema_pullback_sell"
             )
             state.scenario_step = 0
-            # Anchor a synthetic EMA20/50 band near current mid for the scripted path
-            state.asia_high = state.mid + 1.8  # reuse as band hi
-            state.asia_low = state.mid - 0.4   # reuse as band lo / fast EMA proxy
+            if state.session_anchor is None:
+                state.session_anchor = state.mid
 
     def _scenario_delta(self, state: SymbolState, now) -> float | None:
         if state.scenario is None:
@@ -174,28 +173,26 @@ class MarketDataSimulator:
             return None
 
         if state.scenario == "ema_pullback_buy":
-            # Dip into a synthetic EMA band, then bullish reclaim (RSI lifts into buy zone)
-            band_lo = state.asia_low if state.asia_low is not None else state.mid - 1.2
-            if step < 18:
-                # Sell-off toward / slightly through fast EMA
-                return min(-0.05, (band_lo - state.mid) * 0.35) + random.gauss(0, vol * 0.12)
-            if step < 40:
-                # Bounce back through the band with bullish follow-through
-                return 0.10 + abs(random.gauss(0, vol * 0.1))
+            # Dip then reclaim — move far enough to refresh RSI into the buy band
+            target = (state.session_anchor or state.mid) - 1.5
+            if step < 25:
+                return min(-0.08, (target - state.mid) * 0.35) + random.gauss(0, vol * 0.08)
             if step < 55:
-                return 0.04 + random.gauss(0, vol * 0.1)
+                return 0.14 + abs(random.gauss(0, vol * 0.06))
+            if step < 75:
+                return 0.05 + random.gauss(0, vol * 0.06)
             state.scenario = None
             return None
 
         if state.scenario == "ema_pullback_sell":
-            # Rally into EMA band, then bearish rejection (RSI into sell zone)
-            band_hi = state.asia_high if state.asia_high is not None else state.mid + 1.2
-            if step < 18:
-                return max(0.05, (band_hi - state.mid) * 0.35) + random.gauss(0, vol * 0.12)
-            if step < 40:
-                return -0.10 - abs(random.gauss(0, vol * 0.1))
+            # Rally then reject — lift RSI into sell band before the drop
+            target = (state.session_anchor or state.mid) + 1.5
+            if step < 25:
+                return max(0.08, (target - state.mid) * 0.35) + random.gauss(0, vol * 0.08)
             if step < 55:
-                return -0.04 + random.gauss(0, vol * 0.1)
+                return -0.14 - abs(random.gauss(0, vol * 0.06))
+            if step < 75:
+                return -0.05 + random.gauss(0, vol * 0.06)
             state.scenario = None
             return None
 

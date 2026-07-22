@@ -110,8 +110,11 @@ class EmaRsiScalpStrategy(Strategy):
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
-        uptrend = price > e200 and e20 >= e50
-        downtrend = price < e200 and e20 <= e50
+        # Trend filter: price vs EMA200. EMA20/50 stack is preferred but not mandatory
+        # when they are nearly flat (common right after paper seed).
+        flat_stack = abs(e20 - e50) <= band
+        uptrend = price > e200 and (e20 >= e50 or flat_stack)
+        downtrend = price < e200 and (e20 <= e50 or flat_stack)
 
         self.last_checklist = [
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
