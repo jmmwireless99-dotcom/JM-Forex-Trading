@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # JM_ASIA_DESK_ONLY=false
     asia_desk_only: bool = False
 
+    # Paper tape: pin XAUUSD mid to live gold (Yahoo GC=F / Binance PAXG)
+    # so Manual trade / desk match TradingView (~4100), not the old 2350 sim.
+    # JM_PAPER_SYNC_LIVE_GOLD=true
+    paper_sync_live_gold: bool = True
+    paper_live_noise: float = 0.08  # small jitter around live mid (points)
+
     # MetaTrader file bridge (empty = paper only)
     # JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR =
     #   C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files

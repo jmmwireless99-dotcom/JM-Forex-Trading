@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timezone
 
 from app.models.domain import Tick, utcnow
+
+
+LiveMidProvider = Callable[[str], float | None]
 
 
 @dataclass
@@ -28,45 +32,100 @@ class MarketDataSimulator:
 
     Includes light session scenarios so London Judas / SMC can fire on paper
     (plain random walk almost never forms sweep + ChoCH + FVG confluence).
+
+    When a live_mid_provider is set (paper sync to gold), XAUUSD mid tracks
+    the real market with small noise — desk prices match TradingView.
     """
 
     DEFAULTS = {
         "EURUSD": (1.0850, 0.00012, 0.00008),
         "GBPUSD": (1.2650, 0.00016, 0.00010),
         "USDJPY": (156.20, 0.012, 0.015),
-        # Gold paper tape: moderate vol so ATR stops are not noise-stopped every few seconds
+        # Fallback only — normally overwritten by live gold sync (~4100+)
         "XAUUSD": (2350.0, 0.30, 0.45),
     }
 
-    def __init__(self, symbols: list[str]) -> None:
+    def __init__(
+        self,
+        symbols: list[str],
+        *,
+        live_mid_provider: LiveMidProvider | None = None,
+        live_noise: float = 0.08,
+    ) -> None:
         self._states: dict[str, SymbolState] = {}
+        self._live_mid_provider = live_mid_provider
+        self._live_noise = max(0.0, float(live_noise))
         for symbol in symbols:
             mid, spread, vol = self.DEFAULTS.get(symbol, (1.0, 0.0002, 0.0001))
             self._states[symbol] = SymbolState(symbol, mid, spread, vol)
         self._step = 0
+        # Best-effort pin on construct so first ticks are already near live.
+        self.pull_live_mids(force=True)
+
+    def set_live_mid_provider(self, provider: LiveMidProvider | None) -> None:
+        self._live_mid_provider = provider
+        self.pull_live_mids(force=True)
+
+    def pull_live_mids(self, *, force: bool = False) -> dict[str, float]:
+        """Sync symbol mids from live provider. Returns updated symbol→mid."""
+        updated: dict[str, float] = {}
+        if self._live_mid_provider is None:
+            return updated
+        for symbol, state in self._states.items():
+            if symbol != "XAUUSD" and not force:
+                continue
+            try:
+                live = self._live_mid_provider(symbol)
+            except Exception:
+                live = None
+            if live is None or not (1000 < float(live) < 20000):
+                continue
+            self.sync_mid(symbol, float(live))
+            updated[symbol] = float(live)
+        return updated
 
     def next_ticks(self) -> list[Tick]:
         self._step += 1
+        # Refresh live gold anchor periodically (provider is cached ~20s).
+        if self._live_mid_provider and self._step % 15 == 1:
+            self.pull_live_mids(force=True)
+
         ticks: list[Tick] = []
         now = utcnow()
         for state in self._states.values():
-            if state.symbol == "XAUUSD":
+            live_tracked = False
+            if self._live_mid_provider and state.symbol == "XAUUSD":
+                # Still run paper scenarios (Judas/SMC) on top of live gold.
                 self._maybe_start_scenario(state, now)
-                delta = self._scenario_delta(state, now)
-            else:
-                delta = None
+                if state.scenario is not None:
+                    delta = self._scenario_delta(state, now)
+                    if delta is None:
+                        delta = 0.0
+                    state.mid = max(state.mid * 0.0001, state.mid + delta)
+                    live_tracked = True
+                elif state.session_anchor and state.session_anchor > 1000:
+                    noise = random.gauss(0, self._live_noise) if self._live_noise else 0.0
+                    state.mid = float(state.session_anchor) + noise
+                    live_tracked = True
 
-            if delta is None:
-                # mild drift + mean-reverting noise (stay near session anchor for EMA demos)
-                state.phase += 0.05
-                drift = math.sin(state.phase) * state.volatility * 0.35
-                noise = random.gauss(0, state.volatility)
-                if state.session_anchor is None:
-                    state.session_anchor = state.mid
-                pull = (state.session_anchor - state.mid) * 0.08
-                delta = drift + noise + pull
+            if not live_tracked:
+                if state.symbol == "XAUUSD":
+                    self._maybe_start_scenario(state, now)
+                    delta = self._scenario_delta(state, now)
+                else:
+                    delta = None
 
-            state.mid = max(state.mid * 0.0001, state.mid + delta)
+                if delta is None:
+                    state.phase += 0.05
+                    drift = math.sin(state.phase) * state.volatility * 0.35
+                    noise = random.gauss(0, state.volatility)
+                    if state.session_anchor is None:
+                        state.session_anchor = state.mid
+                    pull = (state.session_anchor - state.mid) * 0.08
+                    delta = drift + noise + pull
+
+                state.mid = max(state.mid * 0.0001, state.mid + delta)
+
             half = state.spread / 2
             bid = state.mid - half
             ask = state.mid + half

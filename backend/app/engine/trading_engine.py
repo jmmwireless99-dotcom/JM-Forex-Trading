@@ -59,7 +59,12 @@ class TradingEngine:
         self.broker = self.paper
         self.risk = self._desk.risk
         self.journal = self._desk.journal
-        self.market = MarketDataSimulator(settings.symbols)
+        self.market = MarketDataSimulator(
+            settings.symbols,
+            live_noise=settings.paper_live_noise,
+        )
+        if settings.paper_sync_live_gold and settings.execution_mode == "paper":
+            self.market.set_live_mid_provider(self._live_gold_mid)
         self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
         requested = settings.default_strategy or "manual_only"
         if requested not in STRATEGY_REGISTRY:
@@ -199,6 +204,10 @@ class TradingEngine:
         self.mode = mode
         self.settings.execution_mode = mode
         self.mt, self._mt_platform = resolve_mt_bridge(self.settings)
+        if mode == "paper" and self.settings.paper_sync_live_gold:
+            self.market.set_live_mid_provider(self._live_gold_mid)
+        else:
+            self.market.set_live_mid_provider(None)
 
     def mt_online(self) -> bool:
         return bool(self.mt and self.mt.is_online())
@@ -206,10 +215,28 @@ class TradingEngine:
     def using_mt(self) -> bool:
         return self.mode in {"mt4", "mt5"} and self.mt_online()
 
+    def _live_gold_mid(self, symbol: str) -> float | None:
+        """Live gold mid for paper desk sync (display + paper fills near TV)."""
+        if (symbol or "").upper() != "XAUUSD":
+            return None
+        try:
+            from app.market_data.gold_feed import fetch_gold_candles
+
+            data = fetch_gold_candles(interval="5m", limit=5)
+            price = data.get("price")
+            if price is None and data.get("candles"):
+                price = data["candles"][-1].get("close")
+            return float(price) if price is not None else None
+        except Exception:
+            return None
+
     def _seed_candle_history(self) -> None:
         """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
         if self.signal_candles.closed_history(self.settings.symbols[0], 10):
             return
+        # Pin paper mid to live gold BEFORE seeding so EMA history sits near TV price.
+        if self.settings.paper_sync_live_gold and self.settings.execution_mode == "paper":
+            self.market.pull_live_mids(force=True)
         symbol = self.settings.symbols[0]
         mid = self.market.last_mids().get(symbol, 2350.0)
         now = utcnow()
@@ -334,6 +361,7 @@ class TradingEngine:
         )
 
     def connection_info(self) -> dict:
+        mids = self.market.last_mids()
         return {
             "mode": self.mode,
             "mt_configured": self.mt is not None,
@@ -341,6 +369,10 @@ class TradingEngine:
             "mt_platform": self.mode if self.mode in {"mt4", "mt5"} else self._mt_platform,
             "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
             "using_live_feed": self.using_mt(),
+            "paper_sync_live_gold": bool(
+                self.settings.paper_sync_live_gold and self.mode == "paper"
+            ),
+            "paper_mid": mids.get(self.settings.symbols[0]),
             "candle_period_seconds": self.candles.period_seconds,
             "signal_period_seconds": self.signal_candles.period_seconds,
             "signal_timeframe": f"M{max(1, self.signal_candles.period_seconds // 60)}",
