@@ -10,13 +10,9 @@ def test_interval_map_defaults():
 
 
 def test_fetch_gold_candles_live():
-    try:
-        data = fetch_gold_candles(interval="5m", limit=50)
-    except RuntimeError as e:
-        if "429" in str(e) or "Too Many" in str(e):
-            pytest.skip(f"Yahoo rate-limited in CI: {e}")
-        raise
+    data = fetch_gold_candles(interval="5m", limit=50)
     assert data["ok"] is True
+    assert data["source"] in {"yahoo", "binance"}
     assert data["symbol"]
     assert len(data["candles"]) >= 10
     c = data["candles"][-1]
