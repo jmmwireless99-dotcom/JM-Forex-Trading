@@ -116,23 +116,38 @@ class EmaRsiScalpStrategy(Strategy):
         uptrend = price > e200 and (e20 >= e50 or flat_stack)
         downtrend = price < e200 and (e20 <= e50 or flat_stack)
 
+        paper = get_settings().execution_mode == "paper"
+        # Paper tape rarely prints a perfect EMA retest; allow a wider proximity + RSI.
+        near_fast = in_zone or touched_fast or (
+            paper and abs(price - e20) <= max(2.5, 1.5 * atr)
+        )
+        buy_ok_rsi = buy_rsi or (paper and 30.0 <= rsi_v <= 62.0)
+        sell_ok_rsi = sell_rsi or (paper and 38.0 <= rsi_v <= 70.0)
+        # Extreme RSI continuation on paper when price is already hugging EMA20
+        if paper and near_fast:
+            buy_ok_rsi = buy_ok_rsi or (rsi_v < 45 and (bull_pat or bull_soft))
+            sell_ok_rsi = sell_ok_rsi or (rsi_v > 55 and (bear_pat or bear_soft))
+            # Also allow reclaim/reject at EMA with soft candle even if RSI still stretched
+            buy_ok_rsi = buy_ok_rsi or (bull_pat or bull_soft)
+            sell_ok_rsi = sell_ok_rsi or (bear_pat or bear_soft)
+
         self.last_checklist = [
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
             f"RSI={rsi_v:.1f} ATR={atr:.2f}",
-            f"zone={zone_lo:.2f}-{zone_hi:.2f} in_zone={in_zone}",
+            f"zone={zone_lo:.2f}-{zone_hi:.2f} in_zone={in_zone} near={near_fast}",
             f"pattern bull={bull_pat}/{bull_soft} bear={bear_pat}/{bear_soft}",
         ]
 
         side: Side | None = None
         reason = ""
-        if uptrend and (in_zone or touched_fast) and buy_rsi and (bull_pat or bull_soft):
+        if uptrend and near_fast and buy_ok_rsi and (bull_pat or bull_soft):
             side = Side.BUY
             tag = "engulf" if bullish_engulfing(prev, cur) else "pin" if bullish_pin_bar(cur) else "soft"
             reason = (
                 f"EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · "
                 f"RSI {rsi_v:.0f} · {tag}"
             )
-        elif downtrend and (in_zone or touched_fast) and sell_rsi and (bear_pat or bear_soft):
+        elif downtrend and near_fast and sell_ok_rsi and (bear_pat or bear_soft):
             side = Side.SELL
             tag = "engulf" if bearish_engulfing(prev, cur) else "pin" if bearish_pin_bar(cur) else "soft"
             reason = (
@@ -143,7 +158,8 @@ class EmaRsiScalpStrategy(Strategy):
             self.last_block_reason = (
                 "No confluence "
                 f"(trend={'up' if uptrend else 'down' if downtrend else 'flat'} "
-                f"rsi={rsi_v:.0f} zone={in_zone} pat={bull_pat or bear_pat or bull_soft or bear_soft})"
+                f"rsi={rsi_v:.0f} zone={in_zone} near={near_fast} "
+                f"pat={bull_pat or bear_pat or bull_soft or bear_soft})"
             )
             return None
 

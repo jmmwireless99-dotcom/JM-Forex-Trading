@@ -63,7 +63,7 @@ class MarketDataSimulator:
                 noise = random.gauss(0, state.volatility)
                 if state.session_anchor is None:
                     state.session_anchor = state.mid
-                pull = (state.session_anchor - state.mid) * 0.025
+                pull = (state.session_anchor - state.mid) * 0.08
                 delta = drift + noise + pull
 
             state.mid = max(state.mid * 0.0001, state.mid + delta)
@@ -117,6 +117,8 @@ class MarketDataSimulator:
             state.scenario_step = 0
             if state.session_anchor is None:
                 state.session_anchor = state.mid
+            # Snap near the session anchor so EMA20 proximity is reachable on paper
+            state.mid = float(state.session_anchor)
 
     def _scenario_delta(self, state: SymbolState, now) -> float | None:
         if state.scenario is None:
