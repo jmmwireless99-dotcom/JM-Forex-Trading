@@ -25,6 +25,29 @@ class CreateAccountBody(BaseModel):
     label: str | None = None
     deposit: float | None = Field(default=None, gt=0, le=1_000_000)
     follow_auto: bool = True
+    password: str | None = Field(default=None, min_length=6, max_length=128)
+    avatar: str | None = None
+
+
+class LoginAccountBody(BaseModel):
+    """Sign in with account code + password (history is never reset)."""
+
+    code: str = Field(..., min_length=4, max_length=16)
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+class ProfileUpdateBody(BaseModel):
+    """Update display name / logo only — does not touch trades or capital."""
+
+    label: str | None = Field(default=None, max_length=64)
+    avatar: str | None = None
+
+
+class PasswordChangeBody(BaseModel):
+    """Set or change password. Current required only if one already exists."""
+
+    new_password: str = Field(..., min_length=6, max_length=128)
+    current_password: str | None = Field(default=None, max_length=128)
 
 
 class StartRequest(BaseModel):
@@ -351,13 +374,45 @@ async def set_strategy(body: StrategyRequest) -> dict:
 
 @router.post("/accounts")
 async def create_account(body: CreateAccountBody | None = None) -> dict:
-    """Create a private paper account — capital/trades/history isolated per client."""
+    """Register a private paper account — capital/trades/history isolated per client."""
     body = body or CreateAccountBody()
-    return get_engine().create_client_account(
-        label=body.label,
-        deposit=body.deposit,
-        follow_auto=body.follow_auto,
-    )
+    try:
+        return get_engine().create_client_account(
+            label=body.label,
+            deposit=body.deposit,
+            follow_auto=body.follow_auto,
+            password=body.password,
+            avatar=body.avatar,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/accounts/login")
+async def login_account(body: LoginAccountBody) -> dict:
+    """Login with account code + password. Does not reset trade history."""
+    engine = get_engine()
+    try:
+        return engine.login_client_account(code=body.code, password=body.password)
+    except KeyError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+@router.get("/accounts/lookup/{code}")
+async def lookup_account(code: str) -> dict:
+    """Public profile preview for login screen (no token / no balances)."""
+    acc = get_engine().accounts.get_by_code(code)
+    if acc is None or acc.is_desk:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {
+        "ok": True,
+        "code": acc.code,
+        "label": acc.label,
+        "avatar": acc.avatar or None,
+        "has_password": bool(acc.password_hash),
+    }
 
 
 @router.get("/accounts/me")
@@ -369,6 +424,44 @@ async def account_me(account: PaperAccount = Depends(require_paper_account)) -> 
         "capital": engine.capital_preview(account=account),
         "trades": engine._trades_payload(account),
     }
+
+
+@router.patch("/accounts/me")
+async def update_account_profile(
+    body: ProfileUpdateBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Update label / logo. Trade log and balances are never cleared."""
+    engine = get_engine()
+    try:
+        # Distinguish "omit avatar" vs "clear avatar" via model fields_set.
+        kwargs: dict = {}
+        if "label" in body.model_fields_set:
+            kwargs["label"] = body.label
+        if "avatar" in body.model_fields_set:
+            kwargs["avatar"] = body.avatar
+        return engine.update_client_profile(account, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/accounts/me/password")
+async def change_account_password(
+    body: PasswordChangeBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Set or change password without touching trade history."""
+    engine = get_engine()
+    try:
+        return engine.change_client_password(
+            account,
+            new_password=body.new_password,
+            current_password=body.current_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.get("/account")

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, connectFeed, ensureAccountSession } from './api'
+import AccountAuth from './AccountAuth'
+import AccountProfile from './AccountProfile'
+import { api, connectFeed, restoreAccountSession, saveAccountSession, loadAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -106,6 +108,8 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [sessionBoot, setSessionBoot] = useState(0)
   const accountIdRef = useRef(null)
 
   useEffect(() => {
@@ -113,14 +117,23 @@ export default function App() {
     let disconnect = () => {}
     ;(async () => {
       try {
-        const session = await ensureAccountSession({ deposit: 1000, label: 'Client demo' })
+        const session = await restoreAccountSession()
         if (!alive) return
+        if (!session) {
+          setAccountMeta(null)
+          accountIdRef.current = null
+          setAuthReady(true)
+          return
+        }
         accountIdRef.current = session.id
         setAccountMeta({
           id: session.id,
           code: session.code,
           label: session.label,
+          avatar: session.avatar || session.account?.avatar || '',
+          has_password: Boolean(session.account?.has_password),
         })
+        setAuthReady(true)
 
         const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto] =
           await Promise.all([
@@ -142,6 +155,14 @@ export default function App() {
         setCapital(acc.capital || null)
         if (acc.deposit != null) setDepositInput(String(acc.deposit))
         else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+        setAccountMeta((prev) => ({
+          ...(prev || {}),
+          id: acc.account_id || prev?.id,
+          code: acc.account_code || prev?.code,
+          label: acc.account_label || prev?.label,
+          avatar: acc.avatar || prev?.avatar || '',
+          has_password: Boolean(acc.has_password),
+        }))
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
         setStrategies(strat.strategies || [])
@@ -239,11 +260,15 @@ export default function App() {
           }
         })
       } catch (err) {
-        if (alive) setError(err.message || 'Failed to load API')
+        if (alive) {
+          setAuthReady(true)
+          setError(err.message || 'Failed to load API')
+        }
       }
     })()
 
     const deskTimer = setInterval(() => {
+      if (!accountIdRef.current) return
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
       api.mtStatus().then((m) => alive && setMt(m)).catch(() => {})
     }, 10000)
@@ -253,7 +278,50 @@ export default function App() {
       disconnect()
       clearInterval(deskTimer)
     }
-  }, [])
+  }, [sessionBoot])
+
+  function handleAuthed(session) {
+    setError('')
+    setAccountMeta({
+      id: session.id,
+      code: session.code,
+      label: session.label,
+      avatar: session.avatar || '',
+      has_password: Boolean(session.account?.has_password ?? true),
+    })
+    accountIdRef.current = session.id
+    setAuthReady(true)
+    setSessionBoot((n) => n + 1)
+  }
+
+  function handleLogout() {
+    accountIdRef.current = null
+    setAccountMeta(null)
+    setAccount(emptyAccount)
+    setPositions([])
+    setTrades([])
+    setTradeSummary(null)
+    setCapital(null)
+    setError('')
+    setSessionBoot((n) => n + 1)
+  }
+
+  function handleProfileUpdated(next) {
+    setAccountMeta((prev) => {
+      const merged = { ...(prev || {}), ...next }
+      const existing = loadAccountSession()
+      if (existing?.token) {
+        saveAccountSession({
+          id: merged.id || existing.id,
+          token: existing.token,
+          code: merged.code || existing.code,
+          label: merged.label || existing.label,
+          avatar: merged.avatar || '',
+        })
+      }
+      return merged
+    })
+  }
 
   async function run(action) {
     setBusy(true)
@@ -380,6 +448,26 @@ export default function App() {
   const gold = ticks.XAUUSD
   const hasOpen = positions.length > 0
 
+  if (!authReady) {
+    return (
+      <div className="app">
+        <div className="auth-screen">
+          <div className="auth-card">
+            <p className="meta">Loading account…</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!accountMeta?.id) {
+    return (
+      <div className="app">
+        <AccountAuth onAuthed={handleAuthed} />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <header className="hero">
@@ -391,6 +479,11 @@ export default function App() {
             {status?.running ? 'Desk live' : 'Paused'} · {mode.toUpperCase()}
             {mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''}
           </div>
+          <AccountProfile
+            meta={accountMeta}
+            onUpdated={handleProfileUpdated}
+            onLogout={handleLogout}
+          />
         </div>
         <p>
           XAUUSD scalp desk — EMA+RSI momentum or SMC liquidity sweep.
@@ -527,6 +620,7 @@ export default function App() {
         <div className="metric">
           <label>Demo acct</label>
           <strong>{accountMeta?.code || account.account_code || '—'}</strong>
+          <span className="meta">{accountMeta?.label || account.account_label || ''}</span>
         </div>
         <div className="metric">
           <label>Equity</label>
@@ -557,9 +651,10 @@ export default function App() {
           <div>
             <h2>Paper deposit · private trial capital</h2>
             <p className="meta">
-              This browser has its own demo account ({accountMeta?.code || '…'}). Other clients
-              cannot see your capital, open trades, or history. Trade log is kept when you
-              change deposit; open positions close into the log.
+              Signed in as {accountMeta?.label || 'Demo'} ({accountMeta?.code || '…'}). Other
+              clients cannot see your capital, open trades, or history. Logout / switch account
+              keeps your trade log. Deposit changes keep history; open positions close into the
+              log.
             </p>
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>

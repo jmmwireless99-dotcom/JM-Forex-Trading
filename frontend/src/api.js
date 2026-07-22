@@ -2,6 +2,7 @@ const BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
 const API = `${BASE}api`
 
 const ACCOUNT_KEY = 'jm_fx_account'
+const RECENT_KEY = 'jm_fx_recent_accounts'
 
 export function loadAccountSession() {
   try {
@@ -17,19 +18,42 @@ export function loadAccountSession() {
 
 export function saveAccountSession(session) {
   if (!session?.id || !session?.token) return
-  localStorage.setItem(
-    ACCOUNT_KEY,
-    JSON.stringify({
-      id: session.id,
-      token: session.token,
-      code: session.code || '',
-      label: session.label || '',
-    }),
-  )
+  const payload = {
+    id: session.id,
+    token: session.token,
+    code: session.code || '',
+    label: session.label || '',
+    avatar: session.avatar || '',
+  }
+  localStorage.setItem(ACCOUNT_KEY, JSON.stringify(payload))
+  rememberRecentAccount(payload)
 }
 
 export function clearAccountSession() {
   localStorage.removeItem(ACCOUNT_KEY)
+}
+
+export function loadRecentAccounts() {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const list = raw ? JSON.parse(raw) : []
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function rememberRecentAccount(session) {
+  if (!session?.code) return
+  const next = [
+    {
+      code: session.code,
+      label: session.label || '',
+      avatar: session.avatar || '',
+    },
+    ...loadRecentAccounts().filter((a) => a.code !== session.code),
+  ].slice(0, 8)
+  localStorage.setItem(RECENT_KEY, JSON.stringify(next))
 }
 
 function accountHeaders() {
@@ -63,6 +87,21 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function sessionFromAuthResponse(res) {
+  const account = res.account || {}
+  return {
+    id: account.account_id,
+    token: res.token,
+    code: account.account_code,
+    label: account.account_label,
+    avatar: account.avatar || '',
+    account,
+    capital: res.capital,
+    trades: res.trades,
+    message: res.message,
+  }
+}
+
 export const api = {
   health: () => request('/health'),
   status: () => request('/status'),
@@ -80,6 +119,13 @@ export const api = {
     ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
+  loginAccount: (body) =>
+    request('/accounts/login', { method: 'POST', body: JSON.stringify(body) }),
+  lookupAccount: (code) => request(`/accounts/lookup/${encodeURIComponent(code)}`),
+  updateProfile: (body) =>
+    request('/accounts/me', { method: 'PATCH', body: JSON.stringify(body) }),
+  changePassword: (body) =>
+    request('/accounts/me/password', { method: 'POST', body: JSON.stringify(body) }),
   accountMe: () => request('/accounts/me'),
   account: () => request('/account'),
   capitalPreview: (amount) =>
@@ -125,51 +171,65 @@ export const api = {
     }),
 }
 
-/** Ensure this browser has its own private demo account. */
-export async function ensureAccountSession(options = {}) {
+/** Restore existing browser session only — never auto-creates a new empty account. */
+export async function restoreAccountSession() {
   const existing = loadAccountSession()
-  if (existing) {
-    let lastErr = null
-    // Retry through brief restarts — wiping the session creates a NEW empty
-    // account and makes it look like trade history vanished.
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      try {
-        const me = await api.accountMe()
-        return {
-          id: me.account_id || existing.id,
-          token: existing.token,
-          code: me.account_code || existing.code,
-          label: me.account_label || existing.label,
-          account: me,
-        }
-      } catch (err) {
-        lastErr = err
-        const status = err?.status
-        if (status === 401 || status === 403 || status === 404) {
-          clearAccountSession()
-          break
-        }
-        await sleep(400 * (attempt + 1))
+  if (!existing) return null
+  let lastErr = null
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const me = await api.accountMe()
+      const session = {
+        id: me.account_id || existing.id,
+        token: existing.token,
+        code: me.account_code || existing.code,
+        label: me.account_label || existing.label,
+        avatar: me.avatar || existing.avatar || '',
+        account: me,
       }
-    }
-    if (existing && loadAccountSession()) {
-      // Keep the local session on transient/network errors; surface the failure.
-      throw lastErr || new Error('Account session temporarily unavailable')
+      saveAccountSession(session)
+      return session
+    } catch (err) {
+      lastErr = err
+      const status = err?.status
+      if (status === 401 || status === 403 || status === 404) {
+        clearAccountSession()
+        return null
+      }
+      await sleep(400 * (attempt + 1))
     }
   }
+  if (loadAccountSession()) {
+    throw lastErr || new Error('Account session temporarily unavailable')
+  }
+  return null
+}
+
+export async function registerAccount(options = {}) {
   const created = await api.createAccount({
     label: options.label || 'Client demo',
     deposit: options.deposit ?? 1000,
     follow_auto: options.follow_auto !== false,
+    password: options.password,
+    avatar: options.avatar || undefined,
   })
-  const session = {
-    id: created.account.account_id,
-    token: created.token,
-    code: created.account.account_code,
-    label: created.account.account_label,
-  }
+  const session = sessionFromAuthResponse(created)
   saveAccountSession(session)
-  return { ...session, account: created.account, created }
+  return { ...session, created: true, message: created.message }
+}
+
+export async function loginAccount({ code, password }) {
+  const res = await api.loginAccount({ code: String(code || '').trim(), password })
+  const session = sessionFromAuthResponse(res)
+  saveAccountSession(session)
+  return { ...session, message: res.message }
+}
+
+/** @deprecated use restoreAccountSession + register/login — kept for older callers */
+export async function ensureAccountSession(options = {}) {
+  const restored = await restoreAccountSession()
+  if (restored) return restored
+  return registerAccount(options)
 }
 
 export function connectFeed(onMessage) {

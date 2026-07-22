@@ -14,6 +14,8 @@ from pathlib import Path
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.models.domain import utcnow
+from app.paper_accounts.avatar import normalize_avatar
+from app.paper_accounts.security import hash_password, verify_password
 from app.risk.manager import RiskManager
 
 log = logging.getLogger(__name__)
@@ -39,6 +41,20 @@ class PaperAccount:
     follow_auto: bool = True
     is_desk: bool = False
     created_at: datetime = field(default_factory=utcnow)
+    password_hash: str | None = None
+    avatar: str | None = None  # data-URL logo
+
+    def profile_public(self) -> dict:
+        """Safe profile fields (no token / password)."""
+        return {
+            "account_id": self.id,
+            "account_code": self.code,
+            "account_label": self.label,
+            "avatar": self.avatar or None,
+            "has_password": bool(self.password_hash),
+            "follow_auto": self.follow_auto,
+            "created_at": self.created_at.isoformat(),
+        }
 
     def public_info(self) -> dict:
         snap = self.broker.snapshot()
@@ -46,6 +62,8 @@ class PaperAccount:
             "id": self.id,
             "code": self.code,
             "label": self.label,
+            "avatar": self.avatar or None,
+            "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
@@ -60,10 +78,7 @@ class PaperAccount:
         snap = self.broker.snapshot().model_dump(mode="json")
         return {
             **snap,
-            "account_id": self.id,
-            "account_code": self.code,
-            "account_label": self.label,
-            "follow_auto": self.follow_auto,
+            **self.profile_public(),
         }
 
 
@@ -75,6 +90,7 @@ class PaperAccountRegistry:
         self._lock = threading.RLock()
         self._accounts: dict[str, PaperAccount] = {}
         self._by_token: dict[str, str] = {}
+        self._by_code: dict[str, str] = {}
         backend_data = Path(__file__).resolve().parents[1] / "data" / "paper_accounts.json"
         self.store_path = store_path or backend_data
         self._load()
@@ -110,10 +126,18 @@ class PaperAccountRegistry:
         label: str | None = None,
         follow_auto: bool = True,
         is_desk: bool = False,
+        password: str | None = None,
+        avatar: str | None = None,
     ) -> PaperAccount:
         amount = float(deposit if deposit is not None else self.settings.initial_balance)
         amount = max(50.0, min(amount, 1_000_000.0))
         broker, journal, risk = self._new_book(amount)
+        pwd_hash = None
+        if password is not None and str(password).strip():
+            pwd_hash = hash_password(str(password))
+        logo = None
+        if avatar is not None:
+            logo = normalize_avatar(avatar) or None
         acc = PaperAccount(
             id=str(uuid.uuid4()),
             code=_short_code(),
@@ -124,17 +148,21 @@ class PaperAccountRegistry:
             risk=risk,
             follow_auto=follow_auto and not is_desk,
             is_desk=is_desk,
+            password_hash=pwd_hash,
+            avatar=logo,
         )
         with self._lock:
             self._accounts[acc.id] = acc
             self._by_token[acc.token] = acc.id
+            self._by_code[acc.code.upper()] = acc.id
             self._save()
         log.info(
-            "paper account created id=%s code=%s deposit=%s desk=%s",
+            "paper account created id=%s code=%s deposit=%s desk=%s has_password=%s",
             acc.id,
             acc.code,
             amount,
             is_desk,
+            bool(pwd_hash),
         )
         return acc
 
@@ -147,6 +175,11 @@ class PaperAccountRegistry:
             aid = self._by_token.get(token)
             return self._accounts.get(aid) if aid else None
 
+    def get_by_code(self, code: str) -> PaperAccount | None:
+        with self._lock:
+            aid = self._by_code.get((code or "").strip().upper())
+            return self._accounts.get(aid) if aid else None
+
     def require(self, account_id: str, token: str | None = None) -> PaperAccount:
         acc = self.get(account_id)
         if acc is None:
@@ -156,6 +189,69 @@ class PaperAccountRegistry:
         if token and acc.token != token:
             raise PermissionError("Invalid account token")
         return acc
+
+    def authenticate(self, code: str, password: str) -> PaperAccount:
+        """Login with account code + password. Never clears trade history."""
+        acc = self.get_by_code(code)
+        if acc is None or acc.is_desk:
+            raise KeyError("Invalid account code or password")
+        if not acc.password_hash:
+            raise PermissionError(
+                "This account has no password yet. Open the desk on the device "
+                "that still has the session, then set a password in Profile."
+            )
+        if not verify_password(password, acc.password_hash):
+            raise PermissionError("Invalid account code or password")
+        return acc
+
+    def update_profile(
+        self,
+        account: PaperAccount,
+        *,
+        label: str | None = None,
+        avatar: str | None = ...,  # type: ignore[assignment]
+    ) -> PaperAccount:
+        """Update label/logo only — balances and trade journal are untouched."""
+        with self._lock:
+            if label is not None:
+                cleaned = label.strip()
+                if cleaned:
+                    account.label = cleaned[:64]
+            if avatar is not ...:
+                if avatar is None or str(avatar).strip() == "":
+                    account.avatar = None
+                else:
+                    account.avatar = normalize_avatar(str(avatar)) or None
+            self._save()
+        return account
+
+    def set_password(
+        self,
+        account: PaperAccount,
+        *,
+        new_password: str,
+        current_password: str | None = None,
+    ) -> PaperAccount:
+        """Set or change password. Does not touch trades or capital."""
+        with self._lock:
+            if account.password_hash:
+                if not current_password or not verify_password(
+                    current_password, account.password_hash
+                ):
+                    raise PermissionError("Current password is incorrect")
+            account.password_hash = hash_password(new_password)
+            self._save()
+        return account
+
+    def rotate_token(self, account: PaperAccount) -> str:
+        """Issue a fresh session token (logout-other-devices). Keeps history."""
+        with self._lock:
+            old = account.token
+            self._by_token.pop(old, None)
+            account.token = secrets.token_urlsafe(24)
+            self._by_token[account.token] = account.id
+            self._save()
+            return account.token
 
     def list_public(self) -> list[dict]:
         with self._lock:
@@ -195,6 +291,8 @@ class PaperAccountRegistry:
                         "code": acc.code,
                         "label": acc.label,
                         "token": acc.token,
+                        "password_hash": acc.password_hash,
+                        "avatar": acc.avatar,
                         "follow_auto": acc.follow_auto,
                         "is_desk": False,
                         "created_at": acc.created_at.isoformat(),
@@ -323,10 +421,13 @@ class PaperAccountRegistry:
                     follow_auto=bool(row.get("follow_auto", True)),
                     is_desk=False,
                     created_at=created_at,
+                    password_hash=row.get("password_hash") or None,
+                    avatar=row.get("avatar") or None,
                 )
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc
                 self._by_token[acc.token] = acc.id
+                self._by_code[acc.code.upper()] = acc.id
             except Exception:  # noqa: BLE001
                 log.exception("skip corrupt paper account row")
         log.info(

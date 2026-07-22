@@ -1090,3 +1090,254 @@ select {
     background: rgba(8, 20, 18, 0.45);
   }
 }
+/* —— Account auth / profile —— */
+.auth-screen {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 0;
+  animation: rise 600ms ease both;
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 1.1rem;
+  padding: 1.5rem 1.35rem 1.35rem;
+  background:
+    linear-gradient(160deg, rgba(16, 48, 44, 0.92), rgba(8, 18, 16, 0.88)),
+    rgba(12, 32, 30, 0.8);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.auth-brand .brand {
+  font-size: clamp(2.4rem, 7vw, 3.4rem);
+}
+
+.auth-brand p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.auth-tabs button {
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  padding: 0.55rem 0.8rem;
+}
+
+.auth-tabs button.on {
+  background: rgba(125, 255, 179, 0.14);
+  color: var(--sand);
+}
+
+.auth-form,
+.acct-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.auth-form label,
+.acct-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--mist);
+  font-size: 0.92rem;
+}
+
+.auth-form input,
+.acct-form input[type='text'],
+.acct-form input[type='password'],
+.acct-form input[type='number'],
+.auth-form input[type='file'] {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(8, 16, 15, 0.75);
+  color: var(--sand);
+  padding: 0.7rem 0.85rem;
+}
+
+.auth-logo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.auth-recent {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.auth-recent-row {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.auth-recent-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--sand);
+  padding: 0.55rem 0.7rem;
+}
+
+.auth-recent-chip strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.auth-recent-chip em {
+  display: block;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.auth-foot {
+  margin: 0;
+}
+
+.acct-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.acct-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(20, 99, 92, 0.8), rgba(242, 193, 78, 0.35));
+  color: var(--sand);
+  font-family: var(--display);
+  font-size: 1.15rem;
+}
+
+.acct-profile {
+  position: relative;
+  margin-left: auto;
+}
+
+.acct-profile-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(8, 20, 18, 0.55);
+  color: var(--sand);
+  padding: 0.35rem 0.85rem 0.35rem 0.35rem;
+}
+
+.acct-profile-text {
+  display: grid;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.acct-profile-text strong {
+  font-size: 0.92rem;
+}
+
+.acct-profile-text em {
+  font-style: normal;
+  color: var(--gold);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+}
+
+.acct-profile-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.55rem);
+  z-index: 40;
+  width: min(360px, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(165deg, rgba(14, 40, 36, 0.98), rgba(8, 16, 15, 0.96));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  animation: rise 280ms ease both;
+}
+
+.acct-profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.acct-profile-head h3,
+.acct-form h4 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.acct-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.ok-banner {
+  color: #b8ffd4;
+  background: rgba(125, 255, 179, 0.1);
+  border: 1px solid rgba(125, 255, 179, 0.28);
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+}
+
+.metric .meta {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 720px) {
+  .acct-profile {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .acct-profile-trigger {
+    width: 100%;
+  }
+
+  .acct-profile-panel {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+    width: auto;
+  }
+}

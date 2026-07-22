@@ -123,6 +123,8 @@ class TradingEngine:
         label: str | None = None,
         deposit: float | None = None,
         follow_auto: bool = True,
+        password: str | None = None,
+        avatar: str | None = None,
     ) -> dict[str, Any]:
         """Provision an isolated paper account for one client browser/session."""
         acct = self.accounts.create(
@@ -130,6 +132,8 @@ class TradingEngine:
             label=label,
             follow_auto=follow_auto,
             is_desk=False,
+            password=password,
+            avatar=avatar,
         )
         return {
             "ok": True,
@@ -138,9 +142,54 @@ class TradingEngine:
             "capital": self.capital_preview(acct.broker.deposit, account=acct),
             "trades": self._trades_payload(acct),
             "message": (
-                "New demo account created. Only this account id + token can see "
-                "its capital, trades, and history."
+                "New demo account created. Save your account code + password — "
+                "only this login can see its capital, trades, and history."
             ),
+        }
+
+    def login_client_account(self, *, code: str, password: str) -> dict[str, Any]:
+        """Authenticate by code + password. Trade history is never reset."""
+        acct = self.accounts.authenticate(code, password)
+        return {
+            "ok": True,
+            "account": acct.snapshot_payload(),
+            "token": acct.token,
+            "capital": self.capital_preview(account=acct),
+            "trades": self._trades_payload(acct),
+            "message": f"Signed in as {acct.code} — trade history kept.",
+        }
+
+    def update_client_profile(
+        self,
+        account: PaperAccount,
+        *,
+        label: str | None = None,
+        avatar: str | None = ...,  # type: ignore[assignment]
+    ) -> dict[str, Any]:
+        self.accounts.update_profile(account, label=label, avatar=avatar)
+        return {
+            "ok": True,
+            "account": self.account_payload(account),
+            "message": "Profile updated — trade history unchanged.",
+        }
+
+    def change_client_password(
+        self,
+        account: PaperAccount,
+        *,
+        new_password: str,
+        current_password: str | None = None,
+    ) -> dict[str, Any]:
+        self.accounts.set_password(
+            account,
+            new_password=new_password,
+            current_password=current_password,
+        )
+        return {
+            "ok": True,
+            "account": self.account_payload(account),
+            "has_password": True,
+            "message": "Password updated — trade history unchanged.",
         }
 
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
