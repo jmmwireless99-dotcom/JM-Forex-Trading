@@ -486,7 +486,7 @@ export default function App() {
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
-  const maxOpen = Number(desk?.max_open_positions) || 3
+  const maxOpen = Number(desk?.risk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
   const atMaxOpen = positions.length >= maxOpen
   const hasBuyOpen = positions.some((p) => p.side === 'BUY')
