@@ -461,9 +461,71 @@ select {
 }
 
 .tv-chart-canvas {
+  position: relative;
   width: 100%;
   height: min(58vh, 520px);
   min-height: 360px;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+  background: #0b1014;
+}
+
+.tv-chart-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #0b1014;
+}
+
+.tv-chart-frame.is-hidden {
+  visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+
+.tv-chart-status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(11, 16, 20, 0.92);
+  font-size: 0.92rem;
+}
+
+.tv-chart-error p {
+  margin: 0;
+  max-width: 28rem;
+}
+
+.tv-chart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.tv-chart-actions a,
+.tv-chart-actions button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8eef5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tv-chart-actions a:hover,
+.tv-chart-actions button:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .tradingview-widget-copyright {

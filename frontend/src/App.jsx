@@ -95,7 +95,14 @@ export default function App() {
   const [manualLots, setManualLots] = useState(0.01)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
-  const [chartMode, setChartMode] = useState('tradingview') // tradingview | desk
+  const [chartMode, setChartMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jm_chart_mode')
+      return saved === 'desk' || saved === 'tradingview' ? saved : 'tradingview'
+    } catch {
+      return 'tradingview'
+    }
+  }) // tradingview | desk
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
@@ -716,14 +723,28 @@ export default function App() {
           <button
             type="button"
             className={`chart-mode-btn ${chartMode === 'tradingview' ? 'on' : ''}`}
-            onClick={() => setChartMode('tradingview')}
+            onClick={() => {
+              setChartMode('tradingview')
+              try {
+                localStorage.setItem('jm_chart_mode', 'tradingview')
+              } catch {
+                /* ignore */
+              }
+            }}
           >
             TradingView (live gold)
           </button>
           <button
             type="button"
             className={`chart-mode-btn ${chartMode === 'desk' ? 'on' : ''}`}
-            onClick={() => setChartMode('desk')}
+            onClick={() => {
+              setChartMode('desk')
+              try {
+                localStorage.setItem('jm_chart_mode', 'desk')
+              } catch {
+                /* ignore */
+              }
+            }}
           >
             Desk tape ({mode})
           </button>
