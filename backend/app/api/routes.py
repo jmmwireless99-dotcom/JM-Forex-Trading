@@ -426,6 +426,14 @@ async def trades(
     }
 
 
+@router.post("/trades/clear")
+async def clear_trades(
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Clear this account's trade log and reset daily risk counters."""
+    return await get_engine().clear_trade_log(account)
+
+
 @router.get("/signals")
 async def signals() -> dict:
     return {

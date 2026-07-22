@@ -872,6 +872,23 @@ export default function App() {
                 ? `${tradeSummary.closed} closed · ${tradeSummary.wins}W/${tradeSummary.losses}L · net $${money(tradeSummary.net_pnl)}`
                 : 'entry · SL · TP · exit'}
             </span>
+            <button
+              type="button"
+              disabled={busy || trades.length === 0}
+              onClick={() =>
+                run(async () => {
+                  const res = await api.clearTrades()
+                  setTrades(res.trades?.trades || [])
+                  setTradeSummary(res.trades?.summary || null)
+                  setPositions([])
+                  if (res.account) setAccount(res.account)
+                  setOrderNote(res.message || 'Trade log cleared')
+                  return res
+                })
+              }
+            >
+              Clear log
+            </button>
           </div>
           {trades.length === 0 ? (
             <div className="empty">No trades yet — waiting for signals/fills.</div>

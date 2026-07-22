@@ -824,6 +824,39 @@ class TradingEngine:
                 ),
             }
 
+    async def clear_trade_log(self, account: PaperAccount | None = None) -> dict:
+        """Wipe trade journal for one account and reset daily risk counters."""
+        acct = account or self._desk
+        async with self._lock:
+            if not self.using_mt():
+                for position in list(acct.broker.open_positions()):
+                    closed = acct.broker.close_position(position.id, reason="log_clear")
+                    if closed:
+                        acct.risk.record_realized_pnl(closed.realized_pnl)
+                acct.broker.cancel_pending(reason="Cancelled — trade log cleared")
+            acct.journal.clear()
+            snap = acct.broker.snapshot()
+            acct.risk.reset_daily(snap.equity)
+            self.accounts.save()
+            payload = self._trades_payload(acct)
+            await self._emit("trades", payload)
+            await self._emit("account", self.account_payload(acct))
+            await self._emit(
+                "positions",
+                {
+                    "account_id": acct.id,
+                    "positions": [
+                        p.model_dump(mode="json") for p in self.open_positions(acct)
+                    ],
+                },
+            )
+            return {
+                "ok": True,
+                "account": self.account_payload(acct),
+                "trades": payload,
+                "message": f"Trade log cleared for account {acct.code}",
+            }
+
     async def manual_order(
         self, request: OrderRequest, account: PaperAccount | None = None
     ) -> Order:
