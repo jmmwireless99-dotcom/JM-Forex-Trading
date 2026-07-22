@@ -29,8 +29,8 @@ class EmaRsiScalpStrategy(Strategy):
         ema_fast: int = 20,
         ema_slow: int = 50,
         rsi_period: int = 14,
-        rsi_buy: tuple[float, float] = (38.0, 52.0),
-        rsi_sell: tuple[float, float] = (48.0, 62.0),
+        rsi_buy: tuple[float, float] = (35.0, 55.0),
+        rsi_sell: tuple[float, float] = (45.0, 65.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
     ) -> None:
@@ -90,13 +90,17 @@ class EmaRsiScalpStrategy(Strategy):
         cur = bars[-1]
         prev = bars[-2]
         price = cur.close
-        band = max(0.15 * atr, 0.3)
+        band = max(0.25 * atr, 0.5)
 
-        # Dynamic S/R zone between EMA20 and EMA50
+        # Dynamic S/R zone between EMA20 and EMA50 (wider band so paper ATR doesn't starve entries)
         zone_lo = min(e20, e50)
         zone_hi = max(e20, e50)
         in_zone = zone_lo - band <= price <= zone_hi + band
-        touched_fast = abs(cur.low - e20) <= band or abs(cur.high - e20) <= band
+        touched_fast = (
+            abs(cur.low - e20) <= band
+            or abs(cur.high - e20) <= band
+            or abs(price - e20) <= band
+        )
 
         bull_pat = bullish_engulfing(prev, cur) or bullish_pin_bar(cur)
         bear_pat = bearish_engulfing(prev, cur) or bearish_pin_bar(cur)

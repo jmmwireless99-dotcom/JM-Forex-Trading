@@ -97,7 +97,7 @@ def strategy_catalog() -> list[dict]:
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
-                "RSI 38–52 for BUY; RSI 48–62 for SELL.",
+                "RSI 35–55 for BUY; RSI 45–65 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
             ],
             "entry_flow": [

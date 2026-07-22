@@ -20,6 +20,7 @@ class SymbolState:
     scenario_step: int = 0
     asia_high: float | None = None
     asia_low: float | None = None
+    session_anchor: float | None = None
 
 
 class MarketDataSimulator:
@@ -56,11 +57,14 @@ class MarketDataSimulator:
                 delta = None
 
             if delta is None:
-                # mild drift + mean-reverting noise
+                # mild drift + mean-reverting noise (stay near session anchor for EMA demos)
                 state.phase += 0.05
                 drift = math.sin(state.phase) * state.volatility * 0.35
                 noise = random.gauss(0, state.volatility)
-                delta = drift + noise
+                if state.session_anchor is None:
+                    state.session_anchor = state.mid
+                pull = (state.session_anchor - state.mid) * 0.025
+                delta = drift + noise + pull
 
             state.mid = max(state.mid * 0.0001, state.mid + delta)
             half = state.spread / 2
@@ -86,6 +90,8 @@ class MarketDataSimulator:
         hour = utc.hour
         # Track Asia box roughly for later sweep
         if 0 <= hour < 7:
+            if state.session_anchor is None:
+                state.session_anchor = state.mid
             state.asia_high = max(state.asia_high or state.mid, state.mid)
             state.asia_low = min(state.asia_low or state.mid, state.mid)
             return
@@ -103,10 +109,15 @@ class MarketDataSimulator:
                 state.asia_low = state.mid - 1.5
             state.scenario = "smc_sweep_sell" if (self._step // 150) % 2 == 0 else "smc_sweep_buy"
             state.scenario_step = 0
-        # Asia / NY: mild EMA pullback impulse
-        elif (0 <= hour < 7 or 16 <= hour < 20) and self._step % 240 == 0:
-            state.scenario = "ema_pullback_buy" if (self._step // 240) % 2 == 0 else "ema_pullback_sell"
+        # Asia / NY: EMA pullback setups — fire often enough for paper demos
+        elif (0 <= hour < 7 or 16 <= hour < 20) and self._step % 90 == 0:
+            state.scenario = (
+                "ema_pullback_buy" if (self._step // 90) % 2 == 0 else "ema_pullback_sell"
+            )
             state.scenario_step = 0
+            # Anchor a synthetic EMA20/50 band near current mid for the scripted path
+            state.asia_high = state.mid + 1.8  # reuse as band hi
+            state.asia_low = state.mid - 0.4   # reuse as band lo / fast EMA proxy
 
     def _scenario_delta(self, state: SymbolState, now) -> float | None:
         if state.scenario is None:
@@ -163,18 +174,28 @@ class MarketDataSimulator:
             return None
 
         if state.scenario == "ema_pullback_buy":
-            if step < 12:
-                return -0.06 + random.gauss(0, vol * 0.15)
-            if step < 28:
-                return 0.08 + abs(random.gauss(0, vol * 0.12))
+            # Dip into a synthetic EMA band, then bullish reclaim (RSI lifts into buy zone)
+            band_lo = state.asia_low if state.asia_low is not None else state.mid - 1.2
+            if step < 18:
+                # Sell-off toward / slightly through fast EMA
+                return min(-0.05, (band_lo - state.mid) * 0.35) + random.gauss(0, vol * 0.12)
+            if step < 40:
+                # Bounce back through the band with bullish follow-through
+                return 0.10 + abs(random.gauss(0, vol * 0.1))
+            if step < 55:
+                return 0.04 + random.gauss(0, vol * 0.1)
             state.scenario = None
             return None
 
         if state.scenario == "ema_pullback_sell":
-            if step < 12:
-                return 0.06 + random.gauss(0, vol * 0.15)
-            if step < 28:
-                return -0.08 - abs(random.gauss(0, vol * 0.12))
+            # Rally into EMA band, then bearish rejection (RSI into sell zone)
+            band_hi = state.asia_high if state.asia_high is not None else state.mid + 1.2
+            if step < 18:
+                return max(0.05, (band_hi - state.mid) * 0.35) + random.gauss(0, vol * 0.12)
+            if step < 40:
+                return -0.10 - abs(random.gauss(0, vol * 0.1))
+            if step < 55:
+                return -0.04 + random.gauss(0, vol * 0.1)
             state.scenario = None
             return None
 
