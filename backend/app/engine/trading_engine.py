@@ -79,11 +79,11 @@ class TradingEngine:
         )
         self.signal_candles = CandleAggregator(
             period_seconds=settings.signal_period_seconds,
-            maxlen=max(settings.candle_history, 120),
+            maxlen=max(settings.candle_history, 260),
         )
         self.m3_candles = CandleAggregator(
             period_seconds=180,
-            maxlen=max(settings.candle_history, 160),
+            maxlen=max(settings.candle_history, 200),
         )
         self.mt, detected = resolve_mt_bridge(settings)
         self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
@@ -213,10 +213,12 @@ class TradingEngine:
         symbol = self.settings.symbols[0]
         mid = self.market.last_mids().get(symbol, 2350.0)
         now = utcnow()
+        # EMA200 needs 205+ M5 closes — seed past that so Asia/EMA can fire after restart.
+        signal_seed = max(220, int(self.settings.candle_history))
         for period, agg, count in (
-            (self.settings.signal_period_seconds, self.signal_candles, 90),
-            (180, self.m3_candles, 120),
-            (self.settings.candle_period_seconds, self.candles, 120),
+            (self.settings.signal_period_seconds, self.signal_candles, signal_seed),
+            (180, self.m3_candles, max(160, signal_seed // 2)),
+            (self.settings.candle_period_seconds, self.candles, signal_seed),
         ):
             bars: list[Candle] = []
             price = mid - 8.0
@@ -337,7 +339,7 @@ class TradingEngine:
 
     def _signal_prices(self, symbol: str | None = None) -> list[float]:
         symbol = (symbol or self.settings.symbols[0]).upper()
-        bars = self.signal_candles.closed_history(symbol, 200)
+        bars = self.signal_candles.closed_history(symbol, 240)
         if bars:
             return [c.close for c in bars]
         return self.strategy.prices(symbol)
@@ -520,7 +522,7 @@ class TradingEngine:
 
             if not db_enabled() or signal.strategy != "London_Judas_Sweep":
                 return None
-            bars = self.signal_candles.closed_history(signal.symbol, 200)
+            bars = self.signal_candles.closed_history(signal.symbol, 240)
             asian = calculate_asian_range(bars, as_of=signal.timestamp)
             session_id = None
             if asian:
@@ -973,7 +975,7 @@ class TradingEngine:
                             strat.feed_bar(closed_signal)
                             if hasattr(strat, "set_structure_bars"):
                                 strat.set_structure_bars(
-                                    self.signal_candles.closed_history(tick.symbol, 200)
+                                    self.signal_candles.closed_history(tick.symbol, 240)
                                 )
                             if hasattr(strat, "set_m1_bars"):
                                 strat.set_m1_bars(
@@ -983,7 +985,7 @@ class TradingEngine:
                             strat.feed(tick)
                     allow_entries = await self._apply_auto_router(tick)
                     if allow_entries and not uses_m3_entry:
-                        bars = self.signal_candles.closed_history(tick.symbol, 200)
+                        bars = self.signal_candles.closed_history(tick.symbol, 240)
                         if getattr(self.strategy, "candle_driven", False):
                             if hasattr(self.strategy, "set_m1_bars"):
                                 self.strategy.set_m1_bars(
@@ -1011,11 +1013,11 @@ class TradingEngine:
                 ):
                     if hasattr(self.strategy, "set_structure_bars"):
                         self.strategy.set_structure_bars(
-                            self.signal_candles.closed_history(tick.symbol, 200)
+                            self.signal_candles.closed_history(tick.symbol, 240)
                         )
                     allow_entries = await self._apply_auto_router(tick)
                     if allow_entries:
-                        m3_bars = self.m3_candles.closed_history(tick.symbol, 200)
+                        m3_bars = self.m3_candles.closed_history(tick.symbol, 240)
                         signal = self.strategy.on_bar(m3_bars, tick)
 
                 if signal:
