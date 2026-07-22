@@ -149,6 +149,6 @@ class TradeJournal:
         }
 
     def clear(self) -> None:
-        """Wipe in-memory trade log (used when paper deposit is reset)."""
+        """Wipe in-memory trade log (explicit Clear log action only)."""
         self._trades.clear()
         self._by_ticket.clear()

@@ -898,6 +898,10 @@ export default function App() {
               disabled={busy || trades.length === 0}
               onClick={() =>
                 run(async () => {
+                  const ok = window.confirm(
+                    'Clear trade log for THIS account only? This cannot be undone.',
+                  )
+                  if (!ok) return null
                   const res = await api.clearTrades()
                   setTrades(res.trades?.trades || [])
                   setTradeSummary(res.trades?.summary || null)

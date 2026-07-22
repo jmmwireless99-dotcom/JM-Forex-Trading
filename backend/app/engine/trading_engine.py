@@ -750,6 +750,9 @@ class TradingEngine:
         if row:
             self._arm_entry_cooldown()
             await self._persist_trade_close(position)
+            # Persist immediately — auto SL/TP closes used to stay memory-only
+            # and vanished on every service restart / deploy.
+            self.accounts.save()
             payload = {**row.model_dump(mode="json"), "account_id": account.id}
             await self._emit("trade", payload)
             await self._emit("trades", self._trades_payload(account))
@@ -769,6 +772,7 @@ class TradingEngine:
             return
         if order.status == OrderStatus.REJECTED:
             row = acct.journal.record_order(order, mode=self.mode)
+            self.accounts.save()
             await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
             await self._emit("trades", self._trades_payload(acct))
             return
@@ -778,6 +782,7 @@ class TradingEngine:
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
         else:
             row = acct.journal.record_order(order, mode=self.mode)
+        self.accounts.save()
         await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
         await self._emit("trades", self._trades_payload(acct))
 

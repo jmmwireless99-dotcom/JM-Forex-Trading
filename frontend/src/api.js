@@ -52,9 +52,15 @@ async function request(path, options = {}) {
   })
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}))
-    throw new Error(detail.detail || res.statusText)
+    const err = new Error(detail.detail || res.statusText || `HTTP ${res.status}`)
+    err.status = res.status
+    throw err
   }
   return res.json()
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export const api = {
@@ -123,17 +129,32 @@ export const api = {
 export async function ensureAccountSession(options = {}) {
   const existing = loadAccountSession()
   if (existing) {
-    try {
-      const me = await api.accountMe()
-      return {
-        id: me.account_id || existing.id,
-        token: existing.token,
-        code: me.account_code || existing.code,
-        label: me.account_label || existing.label,
-        account: me,
+    let lastErr = null
+    // Retry through brief restarts — wiping the session creates a NEW empty
+    // account and makes it look like trade history vanished.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        const me = await api.accountMe()
+        return {
+          id: me.account_id || existing.id,
+          token: existing.token,
+          code: me.account_code || existing.code,
+          label: me.account_label || existing.label,
+          account: me,
+        }
+      } catch (err) {
+        lastErr = err
+        const status = err?.status
+        if (status === 401 || status === 403 || status === 404) {
+          clearAccountSession()
+          break
+        }
+        await sleep(400 * (attempt + 1))
       }
-    } catch {
-      clearAccountSession()
+    }
+    if (existing && loadAccountSession()) {
+      // Keep the local session on transient/network errors; surface the failure.
+      throw lastErr || new Error('Account session temporarily unavailable')
     }
   }
   const created = await api.createAccount({

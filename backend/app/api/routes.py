@@ -56,7 +56,7 @@ class DepositBody(BaseModel):
     """Paper demo deposit / starting capital for client trials."""
 
     amount: float = Field(..., gt=0, le=1_000_000)
-    reset: bool = True  # close opens + clear paper trade log
+    reset: bool = True  # close opens; trade log history is always kept
 
 
 class PositionStopsBody(BaseModel):

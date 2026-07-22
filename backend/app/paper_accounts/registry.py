@@ -13,7 +13,6 @@ from pathlib import Path
 
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
-from app.engine.trade_journal import TradeJournal
 from app.models.domain import utcnow
 from app.risk.manager import RiskManager
 
@@ -35,7 +34,7 @@ class PaperAccount:
     label: str
     token: str
     broker: PaperBroker
-    journal: TradeJournal
+    journal: object  # TradeJournal — typed loosely to avoid import cycles
     risk: RiskManager
     follow_auto: bool = True
     is_desk: bool = False
@@ -80,7 +79,9 @@ class PaperAccountRegistry:
         self.store_path = store_path or backend_data
         self._load()
 
-    def _new_book(self, deposit: float) -> tuple[PaperBroker, TradeJournal, RiskManager]:
+    def _new_book(self, deposit: float) -> tuple:
+        from app.engine.trade_journal import TradeJournal
+
         broker = PaperBroker(deposit, self.settings.base_currency)
         journal = TradeJournal(maxlen=500)
         risk = RiskManager(self.settings)
@@ -211,6 +212,21 @@ class PaperAccountRegistry:
         except Exception:  # noqa: BLE001
             log.exception("failed to persist paper accounts")
 
+    @staticmethod
+    def _parse_dt(value: object) -> datetime | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            try:
+                dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except Exception:  # noqa: BLE001
+                return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
     def _load(self) -> None:
         if not self.store_path.exists():
             return
@@ -221,6 +237,9 @@ class PaperAccountRegistry:
             return
         if not isinstance(raw, list):
             return
+        from app.models.domain import Position, PositionStatus, Side, TradeLog, TradeStatus
+
+        restored_open = 0
         for row in raw:
             try:
                 if row.get("is_desk"):
@@ -230,21 +249,16 @@ class PaperAccountRegistry:
                 broker, journal, risk = self._new_book(deposit)
                 broker.balance = balance
                 broker.deposit = deposit
-                from app.models.domain import Side, TradeLog, TradeStatus
 
                 for t in row.get("trades") or []:
                     try:
                         status = TradeStatus(t.get("status", "CLOSED"))
-                        if status == TradeStatus.OPEN:
-                            status = TradeStatus.CLOSED
-                            t = {
-                                **t,
-                                "status": "CLOSED",
-                                "close_reason": t.get("close_reason") or "session_restart",
-                            }
+                        ticket = t.get("ticket") or str(uuid.uuid4())
+                        opened_at = self._parse_dt(t.get("opened_at")) or utcnow()
+                        closed_at = self._parse_dt(t.get("closed_at"))
                         row_log = TradeLog(
                             id=t.get("id") or str(uuid.uuid4()),
-                            ticket=t.get("ticket") or str(uuid.uuid4()),
+                            ticket=ticket,
                             symbol=t.get("symbol") or "XAUUSD",
                             side=Side(t.get("side", "BUY")),
                             lots=float(t.get("lots") or 0.01),
@@ -260,9 +274,34 @@ class PaperAccountRegistry:
                             realized_pnl=float(t.get("realized_pnl") or 0),
                             mode=t.get("mode") or "paper",
                             reject_reason=t.get("reject_reason"),
+                            opened_at=opened_at,
+                            closed_at=closed_at,
                         )
                         journal._trades.append(row_log)
                         journal._by_ticket[row_log.ticket] = row_log
+
+                        # Rehydrate open positions so restart does not wipe / rewrite history.
+                        if (
+                            status == TradeStatus.OPEN
+                            and row_log.entry is not None
+                            and row_log.ticket
+                        ):
+                            broker.positions.append(
+                                Position(
+                                    id=row_log.ticket,
+                                    symbol=row_log.symbol,
+                                    side=row_log.side,
+                                    lots=row_log.lots,
+                                    entry_price=float(row_log.entry),
+                                    stop_loss=row_log.stop_loss,
+                                    take_profit=row_log.take_profit,
+                                    strategy=row_log.strategy,
+                                    status=PositionStatus.OPEN,
+                                    unrealized_pnl=row_log.unrealized_pnl,
+                                    opened_at=opened_at,
+                                )
+                            )
+                            restored_open += 1
                     except Exception:  # noqa: BLE001
                         continue
                 created = row.get("created_at")
@@ -285,8 +324,14 @@ class PaperAccountRegistry:
                     is_desk=False,
                     created_at=created_at,
                 )
+                risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc
                 self._by_token[acc.token] = acc.id
             except Exception:  # noqa: BLE001
                 log.exception("skip corrupt paper account row")
-        log.info("loaded %s paper accounts from %s", len(self._accounts), self.store_path)
+        log.info(
+            "loaded %s paper accounts (%s open positions) from %s",
+            len(self._accounts),
+            restored_open,
+            self.store_path,
+        )
