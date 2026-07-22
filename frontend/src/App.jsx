@@ -755,7 +755,7 @@ export default function App() {
           </span>
         </div>
         {chartMode === 'tradingview' ? (
-          <TradingViewGoldChart symbol="OANDA:XAUUSD" interval="5" />
+          <TradingViewGoldChart symbol="TVC:GOLD" interval="5" />
         ) : (
           <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
         )}

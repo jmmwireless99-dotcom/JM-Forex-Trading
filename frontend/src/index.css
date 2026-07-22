@@ -460,6 +460,39 @@ select {
   min-height: 480px;
 }
 
+.tv-symbol-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+
+.tv-symbol-bar button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(232, 238, 245, 0.78);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.tv-symbol-bar button.on {
+  background: rgba(94, 160, 255, 0.18);
+  border-color: rgba(94, 160, 255, 0.45);
+  color: #e8eef5;
+}
+
+.tv-open-link {
+  margin-left: auto;
+  color: rgba(94, 160, 255, 0.95);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
 .tv-chart-canvas {
   position: relative;
   width: 100%;
@@ -470,18 +503,10 @@ select {
   background: #0b1014;
 }
 
-.tv-chart-frame {
-  display: block;
+.tv-chart-host {
   width: 100%;
   height: 100%;
-  border: 0;
-  background: #0b1014;
-}
-
-.tv-chart-frame.is-hidden {
-  visibility: hidden;
-  position: absolute;
-  inset: 0;
+  min-height: 360px;
 }
 
 .tv-chart-status {

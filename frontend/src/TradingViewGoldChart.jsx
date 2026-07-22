@@ -1,48 +1,117 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
+const TV_SCRIPT = 'https://s3.tradingview.com/tv.js'
+
+function loadTvScript() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
+  if (window.TradingView?.widget) return Promise.resolve()
+  if (window.__jmTvScriptPromise) return window.__jmTvScriptPromise
+
+  window.__jmTvScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${TV_SCRIPT}"]`)
+    if (existing) {
+      existing.addEventListener('load', () => resolve())
+      existing.addEventListener('error', () => reject(new Error('TradingView script failed')))
+      // already loaded
+      if (window.TradingView?.widget) resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = TV_SCRIPT
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('TradingView script failed'))
+    document.head.appendChild(script)
+  })
+  return window.__jmTvScriptPromise
+}
+
 /**
- * Live XAUUSD chart via TradingView widgetembed iframe.
- * More stable under React remounts than the script-injection embed.
+ * Live gold chart via TradingView Advanced Chart (tv.js).
+ * Uses fixed pixel height so the canvas is never 0×0 under flex layouts.
  */
 export default function TradingViewGoldChart({
-  symbol = 'OANDA:XAUUSD',
+  symbol = 'TVC:GOLD',
   interval = '5',
 }) {
   const reactId = useId().replace(/:/g, '')
-  const frameId = `tv_xau_${reactId}`
+  const containerId = `tv_xau_${reactId}`
+  const hostRef = useRef(null)
+  const widgetRef = useRef(null)
   const [status, setStatus] = useState('loading') // loading | ready | error
+  const [activeSymbol, setActiveSymbol] = useState(symbol)
   const [reloadKey, setReloadKey] = useState(0)
-  const timerRef = useRef(null)
-
-  const src = new URL('https://www.tradingview.com/widgetembed/')
-  src.searchParams.set('frameElementId', frameId)
-  src.searchParams.set('symbol', symbol)
-  src.searchParams.set('interval', String(interval))
-  src.searchParams.set('hidesidetoolbar', '0')
-  src.searchParams.set('hidetoptoolbar', '0')
-  src.searchParams.set('symboledit', '0')
-  src.searchParams.set('saveimage', '0')
-  src.searchParams.set('toolbarbg', '0b1014')
-  src.searchParams.set('studies', JSON.stringify(['MASimple@tv-basicstudies', 'MAExp@tv-basicstudies', 'RSI@tv-basicstudies']))
-  src.searchParams.set('theme', 'dark')
-  src.searchParams.set('style', '1')
-  src.searchParams.set('timezone', 'Asia/Manila')
-  src.searchParams.set('withdateranges', '1')
-  src.searchParams.set('hideideas', '1')
-  src.searchParams.set('hidevolume', '0')
-  src.searchParams.set('locale', 'en')
 
   useEffect(() => {
+    setActiveSymbol(symbol)
+  }, [symbol])
+
+  useEffect(() => {
+    let cancelled = false
+    const host = hostRef.current
+    if (!host) return undefined
+
     setStatus('loading')
-    if (timerRef.current) clearTimeout(timerRef.current)
-    // If iframe never fires load (blocked/adblock), surface a recovery UI.
-    timerRef.current = setTimeout(() => {
-      setStatus((s) => (s === 'ready' ? s : 'error'))
-    }, 12000)
+    host.innerHTML = ''
+    const mount = document.createElement('div')
+    mount.id = containerId
+    mount.style.width = '100%'
+    mount.style.height = '100%'
+    host.appendChild(mount)
+
+    ;(async () => {
+      try {
+        await loadTvScript()
+        if (cancelled || !window.TradingView?.widget) {
+          throw new Error('TradingView API unavailable')
+        }
+        // Destroy previous instance if any
+        try {
+          widgetRef.current?.remove?.()
+        } catch {
+          /* ignore */
+        }
+        widgetRef.current = new window.TradingView.widget({
+          autosize: true,
+          width: '100%',
+          height: '100%',
+          symbol: activeSymbol,
+          interval: String(interval),
+          timezone: 'Asia/Manila',
+          theme: 'dark',
+          style: '1',
+          locale: 'en',
+          toolbar_bg: '#0b1014',
+          enable_publishing: false,
+          hide_top_toolbar: false,
+          hide_legend: false,
+          save_image: false,
+          allow_symbol_change: true,
+          container_id: containerId,
+          studies: [
+            'MASimple@tv-basicstudies',
+            'MAExp@tv-basicstudies',
+            'RSI@tv-basicstudies',
+          ],
+        })
+        if (!cancelled) setStatus('ready')
+      } catch (err) {
+        if (!cancelled) setStatus('error')
+        console.error('TradingView chart:', err)
+      }
+    })()
+
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      cancelled = true
+      try {
+        widgetRef.current?.remove?.()
+      } catch {
+        /* ignore */
+      }
+      widgetRef.current = null
+      if (host) host.innerHTML = ''
     }
-  }, [symbol, interval, reloadKey])
+  }, [activeSymbol, interval, containerId, reloadKey])
 
   return (
     <div className="chart-wrap tv-chart-wrap">
@@ -50,19 +119,50 @@ export default function TradingViewGoldChart({
         <h2>XAUUSD · TradingView</h2>
         <span className="meta">Live market · M{interval}</span>
       </div>
+      <div className="tv-symbol-bar">
+        <button
+          type="button"
+          className={activeSymbol === 'TVC:GOLD' ? 'on' : ''}
+          onClick={() => setActiveSymbol('TVC:GOLD')}
+        >
+          TVC:GOLD
+        </button>
+        <button
+          type="button"
+          className={activeSymbol === 'OANDA:XAUUSD' ? 'on' : ''}
+          onClick={() => setActiveSymbol('OANDA:XAUUSD')}
+        >
+          OANDA:XAUUSD
+        </button>
+        <button
+          type="button"
+          className={activeSymbol === 'FOREXCOM:XAUUSD' ? 'on' : ''}
+          onClick={() => setActiveSymbol('FOREXCOM:XAUUSD')}
+        >
+          FOREXCOM
+        </button>
+        <a
+          className="tv-open-link"
+          href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeSymbol)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open full chart ↗
+        </a>
+      </div>
       <div className="tv-chart-canvas">
         {status === 'loading' ? (
           <div className="tv-chart-status">Loading TradingView…</div>
         ) : null}
         {status === 'error' ? (
           <div className="tv-chart-status tv-chart-error">
-            <p>TradingView chart did not load (blocked network, adblock, or timeout).</p>
+            <p>Hindi mag-load ang chart (adblock / network / TradingView block).</p>
             <div className="tv-chart-actions">
               <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
                 Reload chart
               </button>
               <a
-                href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`}
+                href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeSymbol)}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -71,19 +171,7 @@ export default function TradingViewGoldChart({
             </div>
           </div>
         ) : null}
-        <iframe
-          key={`${frameId}-${reloadKey}`}
-          id={frameId}
-          title="XAUUSD TradingView"
-          src={src.toString()}
-          className={`tv-chart-frame${status === 'error' ? ' is-hidden' : ''}`}
-          allow="fullscreen"
-          onLoad={() => {
-            if (timerRef.current) clearTimeout(timerRef.current)
-            setStatus('ready')
-          }}
-          onError={() => setStatus('error')}
-        />
+        <div ref={hostRef} className="tv-chart-host" />
       </div>
     </div>
   )
