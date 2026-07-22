@@ -29,6 +29,7 @@ from app.models.domain import (
     Tick,
     utcnow,
 )
+from app.paper_accounts import PaperAccount, PaperAccountRegistry
 from app.risk.manager import RiskManager
 from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
 from app.strategies.auto_router import AutoStrategyRouter
@@ -49,9 +50,15 @@ class TradingEngine:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.paper = PaperBroker(settings.initial_balance, settings.base_currency)
-        self.broker = self.paper  # compat for older callers
-        self.risk = RiskManager(settings)
+        # Isolated paper books — each client account has own capital + trade log
+        self.accounts = PaperAccountRegistry(settings)
+        # Internal desk book for engine helpers / MT fallback — never exposed to clients.
+        # Client/API traffic must use account-scoped methods.
+        self._desk = self.accounts.ensure_desk(settings.initial_balance)
+        self.paper = self._desk.broker
+        self.broker = self.paper
+        self.risk = self._desk.risk
+        self.journal = self._desk.journal
         self.market = MarketDataSimulator(settings.symbols)
         self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
         requested = settings.default_strategy or "manual_only"
@@ -78,7 +85,6 @@ class TradingEngine:
             period_seconds=180,
             maxlen=max(settings.candle_history, 160),
         )
-        self.journal = TradeJournal(maxlen=500)
         self.mt, detected = resolve_mt_bridge(settings)
         self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
         self.running = False
@@ -105,6 +111,79 @@ class TradingEngine:
     def unsubscribe(self, listener: Listener) -> None:
         if listener in self._listeners:
             self._listeners.remove(listener)
+
+    def create_client_account(
+        self,
+        *,
+        label: str | None = None,
+        deposit: float | None = None,
+        follow_auto: bool = True,
+    ) -> dict[str, Any]:
+        """Provision an isolated paper account for one client browser/session."""
+        acct = self.accounts.create(
+            deposit=deposit,
+            label=label,
+            follow_auto=follow_auto,
+            is_desk=False,
+        )
+        return {
+            "ok": True,
+            "account": acct.snapshot_payload(),
+            "token": acct.token,
+            "capital": self.capital_preview(acct.broker.deposit, account=acct),
+            "trades": self._trades_payload(acct),
+            "message": (
+                "New demo account created. Only this account id + token can see "
+                "its capital, trades, and history."
+            ),
+        }
+
+    def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
+        if account is None and self.using_mt():
+            return self.mt.snapshot()
+        acct = account or self._desk
+        return acct.broker.snapshot()
+
+    def account_payload(self, account: PaperAccount | None = None) -> dict[str, Any]:
+        acct = account or self._desk
+        if account is None and self.using_mt():
+            snap = self.mt.snapshot().model_dump(mode="json")
+            return {**snap, "account_id": None, "account_code": None}
+        return acct.snapshot_payload()
+
+    def trade_logs(
+        self,
+        limit: int = 100,
+        *,
+        include_rejected: bool = True,
+        account: PaperAccount | None = None,
+    ) -> list:
+        acct = account or self._desk
+        return [
+            t.model_dump(mode="json")
+            for t in acct.journal.list(limit, include_rejected=include_rejected)
+        ]
+
+    def trade_summary(self, account: PaperAccount | None = None) -> dict:
+        acct = account or self._desk
+        return acct.journal.summary()
+
+    def _trades_payload(self, account: PaperAccount | None = None) -> dict:
+        acct = account or self._desk
+        return {
+            "account_id": acct.id,
+            "summary": self.trade_summary(acct),
+            "trades": self.trade_logs(100, account=acct),
+        }
+
+    def open_positions(self, account: PaperAccount | None = None) -> list[Position]:
+        if account is None and self.using_mt():
+            return self.mt.open_positions()
+        acct = account or self._desk
+        return acct.broker.open_positions()
+
+    def _balance(self, account: PaperAccount | None = None) -> float:
+        return self.account_snapshot(account).balance
 
     async def _emit(self, event: str, payload: Any) -> None:
         message = {"event": event, "data": payload}
@@ -382,36 +461,42 @@ class TradingEngine:
 
         if self.using_mt() or not is_past_pending_kill(tick.timestamp):
             return
-        cancelled = self.paper.cancel_pending(
-            reason="London kill switch 12:00 UTC — unfilled limit cancelled"
-        )
-        for order in cancelled:
-            lid = self._london_signal_ids.get(order.id)
-            if lid:
-                try:
-                    from app.db.repository import mark_london_signal
+        for acct in self.accounts.all():
+            cancelled = acct.broker.cancel_pending(
+                reason="London kill switch 12:00 UTC — unfilled limit cancelled"
+            )
+            for order in cancelled:
+                lid = self._london_signal_ids.get(f"{acct.id}:{order.id}")
+                if lid:
+                    try:
+                        from app.db.repository import mark_london_signal
 
-                    mark_london_signal(lid, status="CANCELLED")
-                except Exception:
-                    pass
-            await self._emit("order", order.model_dump(mode="json"))
+                        mark_london_signal(lid, status="CANCELLED")
+                    except Exception:
+                        pass
+                await self._emit(
+                    "order",
+                    {**order.model_dump(mode="json"), "account_id": acct.id},
+                )
 
-    async def _sync_limit_fills(self) -> None:
+    async def _sync_limit_fills(self, account: PaperAccount) -> None:
         """Journal LIMIT orders that filled on tick (pending → filled)."""
-        for order in self.paper.orders:
+        for order in account.broker.orders:
+            key = f"{account.id}:{order.id}"
             if (
                 order.order_type == OrderType.LIMIT
                 and order.status == OrderStatus.FILLED
-                and order.id not in self._journaled_limit_ids
+                and key not in self._journaled_limit_ids
             ):
-                pos = self._latest_open(order.symbol, order.side)
+                pos = self._latest_open(order.symbol, order.side, account)
                 await self._journal_fill(
                     order,
                     pos,
                     signal_db_id=None,
+                    account=account,
                 )
-                self._journaled_limit_ids.add(order.id)
-                lid = self._london_signal_ids.get(order.id)
+                self._journaled_limit_ids.add(key)
+                lid = self._london_signal_ids.get(key)
                 if lid:
                     try:
                         from app.db.repository import mark_london_signal
@@ -422,7 +507,10 @@ class TradingEngine:
                         )
                     except Exception:
                         pass
-                await self._emit("order", order.model_dump(mode="json"))
+                await self._emit(
+                    "order",
+                    {**order.model_dump(mode="json"), "account_id": account.id},
+                )
 
     async def _persist_london(self, signal: Signal) -> str | None:
         try:
@@ -614,25 +702,14 @@ class TradingEngine:
         symbol = (symbol or self.settings.symbols[0]).upper()
         return [c.model_dump(mode="json") for c in self.candles.history(symbol, limit)]
 
-    def trade_logs(self, limit: int = 100, *, include_rejected: bool = True) -> list:
-        return [
-            t.model_dump(mode="json")
-            for t in self.journal.list(limit, include_rejected=include_rejected)
-        ]
-
-    def trade_summary(self) -> dict:
-        return self.journal.summary()
-
-    def _trades_payload(self) -> dict:
-        return {"summary": self.trade_summary(), "trades": self.trade_logs(100)}
-
-    async def _journal_close(self, position: Position) -> None:
-        row = self.journal.record_close(position)
+    async def _journal_close(self, position: Position, account: PaperAccount) -> None:
+        row = account.journal.record_close(position)
         if row:
             self._arm_entry_cooldown()
             await self._persist_trade_close(position)
-            await self._emit("trade", row.model_dump(mode="json"))
-            await self._emit("trades", self._trades_payload())
+            payload = {**row.model_dump(mode="json"), "account_id": account.id}
+            await self._emit("trade", payload)
+            await self._emit("trades", self._trades_payload(account))
 
     async def _journal_fill(
         self,
@@ -640,37 +717,39 @@ class TradingEngine:
         position: Position | None = None,
         *,
         signal_db_id: str | None = None,
+        account: PaperAccount | None = None,
     ) -> None:
+        acct = account or self._desk
+        order_payload = {**order.model_dump(mode="json"), "account_id": acct.id}
         if order.status == OrderStatus.PENDING:
-            # LIMIT resting — journal when filled via _sync_limit_fills
-            await self._emit("order", order.model_dump(mode="json"))
+            await self._emit("order", order_payload)
             return
         if order.status == OrderStatus.REJECTED:
-            row = self.journal.record_order(order, mode=self.mode)
-            await self._emit("trade", row.model_dump(mode="json"))
-            await self._emit("trades", self._trades_payload())
+            row = acct.journal.record_order(order, mode=self.mode)
+            await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
+            await self._emit("trades", self._trades_payload(acct))
             return
         if position is not None:
-            row = self.journal.record_open_position(position, mode=self.mode)
+            row = acct.journal.record_open_position(position, mode=self.mode)
             self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
         else:
-            row = self.journal.record_order(order, mode=self.mode)
-        await self._emit("trade", row.model_dump(mode="json"))
-        await self._emit("trades", self._trades_payload())
+            row = acct.journal.record_order(order, mode=self.mode)
+        await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
+        await self._emit("trades", self._trades_payload(acct))
 
-    def _latest_open(self, symbol: str, side: Side) -> Position | None:
-        opens = [p for p in self.open_positions() if p.symbol == symbol and p.side == side]
+    def _latest_open(self, symbol: str, side: Side, account: PaperAccount | None = None) -> Position | None:
+        opens = [p for p in self.open_positions(account) if p.symbol == symbol and p.side == side]
         return opens[-1] if opens else None
 
-    def account_snapshot(self) -> AccountSnapshot:
-        if self.using_mt():
-            return self.mt.snapshot()
-        return self.paper.snapshot()
-
-    def capital_preview(self, deposit: float | None = None) -> dict:
+    def capital_preview(
+        self,
+        deposit: float | None = None,
+        account: PaperAccount | None = None,
+    ) -> dict:
         """Show how risk / lot sizing scales with a paper deposit amount."""
-        amount = float(deposit if deposit is not None else self.paper.deposit)
+        acct = account or self._desk
+        amount = float(deposit if deposit is not None else acct.broker.deposit)
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
         stop_pips = float(self.settings.default_stop_loss_pips)
@@ -691,52 +770,53 @@ class TradingEngine:
             "default_stop_loss_pips": stop_pips,
             "default_take_profit_pips": tp_pips,
             "suggested_lots": suggested_lots,
+            "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-            "note": "Paper demo capital — change deposit to trial different risk sizing",
+            "note": "Paper demo capital for this account only — other clients cannot see it",
         }
 
-    async def set_paper_deposit(self, amount: float, *, reset: bool = True) -> dict:
-        """Set fake deposit / starting capital for paper trials.
+    async def set_paper_deposit(
+        self,
+        amount: float,
+        *,
+        reset: bool = True,
+        account: PaperAccount | None = None,
+    ) -> dict:
+        """Set fake deposit / starting capital for one paper account.
 
         Trade log history is always kept. When reset=True, open positions are
         closed (and journaled) then balance is set to the new deposit.
         """
+        acct = account or self._desk
         if self.using_mt():
             raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
         async with self._lock:
-            closed = self.paper.set_deposit(float(amount), close_positions=reset)
+            closed = acct.broker.set_deposit(float(amount), close_positions=reset)
             for position in closed:
-                await self._journal_close(position)
-            self.risk.reset_daily(self.paper.balance)
+                await self._journal_close(position, acct)
+            acct.risk.reset_daily(acct.broker.balance)
             # Keep trade log history — do not clear journal
-            self._journaled_limit_ids.clear()
-            self._london_signal_ids.clear()
-            snap = self.paper.snapshot()
-            capital = self.capital_preview()
-            await self._emit("account", snap.model_dump(mode="json"))
-            await self._emit("trades", self._trades_payload())
+            self.accounts.save()
+            snap = acct.snapshot_payload()
+            capital = self.capital_preview(account=acct)
+            await self._emit("account", snap)
+            await self._emit("trades", self._trades_payload(acct))
             return {
                 "ok": True,
-                "account": snap.model_dump(mode="json"),
+                "account": snap,
                 "capital": capital,
-                "trades": self._trades_payload(),
+                "trades": self._trades_payload(acct),
                 "message": (
-                    f"Paper deposit set to ${capital['deposit']:,.2f} "
-                    f"(trade history kept · {self.journal.summary()['total']} logged)"
+                    f"Paper deposit set to ${capital['deposit']:,.2f} on {acct.code} "
+                    f"(trade history kept · {acct.journal.summary()['total']} logged)"
                 ),
             }
 
-    def open_positions(self) -> list[Position]:
-        if self.using_mt():
-            return self.mt.open_positions()
-        return self.paper.open_positions()
-
-    def _balance(self) -> float:
-        return self.account_snapshot().balance
-
-    async def manual_order(self, request: OrderRequest) -> Order:
+    async def manual_order(
+        self, request: OrderRequest, account: PaperAccount | None = None
+    ) -> Order:
         async with self._lock:
-            return await self._execute(request)
+            return await self._execute(request, account=account)
 
     async def set_position_stops(
         self,
@@ -747,17 +827,15 @@ class TradingEngine:
         auto: bool = False,
         stop_loss_pips: float | None = None,
         take_profit_pips: float | None = None,
+        account: PaperAccount | None = None,
     ) -> Position | None:
         """Attach / update SL & TP on an open position (manual desk helper)."""
+        acct = account or self._desk
         async with self._lock:
             if self.using_mt():
                 return None  # MT modify not supported via file bridge yet
             pos = next(
-                (
-                    p
-                    for p in self.paper.open_positions()
-                    if p.id == position_id
-                ),
+                (p for p in acct.broker.open_positions() if p.id == position_id),
                 None,
             )
             if pos is None:
@@ -765,7 +843,7 @@ class TradingEngine:
             sl = stop_loss
             tp = take_profit
             if auto or (sl is None and tp is None):
-                auto_sl, auto_tp = self.risk.stops_from_entry(
+                auto_sl, auto_tp = acct.risk.stops_from_entry(
                     symbol=pos.symbol,
                     side=pos.side,
                     entry=pos.entry_price,
@@ -776,26 +854,42 @@ class TradingEngine:
                     sl = auto_sl
                 if tp is None:
                     tp = auto_tp
-            updated = self.paper.set_stops(
+            updated = acct.broker.set_stops(
                 position_id, stop_loss=sl, take_profit=tp
             )
             if updated:
-                self.journal.update_open_pnl(self.paper.open_positions())
-                await self._emit("position", updated.model_dump(mode="json"))
+                acct.journal.update_open_pnl(acct.broker.open_positions())
+                await self._emit(
+                    "position",
+                    {**updated.model_dump(mode="json"), "account_id": acct.id},
+                )
                 await self._emit(
                     "positions",
-                    [p.model_dump(mode="json") for p in self.open_positions()],
+                    {
+                        "account_id": acct.id,
+                        "positions": [
+                            p.model_dump(mode="json") for p in self.open_positions(acct)
+                        ],
+                    },
                 )
             return updated
 
-    async def close_position(self, position_id: str) -> Position | None:
+    async def close_position(
+        self, position_id: str, account: PaperAccount | None = None
+    ) -> Position | None:
+        acct = account or self._desk
         async with self._lock:
             if self.using_mt():
                 ack = self.mt.close_all()
-                await self._emit("account", self.account_snapshot().model_dump(mode="json"))
+                await self._emit("account", self.account_payload(acct))
                 await self._emit(
                     "positions",
-                    [p.model_dump(mode="json") for p in self.open_positions()],
+                    {
+                        "account_id": acct.id,
+                        "positions": [
+                            p.model_dump(mode="json") for p in self.open_positions(acct)
+                        ],
+                    },
                 )
                 if not ack.ok:
                     return None
@@ -808,12 +902,16 @@ class TradingEngine:
                     status=PositionStatus.CLOSED,
                     close_reason="mt_close",
                 )
-            closed = self.paper.close_position(position_id, reason="manual")
+            closed = acct.broker.close_position(position_id, reason="manual")
             if closed:
-                self.risk.record_realized_pnl(closed.realized_pnl)
-                await self._journal_close(closed)
-                await self._emit("position_closed", closed.model_dump(mode="json"))
-                await self._emit("account", self.paper.snapshot().model_dump(mode="json"))
+                acct.risk.record_realized_pnl(closed.realized_pnl)
+                await self._journal_close(closed, acct)
+                await self._emit(
+                    "position_closed",
+                    {**closed.model_dump(mode="json"), "account_id": acct.id},
+                )
+                await self._emit("account", self.account_payload(acct))
+                self.accounts.save()
             return closed
 
     async def _loop(self) -> None:
@@ -839,13 +937,20 @@ class TradingEngine:
                 self._recent_ticks[tick.symbol] = tick
 
                 if not self.using_mt():
-                    closed = self.paper.update_tick(tick)
-                    for position in closed:
-                        self.risk.record_realized_pnl(position.realized_pnl)
-                        await self._journal_close(position)
-                        await self._emit("position_closed", position.model_dump(mode="json"))
-                    self.journal.update_open_pnl(self.paper.open_positions())
-                    await self._sync_limit_fills()
+                    for acct in self.accounts.all():
+                        closed = acct.broker.update_tick(tick)
+                        for position in closed:
+                            acct.risk.record_realized_pnl(position.realized_pnl)
+                            await self._journal_close(position, acct)
+                            await self._emit(
+                                "position_closed",
+                                {
+                                    **position.model_dump(mode="json"),
+                                    "account_id": acct.id,
+                                },
+                            )
+                        acct.journal.update_open_pnl(acct.broker.open_positions())
+                        await self._sync_limit_fills(acct)
                     await self._london_kill_switch(tick)
 
                 closed_candle, forming = self.candles.update(tick)
@@ -927,11 +1032,17 @@ class TradingEngine:
 
                 await self._emit("tick", tick.model_dump(mode="json"))
 
-            await self._emit("account", self.account_snapshot().model_dump(mode="json"))
-            await self._emit(
-                "positions",
-                [p.model_dump(mode="json") for p in self.open_positions()],
-            )
+            for acct in self.accounts.clients():
+                await self._emit("account", self.account_payload(acct))
+                await self._emit(
+                    "positions",
+                    {
+                        "account_id": acct.id,
+                        "positions": [
+                            p.model_dump(mode="json") for p in self.open_positions(acct)
+                        ],
+                    },
+                )
             await self._emit("connection", self.connection_info())
             if self.auto_enabled:
                 await self._emit("auto", self.auto_status())
@@ -944,26 +1055,53 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        for position in self.open_positions():
+        # Auto signals fan out to each client account with that account's capital/risk.
+        # Desk book never receives client auto fills.
+        targets = self.accounts.auto_followers() if not self.using_mt() else [self._desk]
+        if not targets:
+            return
+        for acct in targets:
+            await self._handle_signal_for_account(
+                signal,
+                tick,
+                account=acct,
+                signal_db_id=signal_db_id,
+                london_signal_id=london_signal_id,
+            )
+
+    async def _handle_signal_for_account(
+        self,
+        signal: Signal,
+        tick: Tick,
+        *,
+        account: PaperAccount,
+        signal_db_id: str | None = None,
+        london_signal_id: str | None = None,
+    ) -> None:
+        for position in self.open_positions(account):
             if position.symbol == signal.symbol and position.side != signal.side:
                 if self.using_mt():
                     self.mt.close_all()
                 else:
-                    closed = self.paper.close_position(position.id, reason="signal_reverse")
+                    closed = account.broker.close_position(
+                        position.id, reason="signal_reverse"
+                    )
                     if closed:
-                        self.risk.record_realized_pnl(closed.realized_pnl)
-                        await self._journal_close(closed)
-                        await self._emit("position_closed", closed.model_dump(mode="json"))
+                        account.risk.record_realized_pnl(closed.realized_pnl)
+                        await self._journal_close(closed, account)
+                        await self._emit(
+                            "position_closed",
+                            {**closed.model_dump(mode="json"), "account_id": account.id},
+                        )
 
-        for position in self.open_positions():
+        for position in self.open_positions(account):
             if position.symbol == signal.symbol and position.side == signal.side:
                 return
 
-        # One pending London limit at a time
         if (
             signal.order_type == OrderType.LIMIT
             and not self.using_mt()
-            and self.paper.pending_orders()
+            and account.broker.pending_orders()
         ):
             return
 
@@ -981,7 +1119,7 @@ class TradingEngine:
             attach_stops=signal.order_type != OrderType.LIMIT,
         )
         if request.stop_loss is None and signal.stop_loss_pips and tick:
-            pip = self.risk.pip_size(signal.symbol)
+            pip = account.risk.pip_size(signal.symbol)
             entry = tick.ask if signal.side.value == "BUY" else tick.bid
             if signal.side.value == "BUY":
                 request.stop_loss = entry - signal.stop_loss_pips * pip
@@ -992,14 +1130,18 @@ class TradingEngine:
                 if signal.take_profit_pips:
                     request.take_profit = entry - signal.take_profit_pips * pip
         order = await self._execute(
-            request, tick=tick, signal_db_id=signal_db_id
+            request,
+            tick=tick,
+            signal_db_id=signal_db_id,
+            account=account,
         )
         if london_signal_id and order:
-            self._london_signal_ids[order.id] = london_signal_id
+            key = f"{account.id}:{order.id}"
+            self._london_signal_ids[key] = london_signal_id
             if order.status == OrderStatus.PENDING:
-                self._journaled_limit_ids.discard(order.id)
+                self._journaled_limit_ids.discard(key)
             elif order.status == OrderStatus.FILLED:
-                self._journaled_limit_ids.add(order.id)
+                self._journaled_limit_ids.add(key)
                 try:
                     from app.db.repository import mark_london_signal
 
@@ -1017,12 +1159,17 @@ class TradingEngine:
         tick: Tick | None = None,
         *,
         signal_db_id: str | None = None,
+        account: PaperAccount | None = None,
     ) -> Order:
+        acct = account or self._desk
         tick = tick or self._recent_ticks.get(request.symbol)
-        decision = self.risk.evaluate(
+        # Each paper book keeps its own last-tick cache — sync shared feed before fill.
+        if tick is not None and not self.using_mt():
+            acct.broker._last_ticks[tick.symbol] = tick
+        decision = acct.risk.evaluate(
             request,
-            balance=self._balance(),
-            open_positions=self.open_positions(),
+            balance=self._balance(acct),
+            open_positions=self.open_positions(acct),
             tick=tick,
         )
         if not decision.approved:
@@ -1037,12 +1184,17 @@ class TradingEngine:
                 stop_loss=request.stop_loss,
                 take_profit=request.take_profit,
             )
-            await self._journal_fill(rejected, signal_db_id=signal_db_id)
-            await self._emit("order", rejected.model_dump(mode="json"))
+            await self._journal_fill(
+                rejected, signal_db_id=signal_db_id, account=acct
+            )
+            await self._emit(
+                "order",
+                {**rejected.model_dump(mode="json"), "account_id": acct.id},
+            )
             return rejected
 
         if tick is not None and request.attach_stops:
-            sl, tp = self.risk.apply_default_stops(request, tick)
+            sl, tp = acct.risk.apply_default_stops(request, tick)
             request.stop_loss = request.stop_loss or sl
             request.take_profit = request.take_profit or tp
 
@@ -1050,8 +1202,12 @@ class TradingEngine:
 
         if self.using_mt():
             order = self.mt.place_order(request)
-            pos = self._latest_open(request.symbol, request.side) if order.status == OrderStatus.FILLED else None
-            await self._journal_fill(order, pos, signal_db_id=signal_db_id)
+            pos = (
+                self._latest_open(request.symbol, request.side, acct)
+                if order.status == OrderStatus.FILLED
+                else None
+            )
+            await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
         else:
             if self.mode in {"mt4", "mt5"} and not self.mt_online():
                 rejected = Order(
@@ -1065,14 +1221,18 @@ class TradingEngine:
                     stop_loss=request.stop_loss,
                     take_profit=request.take_profit,
                 )
-                await self._journal_fill(rejected, signal_db_id=signal_db_id)
-                await self._emit("order", rejected.model_dump(mode="json"))
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
+                )
                 return rejected
-            order = self.paper.place_order(request)
+            order = acct.broker.place_order(request)
             pos = None
             if order.status == OrderStatus.FILLED:
-                # Match freshly opened paper position
-                for p in reversed(self.paper.positions):
+                for p in reversed(acct.broker.positions):
                     if (
                         p.status == PositionStatus.OPEN
                         and p.symbol == request.symbol
@@ -1080,12 +1240,20 @@ class TradingEngine:
                     ):
                         pos = p
                         break
-            await self._journal_fill(order, pos, signal_db_id=signal_db_id)
+            await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
+            self.accounts.save()
 
-        await self._emit("order", order.model_dump(mode="json"))
-        await self._emit("account", self.account_snapshot().model_dump(mode="json"))
+        await self._emit(
+            "order", {**order.model_dump(mode="json"), "account_id": acct.id}
+        )
+        await self._emit("account", self.account_payload(acct))
         await self._emit(
             "positions",
-            [p.model_dump(mode="json") for p in self.open_positions()],
+            {
+                "account_id": acct.id,
+                "positions": [
+                    p.model_dump(mode="json") for p in self.open_positions(acct)
+                ],
+            },
         )
         return order

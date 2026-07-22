@@ -10,6 +10,10 @@ venv/
 .coverage
 htmlcov/
 
+# Paper multi-account persistence (local / VPS runtime)
+backend/app/data/
+backend/data/
+
 # Node
 node_modules/
 frontend/dist/

@@ -17,6 +17,20 @@ async def client():
     await engine.stop()
 
 
+async def _make_account(client, *, deposit=1000.0, label="Test demo"):
+    res = await client.post(
+        "/api/accounts",
+        json={"deposit": deposit, "label": label, "follow_auto": True},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    headers = {
+        "X-JM-Account-Id": body["account"]["account_id"],
+        "X-JM-Account-Token": body["token"],
+    }
+    return body, headers
+
+
 @pytest.mark.asyncio
 async def test_health(client):
     res = await client.get("/api/health")
@@ -79,21 +93,34 @@ async def test_mt4_status_unconfigured(client):
 
 
 @pytest.mark.asyncio
-async def test_account_endpoint(client):
+async def test_account_requires_headers(client):
     res = await client.get("/api/account")
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_account_endpoint(client):
+    created, headers = await _make_account(client, deposit=10000.0)
+    res = await client.get("/api/account", headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["balance"] == 10000.0
     assert data["currency"] == "USD"
     assert data["deposit"] == 10000.0
     assert data["paper"] is True
+    assert data["account_id"] == created["account"]["account_id"]
     assert "capital" in data
     assert data["capital"]["suggested_lots"] >= 0.01
 
 
 @pytest.mark.asyncio
 async def test_paper_deposit_changes_capital(client):
-    res = await client.post("/api/account/deposit", json={"amount": 500, "reset": True})
+    _, headers = await _make_account(client, deposit=1000.0)
+    res = await client.post(
+        "/api/account/deposit",
+        json={"amount": 500, "reset": True},
+        headers=headers,
+    )
     assert res.status_code == 200
     body = res.json()
     assert body["ok"] is True
@@ -102,26 +129,26 @@ async def test_paper_deposit_changes_capital(client):
     assert body["capital"]["deposit"] == 500.0
     assert body["capital"]["risk_per_trade_usd"] == 2.5  # 0.5% of 500
 
-    preview = await client.get("/api/account/capital?amount=1000")
+    preview = await client.get("/api/account/capital?amount=1000", headers=headers)
     assert preview.status_code == 200
     assert preview.json()["deposit"] == 1000.0
     assert preview.json()["risk_per_trade_usd"] == 5.0
 
     # Live account still at 500 until applied
-    acc = await client.get("/api/account")
+    acc = await client.get("/api/account", headers=headers)
     assert acc.json()["deposit"] == 500.0
 
 
 @pytest.mark.asyncio
 async def test_paper_deposit_keeps_trade_history(client):
-    # Seed a manual trade into the journal via paper deposit cycle
+    _, headers = await _make_account(client, deposit=1000.0)
     await client.post("/api/engine/start")
-    # Place a tiny manual order after a tick has arrived
     import asyncio
 
     await asyncio.sleep(0.15)
     order = await client.post(
         "/api/orders",
+        headers=headers,
         json={
             "symbol": "XAUUSD",
             "side": "BUY",
@@ -131,16 +158,59 @@ async def test_paper_deposit_keeps_trade_history(client):
         },
     )
     assert order.status_code == 200
-    before = await client.get("/api/trades?limit=50")
+    before = await client.get("/api/trades?limit=50", headers=headers)
     before_n = before.json()["summary"]["total"]
     assert before_n >= 1
 
-    res = await client.post("/api/account/deposit", json={"amount": 2500, "reset": True})
+    res = await client.post(
+        "/api/account/deposit",
+        json={"amount": 2500, "reset": True},
+        headers=headers,
+    )
     assert res.status_code == 200
     assert res.json()["account"]["deposit"] == 2500.0
-    # History must remain (and any open may be closed into the log)
-    after = await client.get("/api/trades?limit=50")
+    after = await client.get("/api/trades?limit=50", headers=headers)
     assert after.json()["summary"]["total"] >= before_n
+
+
+@pytest.mark.asyncio
+async def test_accounts_are_isolated(client):
+    a, ha = await _make_account(client, deposit=500.0, label="Client A")
+    b, hb = await _make_account(client, deposit=2000.0, label="Client B")
+    assert a["account"]["account_id"] != b["account"]["account_id"]
+
+    await client.post("/api/engine/start")
+    import asyncio
+
+    await asyncio.sleep(0.15)
+    order = await client.post(
+        "/api/orders",
+        headers=ha,
+        json={"symbol": "XAUUSD", "side": "BUY", "lots": 0.01, "auto_stops": True},
+    )
+    assert order.status_code == 200
+
+    trades_a = await client.get("/api/trades", headers=ha)
+    trades_b = await client.get("/api/trades", headers=hb)
+    assert trades_a.json()["summary"]["total"] >= 1
+    assert trades_b.json()["summary"]["total"] == 0
+
+    acc_a = await client.get("/api/account", headers=ha)
+    acc_b = await client.get("/api/account", headers=hb)
+    assert acc_a.json()["deposit"] == 500.0
+    assert acc_b.json()["deposit"] == 2000.0
+    assert acc_a.json()["open_positions"] >= 1
+    assert acc_b.json()["open_positions"] == 0
+
+    # Wrong token rejected
+    bad = await client.get(
+        "/api/account",
+        headers={
+            "X-JM-Account-Id": a["account"]["account_id"],
+            "X-JM-Account-Token": "wrong-token",
+        },
+    )
+    assert bad.status_code == 403
 
 
 @pytest.mark.asyncio

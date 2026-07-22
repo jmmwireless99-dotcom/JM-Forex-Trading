@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, connectFeed } from './api'
+import { api, clearAccountSession, connectFeed, ensureAccountSession, saveAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -98,11 +98,23 @@ export default function App() {
   const [chartMode, setChartMode] = useState('tradingview') // tradingview | desk
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
+  const [accountMeta, setAccountMeta] = useState(null)
+  const accountIdRef = useRef(null)
 
   useEffect(() => {
     let alive = true
+    let disconnect = () => {}
     ;(async () => {
       try {
+        const session = await ensureAccountSession({ deposit: 1000, label: 'Client demo' })
+        if (!alive) return
+        accountIdRef.current = session.id
+        setAccountMeta({
+          id: session.id,
+          code: session.code,
+          label: session.label,
+        })
+
         const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto] =
           await Promise.all([
             api.status(),
@@ -137,79 +149,92 @@ export default function App() {
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
         setTicks(map)
+
+        disconnect = connectFeed((msg) => {
+          if (!alive) return
+          const myId = accountIdRef.current
+          const dataAid = msg.data?.account_id
+          if (
+            dataAid &&
+            myId &&
+            dataAid !== myId &&
+            ['account', 'positions', 'trades', 'trade', 'order', 'position', 'position_closed'].includes(
+              msg.event,
+            )
+          ) {
+            return
+          }
+          if (msg.event === 'engine') {
+            setStatus(msg.data)
+            if (msg.data?.mode) setMode(msg.data.mode)
+            if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
+          }
+          if (msg.event === 'account') setAccount(msg.data)
+          if (msg.event === 'positions') {
+            const list = Array.isArray(msg.data)
+              ? msg.data
+              : msg.data?.positions || []
+            setPositions(list)
+          }
+          if (msg.event === 'tick') {
+            setTicks((prev) => ({ ...prev, [msg.data.symbol]: msg.data }))
+          }
+          if (msg.event === 'signal') {
+            setSignals((prev) => [msg.data, ...prev].slice(0, 40))
+          }
+          if (msg.event === 'position_closed') {
+            setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
+          }
+          if (msg.event === 'connection') {
+            setMt((prev) => ({ ...(prev || {}), ...msg.data }))
+            if (msg.data?.mode) setMode(msg.data.mode)
+          }
+          if (msg.event === 'candles') {
+            setCandles(msg.data.candles || [])
+          }
+          if (msg.event === 'candle') {
+            setLiveCandle(msg.data)
+            setCandles((prev) => {
+              const next = [...prev]
+              const idx = next.findIndex(
+                (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
+              )
+              if (idx >= 0) next[idx] = msg.data
+              else next.push(msg.data)
+              return next.slice(-240)
+            })
+          }
+          if (msg.event === 'candle_closed') {
+            setLiveCandle(null)
+            setCandles((prev) => {
+              const next = [...prev.filter((c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp))]
+              next.push(msg.data)
+              return next.slice(-240)
+            })
+          }
+          if (msg.event === 'trades') {
+            setTrades(msg.data?.trades || [])
+            setTradeSummary(msg.data?.summary || null)
+          }
+          if (msg.event === 'trade') {
+            setTrades((prev) => {
+              const rest = prev.filter((t) => t.id !== msg.data.id && t.ticket !== msg.data.ticket)
+              return [msg.data, ...rest].slice(0, 100)
+            })
+          }
+          if (msg.event === 'auto') setAutoInfo(msg.data)
+          if (msg.event === 'transfer') {
+            setAutoInfo((prev) => ({
+              ...(prev || {}),
+              last_transfer: `${msg.data.from_slot} → ${msg.data.to_slot}: ${msg.data.strategy}`,
+              session_slot: msg.data.to_slot,
+            }))
+          }
+        })
       } catch (err) {
         if (alive) setError(err.message || 'Failed to load API')
       }
     })()
-
-    const disconnect = connectFeed((msg) => {
-      if (!alive) return
-      if (msg.event === 'engine') {
-        setStatus(msg.data)
-        if (msg.data?.mode) setMode(msg.data.mode)
-        if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
-      }
-      if (msg.event === 'account') setAccount(msg.data)
-      if (msg.event === 'positions') setPositions(msg.data || [])
-      if (msg.event === 'tick') {
-        setTicks((prev) => ({ ...prev, [msg.data.symbol]: msg.data }))
-      }
-      if (msg.event === 'signal') {
-        setSignals((prev) => [msg.data, ...prev].slice(0, 40))
-      }
-      if (msg.event === 'position_closed') {
-        setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
-      }
-      if (msg.event === 'connection') {
-        setMt((prev) => ({ ...(prev || {}), ...msg.data }))
-        if (msg.data?.mode) setMode(msg.data.mode)
-      }
-      if (msg.event === 'candles') {
-        setCandles(msg.data.candles || [])
-      }
-      if (msg.event === 'candle') {
-        setLiveCandle(msg.data)
-        setCandles((prev) => {
-          const next = [...prev]
-          const idx = next.findIndex(
-            (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
-          )
-          if (idx >= 0) next[idx] = msg.data
-          else next.push(msg.data)
-          return next.slice(-240)
-        })
-      }
-      if (msg.event === 'candle_closed') {
-        setCandles((prev) => {
-          const next = prev.filter(
-            (c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp),
-          )
-          next.push(msg.data)
-          return next.slice(-240)
-        })
-      }
-      if (msg.event === 'trades') {
-        setTrades(msg.data.trades || [])
-        setTradeSummary(msg.data.summary || null)
-      }
-      if (msg.event === 'trade') {
-        setTrades((prev) => {
-          const rest = prev.filter((t) => t.id !== msg.data.id && t.ticket !== msg.data.ticket)
-          return [msg.data, ...rest].slice(0, 100)
-        })
-      }
-      if (msg.event === 'auto') {
-        setAutoInfo(msg.data)
-        // Do not overwrite the strategy <select> here — Apply/engine status owns that.
-      }
-      if (msg.event === 'transfer') {
-        setAutoInfo((prev) => ({
-          ...(prev || {}),
-          last_transfer: `${msg.data.from_slot} → ${msg.data.to_slot}: ${msg.data.strategy}`,
-          session_slot: msg.data.to_slot,
-        }))
-      }
-    })
 
     const deskTimer = setInterval(() => {
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
@@ -222,6 +247,44 @@ export default function App() {
       clearInterval(deskTimer)
     }
   }, [])
+
+  async function newDemoAccount() {
+    setBusy(true)
+    setError('')
+    try {
+      clearAccountSession()
+      const created = await api.createAccount({
+        label: 'Client demo',
+        deposit: Number(depositInput) || 1000,
+        follow_auto: true,
+      })
+      saveAccountSession({
+        id: created.account.account_id,
+        token: created.token,
+        code: created.account.account_code,
+        label: created.account.account_label,
+      })
+      accountIdRef.current = created.account.account_id
+      setAccountMeta({
+        id: created.account.account_id,
+        code: created.account.account_code,
+        label: created.account.account_label,
+      })
+      setAccount(created.account)
+      setCapital(created.capital || null)
+      setTrades(created.trades?.trades || [])
+      setTradeSummary(created.trades?.summary || null)
+      setPositions([])
+      setOrderNote(
+        `New private demo ${created.account.account_code} — capital/trades isolated from other clients`,
+      )
+      // Reload page so WS reconnects with the new account headers
+      window.location.reload()
+    } catch (err) {
+      setError(err.message || 'Failed to create demo account')
+      setBusy(false)
+    }
+  }
 
   async function run(action) {
     setBusy(true)
@@ -493,6 +556,10 @@ export default function App() {
 
       <section className="metrics" aria-label="Account metrics">
         <div className="metric">
+          <label>Demo acct</label>
+          <strong>{accountMeta?.code || account.account_code || '—'}</strong>
+        </div>
+        <div className="metric">
           <label>Equity</label>
           <strong>${money(account.equity)}</strong>
         </div>
@@ -519,10 +586,11 @@ export default function App() {
       <section className="panel deposit-panel" aria-label="Paper deposit">
         <div className="deposit-head">
           <div>
-            <h2>Paper deposit · trial capital</h2>
+            <h2>Paper deposit · private trial capital</h2>
             <p className="meta">
-              Fake money for client demos — try different amounts and see risk / lot sizing
-              change. Trade log history is kept; open positions close into the log.
+              This browser has its own demo account ({accountMeta?.code || '…'}). Other clients
+              cannot see your capital, open trades, or history. Trade log is kept when you
+              change deposit; open positions close into the log.
             </p>
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
@@ -571,6 +639,14 @@ export default function App() {
             onClick={() => applyDeposit()}
           >
             Set deposit
+          </button>
+          <button
+            type="button"
+            disabled={busy || mode !== 'paper'}
+            onClick={() => newDemoAccount()}
+            title="Create a fresh private demo account on this browser"
+          >
+            New demo account
           </button>
         </div>
 

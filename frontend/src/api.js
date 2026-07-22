@@ -1,10 +1,54 @@
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
 const API = `${BASE}api`
 
+const ACCOUNT_KEY = 'jm_fx_account'
+
+export function loadAccountSession() {
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.id && parsed?.token) return parsed
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+export function saveAccountSession(session) {
+  if (!session?.id || !session?.token) return
+  localStorage.setItem(
+    ACCOUNT_KEY,
+    JSON.stringify({
+      id: session.id,
+      token: session.token,
+      code: session.code || '',
+      label: session.label || '',
+    }),
+  )
+}
+
+export function clearAccountSession() {
+  localStorage.removeItem(ACCOUNT_KEY)
+}
+
+function accountHeaders() {
+  const session = loadAccountSession()
+  if (!session) return {}
+  return {
+    'X-JM-Account-Id': session.id,
+    'X-JM-Account-Token': session.token,
+  }
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...accountHeaders(),
+      ...(options.headers || {}),
+    },
   })
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}))
@@ -24,6 +68,9 @@ export const api = {
     request('/execution/mode', { method: 'POST', body: JSON.stringify({ mode }) }),
   candles: (symbol = 'XAUUSD', limit = 200) =>
     request(`/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
+  createAccount: (body = {}) =>
+    request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
+  accountMe: () => request('/accounts/me'),
   account: () => request('/account'),
   capitalPreview: (amount) =>
     request(
@@ -67,9 +114,45 @@ export const api = {
     }),
 }
 
+/** Ensure this browser has its own private demo account. */
+export async function ensureAccountSession(options = {}) {
+  const existing = loadAccountSession()
+  if (existing) {
+    try {
+      const me = await api.accountMe()
+      return {
+        id: me.account_id || existing.id,
+        token: existing.token,
+        code: me.account_code || existing.code,
+        label: me.account_label || existing.label,
+        account: me,
+      }
+    } catch {
+      clearAccountSession()
+    }
+  }
+  const created = await api.createAccount({
+    label: options.label || 'Client demo',
+    deposit: options.deposit ?? 1000,
+    follow_auto: options.follow_auto !== false,
+  })
+  const session = {
+    id: created.account.account_id,
+    token: created.token,
+    code: created.account.account_code,
+    label: created.account.account_label,
+  }
+  saveAccountSession(session)
+  return { ...session, account: created.account, created }
+}
+
 export function connectFeed(onMessage) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsPath = `${BASE}api/ws`.replace(/\/{2,}/g, '/')
+  const session = loadAccountSession()
+  const qs = session
+    ? `?account_id=${encodeURIComponent(session.id)}&account_token=${encodeURIComponent(session.token)}`
+    : ''
+  const wsPath = `${BASE}api/ws${qs}`.replace(/\/{2,}/g, '/')
   const ws = new WebSocket(`${proto}://${window.location.host}${wsPath}`)
   ws.onmessage = (evt) => {
     try {

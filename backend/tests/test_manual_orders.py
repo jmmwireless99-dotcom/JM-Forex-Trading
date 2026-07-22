@@ -95,8 +95,23 @@ async def test_api_manual_order_and_stops():
         eng = get_engine()
         _seed_tick(eng, 2355.0)
 
+        created = await client.post(
+            "/api/accounts",
+            json={"deposit": 1000, "label": "manual-order-test"},
+        )
+        assert created.status_code == 200
+        acct_body = created.json()
+        headers = {
+            "X-JM-Account-Id": acct_body["account"]["account_id"],
+            "X-JM-Account-Token": acct_body["token"],
+        }
+        acct = eng.accounts.require(
+            acct_body["account"]["account_id"], acct_body["token"]
+        )
+
         res = await client.post(
             "/api/orders",
+            headers=headers,
             json={
                 "symbol": "XAUUSD",
                 "side": "BUY",
@@ -113,6 +128,7 @@ async def test_api_manual_order_and_stops():
 
         res2 = await client.post(
             "/api/orders",
+            headers=headers,
             json={
                 "symbol": "XAUUSD",
                 "side": "SELL",
@@ -123,15 +139,19 @@ async def test_api_manual_order_and_stops():
         assert res2.status_code == 200
         assert res2.json()["status"] == "REJECTED"
 
-        opens = (await client.get("/api/positions")).json()["open"]
+        opens = (await client.get("/api/positions", headers=headers)).json()["open"]
         assert len(opens) == 1
         pid = opens[0]["id"]
 
-        pos = eng.paper.open_positions()[0]
+        pos = acct.broker.open_positions()[0]
         pos.stop_loss = None
         pos.take_profit = None
 
-        res3 = await client.post(f"/api/positions/{pid}/stops", json={"auto": True})
+        res3 = await client.post(
+            f"/api/positions/{pid}/stops",
+            headers=headers,
+            json={"auto": True},
+        )
         assert res3.status_code == 200
         stops = res3.json()
         assert stops["stop_loss"] is not None

@@ -2,19 +2,29 @@ from __future__ import annotations
 
 from datetime import timezone
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from app.api.account_deps import require_paper_account
 from app.api.deps import get_engine
 from app.brokers.mt_bridge import resolve_mt_bridge
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
+from app.paper_accounts import PaperAccount
 from app.strategies import STRATEGY_REGISTRY, list_strategy_names
 from app.strategies.catalog import entry_rules_short, strategy_catalog
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import classify_session
 
 router = APIRouter()
+
+
+class CreateAccountBody(BaseModel):
+    """Create an isolated paper demo account for one client session."""
+
+    label: str | None = None
+    deposit: float | None = Field(default=None, gt=0, le=1_000_000)
+    follow_auto: bool = True
 
 
 class StartRequest(BaseModel):
@@ -328,56 +338,91 @@ async def set_strategy(body: StrategyRequest) -> dict:
     }
 
 
-@router.get("/account")
-async def account() -> dict:
+@router.post("/accounts")
+async def create_account(body: CreateAccountBody | None = None) -> dict:
+    """Create a private paper account — capital/trades/history isolated per client."""
+    body = body or CreateAccountBody()
+    return get_engine().create_client_account(
+        label=body.label,
+        deposit=body.deposit,
+        follow_auto=body.follow_auto,
+    )
+
+
+@router.get("/accounts/me")
+async def account_me(account: PaperAccount = Depends(require_paper_account)) -> dict:
+    """Return the caller's private account (requires X-JM-Account-Id + token)."""
     engine = get_engine()
-    snap = engine.account_snapshot().model_dump(mode="json")
     return {
-        **snap,
-        "capital": engine.capital_preview(),
+        **engine.account_payload(account),
+        "capital": engine.capital_preview(account=account),
+        "trades": engine._trades_payload(account),
+    }
+
+
+@router.get("/account")
+async def account(account: PaperAccount = Depends(require_paper_account)) -> dict:
+    engine = get_engine()
+    return {
+        **engine.account_payload(account),
+        "capital": engine.capital_preview(account=account),
     }
 
 
 @router.get("/account/capital")
-async def capital_preview(amount: float | None = None) -> dict:
+async def capital_preview(
+    amount: float | None = None,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
     """Preview risk sizing for a deposit amount without applying it."""
-    return get_engine().capital_preview(amount)
+    return get_engine().capital_preview(amount, account=account)
 
 
 @router.post("/account/deposit")
-async def set_deposit(body: DepositBody) -> dict:
-    """Set paper demo deposit so clients can trial different capital sizes."""
+async def set_deposit(
+    body: DepositBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Set paper demo deposit on the caller's account only."""
     engine = get_engine()
     try:
-        return await engine.set_paper_deposit(body.amount, reset=body.reset)
+        return await engine.set_paper_deposit(
+            body.amount, reset=body.reset, account=account
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/positions")
-async def positions() -> dict:
+async def positions(account: PaperAccount = Depends(require_paper_account)) -> dict:
     engine = get_engine()
-    open_pos = [p.model_dump(mode="json") for p in engine.open_positions()]
-    all_pos = open_pos
-    if hasattr(engine.paper, "all_positions"):
-        all_pos = [p.model_dump(mode="json") for p in engine.paper.all_positions()]
-    return {"open": open_pos, "all": all_pos}
+    open_pos = [p.model_dump(mode="json") for p in engine.open_positions(account)]
+    all_pos = [p.model_dump(mode="json") for p in account.broker.all_positions()]
+    return {"account_id": account.id, "open": open_pos, "all": all_pos}
 
 
 @router.get("/orders")
-async def orders() -> dict:
+async def orders(account: PaperAccount = Depends(require_paper_account)) -> dict:
     return {
-        "orders": [o.model_dump(mode="json") for o in get_engine().paper.recent_orders()]
+        "account_id": account.id,
+        "orders": [o.model_dump(mode="json") for o in account.broker.recent_orders()],
     }
 
 
 @router.get("/trades")
-async def trades(limit: int = 100, include_rejected: bool = True) -> dict:
+async def trades(
+    limit: int = 100,
+    include_rejected: bool = True,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
     engine = get_engine()
     limit = max(1, min(limit, 500))
     return {
-        "summary": engine.trade_summary(),
-        "trades": engine.trade_logs(limit, include_rejected=include_rejected),
+        "account_id": account.id,
+        "summary": engine.trade_summary(account),
+        "trades": engine.trade_logs(
+            limit, include_rejected=include_rejected, account=account
+        ),
     }
 
 
@@ -394,8 +439,11 @@ async def ticks() -> dict:
 
 
 @router.post("/orders")
-async def place_order(body: ManualOrderBody) -> dict:
-    """Manual BUY/SELL. With auto_stops=true, SL/TP attach on fill."""
+async def place_order(
+    body: ManualOrderBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Manual BUY/SELL on the caller's paper account only."""
     engine = get_engine()
     settings = get_settings()
     symbol = (body.symbol or "XAUUSD").upper()
@@ -406,7 +454,7 @@ async def place_order(body: ManualOrderBody) -> dict:
         body.stop_loss_pips is not None or body.take_profit_pips is not None
     ):
         entry = tick.ask if body.side == Side.BUY else tick.bid
-        auto_sl, auto_tp = engine.risk.stops_from_entry(
+        auto_sl, auto_tp = account.risk.stops_from_entry(
             symbol=symbol,
             side=body.side,
             entry=entry,
@@ -425,9 +473,11 @@ async def place_order(body: ManualOrderBody) -> dict:
             stop_loss=sl,
             take_profit=tp,
             attach_stops=body.auto_stops,
-        )
+        ),
+        account=account,
     )
     data = order.model_dump(mode="json")
+    data["account_id"] = account.id
     data["auto_stops"] = body.auto_stops
     data["default_sl_pips"] = settings.default_stop_loss_pips
     data["default_tp_pips"] = settings.default_take_profit_pips
@@ -435,15 +485,22 @@ async def place_order(body: ManualOrderBody) -> dict:
 
 
 @router.post("/positions/{position_id}/close")
-async def close_position(position_id: str) -> dict:
-    closed = await get_engine().close_position(position_id)
+async def close_position(
+    position_id: str,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    closed = await get_engine().close_position(position_id, account=account)
     if closed is None:
         raise HTTPException(status_code=404, detail="Position not found or already closed")
-    return closed.model_dump(mode="json")
+    return {**closed.model_dump(mode="json"), "account_id": account.id}
 
 
 @router.post("/positions/{position_id}/stops")
-async def set_position_stops(position_id: str, body: PositionStopsBody) -> dict:
+async def set_position_stops(
+    position_id: str,
+    body: PositionStopsBody,
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
     """Attach / update SL & TP after a manual (or any) open."""
     if not body.auto and body.stop_loss is None and body.take_profit is None:
         raise HTTPException(
@@ -459,22 +516,54 @@ async def set_position_stops(position_id: str, body: PositionStopsBody) -> dict:
         or body.take_profit_pips is not None,
         stop_loss_pips=body.stop_loss_pips,
         take_profit_pips=body.take_profit_pips,
+        account=account,
     )
     if updated is None:
         raise HTTPException(
             status_code=404,
             detail="Position not found, already closed, or MT modify unsupported",
         )
-    return updated.model_dump(mode="json")
+    return {**updated.model_dump(mode="json"), "account_id": account.id}
 
 
 @router.websocket("/ws")
 async def websocket_feed(ws: WebSocket) -> None:
     await ws.accept()
     engine = get_engine()
+    account_id = ws.query_params.get("account_id")
+    account_token = ws.query_params.get("account_token")
+    account: PaperAccount | None = None
+    if account_id:
+        try:
+            account = engine.accounts.require(account_id, account_token)
+        except (KeyError, PermissionError):
+            account = None
+
+    def _for_account(payload: object) -> bool:
+        """Drop money/trade events that belong to another client account."""
+        if account is None:
+            # Shared market feed only when no account bound
+            return True
+        if not isinstance(payload, dict):
+            return True
+        aid = payload.get("account_id")
+        if aid is None:
+            return True
+        return aid == account.id
 
     async def listener(message: dict) -> None:
         try:
+            event = message.get("event")
+            if event in {
+                "account",
+                "positions",
+                "trades",
+                "trade",
+                "order",
+                "position",
+                "position_closed",
+            } and not _for_account(message.get("data")):
+                return
             await ws.send_json(message)
         except Exception:
             engine.unsubscribe(listener)
@@ -482,15 +571,28 @@ async def websocket_feed(ws: WebSocket) -> None:
     engine.subscribe(listener)
     try:
         await ws.send_json({"event": "engine", "data": engine.status().model_dump(mode="json")})
-        await ws.send_json(
-            {"event": "account", "data": engine.account_snapshot().model_dump(mode="json")}
-        )
-        await ws.send_json(
-            {
-                "event": "positions",
-                "data": [p.model_dump(mode="json") for p in engine.open_positions()],
-            }
-        )
+        if account is not None:
+            await ws.send_json(
+                {"event": "account", "data": engine.account_payload(account)}
+            )
+            await ws.send_json(
+                {
+                    "event": "positions",
+                    "data": {
+                        "account_id": account.id,
+                        "positions": [
+                            p.model_dump(mode="json")
+                            for p in engine.open_positions(account)
+                        ],
+                    },
+                }
+            )
+            await ws.send_json(
+                {
+                    "event": "trades",
+                    "data": engine._trades_payload(account),
+                }
+            )
         await ws.send_json({"event": "connection", "data": engine.connection_info()})
         await ws.send_json({"event": "auto", "data": engine.auto_status()})
         await ws.send_json(
@@ -499,15 +601,6 @@ async def websocket_feed(ws: WebSocket) -> None:
                 "data": {
                     "period_seconds": engine.candles.period_seconds,
                     "candles": engine.candle_history(limit=200),
-                },
-            }
-        )
-        await ws.send_json(
-            {
-                "event": "trades",
-                "data": {
-                    "summary": engine.trade_summary(),
-                    "trades": engine.trade_logs(100),
                 },
             }
         )
