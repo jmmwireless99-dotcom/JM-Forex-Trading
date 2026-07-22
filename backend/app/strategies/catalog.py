@@ -155,7 +155,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · engulf/pin",
+        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 35-55/45-65 · engulf/pin/soft",
         "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
         "Manual BUY/SELL with auto SL/TP always available",
     ]
