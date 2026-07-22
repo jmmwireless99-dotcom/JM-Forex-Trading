@@ -30,6 +30,9 @@ function loadTvScript() {
  * Live gold chart via TradingView Advanced Chart (tv.js).
  * Uses fixed pixel height so the canvas is never 0×0 under flex layouts.
  */
+/** Private saved layout — opens only when YOU are logged into TradingView. */
+const USER_CHART_URL = 'https://www.tradingview.com/chart/Bhih3eRv/'
+
 export default function TradingViewGoldChart({
   symbol = 'TVC:GOLD',
   interval = '5',
@@ -143,11 +146,20 @@ export default function TradingViewGoldChart({
         </button>
         <a
           className="tv-open-link"
+          href={USER_CHART_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Opens your saved TradingView layout (login required)"
+        >
+          My chart (Bhih3eRv) ↗
+        </a>
+        <a
+          className="tv-open-link"
           href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(activeSymbol)}`}
           target="_blank"
           rel="noopener noreferrer"
         >
-          Open full chart ↗
+          Symbol chart ↗
         </a>
       </div>
       <div className="tv-chart-canvas">
