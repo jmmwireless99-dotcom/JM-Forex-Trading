@@ -68,6 +68,10 @@ export const api = {
     request('/execution/mode', { method: 'POST', body: JSON.stringify({ mode }) }),
   candles: (symbol = 'XAUUSD', limit = 200) =>
     request(`/candles?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
+  goldCandles: ({ interval = '5m', limit = 400 } = {}) =>
+    request(
+      `/market/gold-candles?interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`,
+    ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
   accountMe: () => request('/accounts/me'),

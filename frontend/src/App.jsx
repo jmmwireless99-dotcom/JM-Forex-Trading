@@ -732,7 +732,7 @@ export default function App() {
               }
             }}
           >
-            TradingView (live gold)
+            Live gold
           </button>
           <button
             type="button"
@@ -750,7 +750,7 @@ export default function App() {
           </button>
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
-              ? 'Real XAUUSD market chart · strategies still use paper/MT feed'
+              ? 'Live COMEX gold candles · strategies still use paper/MT feed'
               : 'Engine candles — paper sim or MT bridge when online'}
           </span>
         </div>

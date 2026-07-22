@@ -213,6 +213,17 @@ async def candles(symbol: str | None = None, limit: int = 200) -> dict:
     }
 
 
+@router.get("/market/gold-candles")
+async def gold_candles(interval: str = "5m", limit: int = 300) -> dict:
+    """Live gold OHLC for dashboard (Yahoo GC=F). Display only — not strategy feed."""
+    from app.market_data.gold_feed import fetch_gold_candles
+
+    try:
+        return fetch_gold_candles(interval=interval, limit=min(max(limit, 50), 1000))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @router.get("/desk")
 async def desk() -> dict:
     """Clean slate desk board — session/news/risk only; no auto strategies."""
