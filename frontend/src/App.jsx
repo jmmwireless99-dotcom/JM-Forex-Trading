@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, clearAccountSession, connectFeed, ensureAccountSession, saveAccountSession } from './api'
+import { api, connectFeed, ensureAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -247,44 +247,6 @@ export default function App() {
       clearInterval(deskTimer)
     }
   }, [])
-
-  async function newDemoAccount() {
-    setBusy(true)
-    setError('')
-    try {
-      clearAccountSession()
-      const created = await api.createAccount({
-        label: 'Client demo',
-        deposit: Number(depositInput) || 1000,
-        follow_auto: true,
-      })
-      saveAccountSession({
-        id: created.account.account_id,
-        token: created.token,
-        code: created.account.account_code,
-        label: created.account.account_label,
-      })
-      accountIdRef.current = created.account.account_id
-      setAccountMeta({
-        id: created.account.account_id,
-        code: created.account.account_code,
-        label: created.account.account_label,
-      })
-      setAccount(created.account)
-      setCapital(created.capital || null)
-      setTrades(created.trades?.trades || [])
-      setTradeSummary(created.trades?.summary || null)
-      setPositions([])
-      setOrderNote(
-        `New private demo ${created.account.account_code} — capital/trades isolated from other clients`,
-      )
-      // Reload page so WS reconnects with the new account headers
-      window.location.reload()
-    } catch (err) {
-      setError(err.message || 'Failed to create demo account')
-      setBusy(false)
-    }
-  }
 
   async function run(action) {
     setBusy(true)
@@ -639,14 +601,6 @@ export default function App() {
             onClick={() => applyDeposit()}
           >
             Set deposit
-          </button>
-          <button
-            type="button"
-            disabled={busy || mode !== 'paper'}
-            onClick={() => newDemoAccount()}
-            title="Create a fresh private demo account on this browser"
-          >
-            New demo account
           </button>
         </div>
 
