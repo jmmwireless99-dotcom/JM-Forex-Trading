@@ -214,32 +214,6 @@ class TradingEngine:
             ),
         }
 
-    def set_client_strategy(self, account: PaperAccount, name: str) -> dict[str, Any]:
-        """Per-account strategy lock or auto session-follow. Does not affect other accounts."""
-        self.accounts.set_strategy_pref(account, name)
-        pref = account.strategy_pref
-        if pref not in {"auto", "manual_only"}:
-            self._ensure_strategy(pref)
-        mode = (
-            "auto session-follow"
-            if pref == "auto"
-            else ("off (manual trades only)" if pref == "manual_only" else f"locked → {pref}")
-        )
-        return {
-            "ok": True,
-            "account": self.account_payload(account),
-            "strategy_pref": pref,
-            "message": (
-                f"Account {account.code} strategy set to {mode}. "
-                "Other accounts are unchanged. Trade history kept."
-            ),
-        }
-
-    def _ensure_strategy(self, name: str) -> Strategy:
-        if name not in self._strategies:
-            self._strategies[name] = create_strategy(name)
-        return self._strategies[name]
-
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if account is None and self.using_mt():
             return self.mt.snapshot()
@@ -591,58 +565,10 @@ class TradingEngine:
             **status,
         }
 
-    def _arm_entry_cooldown(self, account: PaperAccount | None = None) -> None:
-        until = time.time() + float(self.settings.entry_cooldown_seconds)
-        self._entry_cooldown_until = until
-        if account is not None:
-            account.entry_cooldown_until = until
-
-    def _strategies_needed(self, session_strategy: str | None, allow_trading: bool) -> set[str]:
-        """Which strategy engines must evaluate this tick for client prefs."""
-        needed: set[str] = set()
-        for acct in self.accounts.clients():
-            pref = (acct.strategy_pref or "auto").strip() or "auto"
-            if pref in {"manual_only", "off"}:
-                continue
-            if pref == "auto":
-                if allow_trading and session_strategy:
-                    needed.add(session_strategy)
-            elif pref in STRATEGY_REGISTRY:
-                needed.add(pref)
-        # Always keep desk display strategy warm.
-        if self.active_name in STRATEGY_REGISTRY:
-            needed.add(self.active_name)
-        return needed
-
-    def _evaluate_named_strategy(
-        self,
-        name: str,
-        tick: Tick,
-        *,
-        closed_signal: Candle | None,
-        closed_m3: Candle | None,
-    ) -> Signal | None:
-        strat = self._ensure_strategy(name)
-        uses_m3 = getattr(strat, "entry_period_seconds", None) == 180
-        if getattr(strat, "candle_driven", False):
-            if uses_m3:
-                if closed_m3 is None:
-                    return None
-                if hasattr(strat, "set_structure_bars"):
-                    strat.set_structure_bars(
-                        self.signal_candles.closed_history(tick.symbol, 240)
-                    )
-                bars = self.m3_candles.closed_history(tick.symbol, 240)
-                return strat.on_bar(bars, tick)
-            if closed_signal is None:
-                return None
-            if hasattr(strat, "set_m1_bars"):
-                strat.set_m1_bars(self.candles.closed_history(tick.symbol, 240))
-            bars = self.signal_candles.closed_history(tick.symbol, 240)
-            return strat.on_bar(bars, tick)
-        # Tick strategies can fire every tick.
-        strat.feed(tick)
-        return strat.evaluate(tick)
+    def _arm_entry_cooldown(self) -> None:
+        self._entry_cooldown_until = time.time() + float(
+            self.settings.entry_cooldown_seconds
+        )
 
     async def _london_kill_switch(self, tick: Tick) -> None:
         from app.strategies.london_session import is_past_pending_kill
@@ -893,7 +819,7 @@ class TradingEngine:
     async def _journal_close(self, position: Position, account: PaperAccount) -> None:
         row = account.journal.record_close(position)
         if row:
-            self._arm_entry_cooldown(account)
+            self._arm_entry_cooldown()
             await self._persist_trade_close(position)
             # Persist immediately — auto SL/TP closes used to stay memory-only
             # and vanished on every service restart / deploy.
@@ -923,7 +849,7 @@ class TradingEngine:
             return
         if position is not None:
             row = acct.journal.record_open_position(position, mode=self.mode)
-            self._arm_entry_cooldown(acct)
+            self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
         else:
             row = acct.journal.record_order(order, mode=self.mode)
@@ -1187,16 +1113,15 @@ class TradingEngine:
 
                 closed_signal, _forming_signal = self.signal_candles.update(tick)
                 closed_m3, _forming_m3 = self.m3_candles.update(tick)
-
-                # Session decision — used for accounts with strategy_pref="auto".
-                prices = self._signal_prices(tick.symbol)
-                decision = self.auto_router.decide(tick.timestamp, prices)
-                # Keep global desk display in sync when engine auto is on.
-                await self._apply_auto_router(tick)
+                signal = None
+                uses_m3_entry = (
+                    getattr(self.strategy, "entry_period_seconds", None) == 180
+                )
 
                 if closed_signal is not None:
+                    # Feed M5 closes into strategies — structure / standard entries.
                     await self._persist_candle(closed_signal, timeframe="M5")
-                    for strat in list(self._strategies.values()):
+                    for strat in self._strategies.values():
                         if getattr(strat, "candle_driven", False):
                             strat.feed_bar(closed_signal)
                             if hasattr(strat, "set_structure_bars"):
@@ -1209,35 +1134,44 @@ class TradingEngine:
                                 )
                         else:
                             strat.feed(tick)
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries and not uses_m3_entry:
+                        bars = self.signal_candles.closed_history(tick.symbol, 240)
+                        if getattr(self.strategy, "candle_driven", False):
+                            if hasattr(self.strategy, "set_m1_bars"):
+                                self.strategy.set_m1_bars(
+                                    self.candles.closed_history(tick.symbol, 240)
+                                )
+                            signal = self.strategy.on_bar(bars, tick)
+                        else:
+                            signal = self.strategy.evaluate(tick)
+                elif not getattr(self.strategy, "candle_driven", False):
+                    # Manual tick strategies (RSI/EMA) still evaluate every tick.
+                    self.strategy.feed(tick)
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries:
+                        signal = self.strategy.evaluate(tick)
+                else:
+                    # Keep auto status fresh even between M5 closes.
+                    await self._apply_auto_router(tick)
 
-                # Per-account strategy prefs may require several strategies each tick.
-                needed = self._strategies_needed(
-                    decision.strategy if decision.allow_trading else None,
-                    bool(decision.allow_trading),
-                )
-                for name in needed:
-                    self._ensure_strategy(name)
+                # Asia M3/M5 strategy: trigger on closed M3 with M5 structure.
+                if (
+                    signal is None
+                    and closed_m3 is not None
+                    and uses_m3_entry
+                    and getattr(self.strategy, "candle_driven", False)
+                ):
+                    if hasattr(self.strategy, "set_structure_bars"):
+                        self.strategy.set_structure_bars(
+                            self.signal_candles.closed_history(tick.symbol, 240)
+                        )
+                    allow_entries = await self._apply_auto_router(tick)
+                    if allow_entries:
+                        m3_bars = self.m3_candles.closed_history(tick.symbol, 240)
+                        signal = self.strategy.on_bar(m3_bars, tick)
 
-                signals: list[Signal] = []
-                seen_keys: set[str] = set()
-                for name in needed:
-                    if name == "manual_only":
-                        continue
-                    sig = self._evaluate_named_strategy(
-                        name,
-                        tick,
-                        closed_signal=closed_signal,
-                        closed_m3=closed_m3,
-                    )
-                    if not sig:
-                        continue
-                    key = f"{sig.strategy}:{sig.side.value}:{sig.limit_price or sig.reason}"
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    signals.append(sig)
-
-                for signal in signals:
+                if signal:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
                     signal_db_id = await self._persist_signal(signal)
@@ -1247,8 +1181,6 @@ class TradingEngine:
                         tick,
                         signal_db_id=signal_db_id,
                         london_signal_id=london_id,
-                        session_strategy=decision.strategy,
-                        allow_trading=bool(decision.allow_trading),
                     )
 
                 await self._emit("tick", tick.model_dump(mode="json"))
@@ -1275,23 +1207,10 @@ class TradingEngine:
         *,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
-        session_strategy: str | None = None,
-        allow_trading: bool = True,
     ) -> None:
-        # Fan out only to accounts whose strategy_pref wants this signal.
-        if self.using_mt():
-            targets = [self._desk]
-        else:
-            targets = [
-                acct
-                for acct in self.accounts.clients()
-                if self.accounts.accepts_strategy_signal(
-                    acct,
-                    signal_strategy=signal.strategy or "",
-                    session_strategy=session_strategy,
-                    allow_trading=allow_trading,
-                )
-            ]
+        # Auto signals fan out to each client account with that account's capital/risk.
+        # Desk book never receives client auto fills.
+        targets = self.accounts.auto_followers() if not self.using_mt() else [self._desk]
         if not targets:
             return
         for acct in targets:

@@ -56,12 +56,6 @@ class TradeSettingsBody(BaseModel):
     fixed_lots: float | None = Field(default=None, ge=0.01, le=10)
 
 
-class AccountStrategyBody(BaseModel):
-    """Per-account strategy preference (does not change other accounts)."""
-
-    name: str = Field(..., min_length=2, max_length=64)
-
-
 class StartRequest(BaseModel):
     strategy: str | None = None
 
@@ -499,38 +493,6 @@ async def account_trade_settings(
         return engine.set_client_trade_settings(account, **kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/account/strategy")
-async def account_strategy(
-    body: AccountStrategyBody,
-    account: PaperAccount = Depends(require_paper_account),
-) -> dict:
-    """Set THIS account's strategy (auto / locked / off). Other accounts unchanged."""
-    engine = get_engine()
-    try:
-        return engine.set_client_strategy(account, body.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.get("/account/strategy")
-async def get_account_strategy(
-    account: PaperAccount = Depends(require_paper_account),
-) -> dict:
-    pref = (account.strategy_pref or "auto").strip() or "auto"
-    return {
-        "ok": True,
-        "account_id": account.id,
-        "account_code": account.code,
-        "strategy_pref": pref,
-        "strategy_mode": (
-            "auto"
-            if pref == "auto"
-            else ("off" if pref in {"manual_only", "off"} else "manual")
-        ),
-        "follow_auto": account.follow_auto,
-    }
 
 
 @router.get("/account/capital")
