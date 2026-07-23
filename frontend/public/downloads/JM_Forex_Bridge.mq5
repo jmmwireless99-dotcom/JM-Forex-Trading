@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq5                                              |
-//| File bridge between JM Forex Python AI and MetaTrader 5          |
-//| Same CSV protocol as MT4 JM_Forex_Bridge.mq4                     |
+//| Minimal compile-safe bridge for JM Forex                         |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex"
-#property version   "1.00"
-#property description "JM Forex AI bridge for MT5 — executes Python signals"
+#property version   "1.02"
+#property description "JM Forex MT5 bridge"
+#property strict
 
 #include <Trade/Trade.mqh>
 
@@ -14,44 +14,39 @@ input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
 input int    InpPollMs         = 500;
 input bool   UseCommonFolder   = true;
-input string CommandFile       = "jm_command.csv";
-input string StatusFile        = "jm_status.csv";
-input string PositionsFile     = "jm_positions.csv";
-input string TickFile          = "jm_ticks.csv";
-input string AckFile           = "jm_ack.csv";
 
 CTrade trade;
 string g_last_cmd_id = "";
 
-int FileOpenBridge(string name, int mode)
+int OpenBridge(string name, int mode)
 {
    int flags = mode | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE;
    if(UseCommonFolder)
-      flags |= FILE_COMMON;
+      flags = flags | FILE_COMMON;
    return FileOpen(name, flags);
 }
 
 void WriteAck(string cmd_id, string result, string detail)
 {
-   int h = FileOpenBridge(AckFile, FILE_WRITE | FILE_REWRITE);
-   if(h == INVALID_HANDLE) return;
+   int h = OpenBridge("jm_ack.csv", FILE_WRITE | FILE_REWRITE);
+   if(h == INVALID_HANDLE)
+      return;
    FileWriteString(h, cmd_id + "," + result + "," + detail + "\n");
    FileClose(h);
 }
 
 void WriteStatus()
 {
-   int h = FileOpenBridge(StatusFile, FILE_WRITE | FILE_REWRITE);
-   if(h == INVALID_HANDLE) return;
-   // ok,balance,equity,positions,time,login
-   string line = StringFormat(
-      "ok,%.2f,%.2f,%d,%s,%I64d\n",
-      AccountInfoDouble(ACCOUNT_BALANCE),
-      AccountInfoDouble(ACCOUNT_EQUITY),
-      PositionsTotal(),
-      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS),
-      AccountInfoInteger(ACCOUNT_LOGIN)
-   );
+   int h = OpenBridge("jm_status.csv", FILE_WRITE | FILE_REWRITE);
+   if(h == INVALID_HANDLE)
+      return;
+   long login = AccountInfoInteger(ACCOUNT_LOGIN);
+   string line = "ok," +
+      DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "," +
+      DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + "," +
+      IntegerToString(PositionsTotal()) + "," +
+      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "," +
+      IntegerToString(login) + "\n";
    FileWriteString(h, line);
    FileClose(h);
 }
@@ -60,42 +55,44 @@ void WriteTicks()
 {
    double bid = SymbolInfoDouble(InpSymbol, SYMBOL_BID);
    double ask = SymbolInfoDouble(InpSymbol, SYMBOL_ASK);
-   int h = FileOpenBridge(TickFile, FILE_WRITE | FILE_REWRITE);
-   if(h == INVALID_HANDLE) return;
-   string line = StringFormat(
-      "%s,%.5f,%.5f,%s\n",
-      InpSymbol, bid, ask,
-      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS)
-   );
+   int h = OpenBridge("jm_ticks.csv", FILE_WRITE | FILE_REWRITE);
+   if(h == INVALID_HANDLE)
+      return;
+   string line = InpSymbol + "," +
+      DoubleToString(bid, 5) + "," +
+      DoubleToString(ask, 5) + "," +
+      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\n";
    FileWriteString(h, line);
    FileClose(h);
 }
 
 void WritePositions()
 {
-   int h = FileOpenBridge(PositionsFile, FILE_WRITE | FILE_REWRITE);
-   if(h == INVALID_HANDLE) return;
+   int h = OpenBridge("jm_positions.csv", FILE_WRITE | FILE_REWRITE);
+   if(h == INVALID_HANDLE)
+      return;
    FileWriteString(h, "ticket,symbol,side,lots,open_price,sl,tp,profit\n");
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
-      if(!PositionSelectByTicket(ticket)) continue;
-      if(PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
-      if(PositionGetString(POSITION_SYMBOL) != InpSymbol) continue;
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != InpSymbol)
+         continue;
       long type = PositionGetInteger(POSITION_TYPE);
       string side = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-      string line = StringFormat(
-         "%I64u,%s,%s,%.2f,%.5f,%.5f,%.5f,%.2f\n",
-         ticket,
-         PositionGetString(POSITION_SYMBOL),
-         side,
-         PositionGetDouble(POSITION_VOLUME),
-         PositionGetDouble(POSITION_PRICE_OPEN),
-         PositionGetDouble(POSITION_SL),
-         PositionGetDouble(POSITION_TP),
-         PositionGetDouble(POSITION_PROFIT)
-      );
+      string line = IntegerToString((long)ticket) + "," +
+         PositionGetString(POSITION_SYMBOL) + "," +
+         side + "," +
+         DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + "," +
+         DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN), 5) + "," +
+         DoubleToString(PositionGetDouble(POSITION_SL), 5) + "," +
+         DoubleToString(PositionGetDouble(POSITION_TP), 5) + "," +
+         DoubleToString(PositionGetDouble(POSITION_PROFIT), 2) + "\n";
       FileWriteString(h, line);
    }
    FileClose(h);
@@ -107,10 +104,14 @@ bool CloseAllMagic()
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
-      if(!PositionSelectByTicket(ticket)) continue;
-      if(PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
-      if(PositionGetString(POSITION_SYMBOL) != InpSymbol) continue;
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != InpSymbol)
+         continue;
       if(!trade.PositionClose(ticket))
          ok = false;
    }
@@ -121,11 +122,13 @@ void ProcessCommandLine(string line)
 {
    string parts[];
    int n = StringSplit(line, ',', parts);
-   if(n < 2) return;
+   if(n < 2)
+      return;
 
    string cmd_id = parts[0];
    string action = parts[1];
-   if(cmd_id == g_last_cmd_id) return;
+   if(cmd_id == g_last_cmd_id)
+      return;
    g_last_cmd_id = cmd_id;
 
    if(action == "PING")
@@ -181,15 +184,18 @@ void ProcessCommandLine(string line)
 
 void ReadCommands()
 {
-   int h = FileOpenBridge(CommandFile, FILE_READ);
-   if(h == INVALID_HANDLE) return;
+   int h = OpenBridge("jm_command.csv", FILE_READ);
+   if(h == INVALID_HANDLE)
+      return;
    while(!FileIsEnding(h))
    {
       string line = FileReadString(h);
       StringTrimLeft(line);
       StringTrimRight(line);
-      if(StringLen(line) == 0) continue;
-      if(StringFind(line, "id,action") == 0) continue;
+      if(StringLen(line) == 0)
+         continue;
+      if(StringFind(line, "id,action") == 0)
+         continue;
       ProcessCommandLine(line);
    }
    FileClose(h);
@@ -203,7 +209,7 @@ int OnInit()
    WriteTicks();
    WritePositions();
    Print("JM Forex MT5 Bridge ready on ", InpSymbol);
-   return INIT_SUCCEEDED;
+   return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
