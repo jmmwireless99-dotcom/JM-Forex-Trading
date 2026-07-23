@@ -77,6 +77,7 @@ class PaperAccount:
     last_name: str = ""
     email: str = ""
     mt5_login: str = ""  # same as code for client MT5-linked accounts
+    mt5_server: str = ""  # e.g. VantageMarkets-Demo — metadata only, per account
 
     def profile_public(self) -> dict:
         """Safe profile fields (no token / password)."""
@@ -92,6 +93,7 @@ class PaperAccount:
             "last_name": self.last_name or "",
             "email": self.email or "",
             "mt5_login": self.mt5_login or self.code,
+            "mt5_server": self.mt5_server or "",
             "created_at": self.created_at.isoformat(),
         }
 
@@ -108,6 +110,7 @@ class PaperAccount:
             "last_name": self.last_name or "",
             "email": self.email or "",
             "mt5_login": self.mt5_login or self.code,
+            "mt5_server": self.mt5_server or "",
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
             "balance": snap.balance,
@@ -228,6 +231,7 @@ class PaperAccountRegistry:
             last_name=ln,
             email=mail,
             mt5_login=mt5 or (code if not is_desk and str(code).isdigit() else ""),
+            mt5_server="",
         )
         with self._lock:
             if acc.code.upper() in self._by_code:
@@ -322,6 +326,39 @@ class PaperAccountRegistry:
                 ):
                     raise PermissionError("Current password is incorrect")
             account.password_hash = hash_password(new_password)
+            self._save()
+        return account
+
+    def sync_mt5_credentials(
+        self,
+        account: PaperAccount,
+        *,
+        mt5_login: str | None = None,
+        mt5_password: str | None = None,
+        mt5_server: str | None = None,
+        force_password: bool = False,
+    ) -> PaperAccount:
+        """Attach MT5 metadata + login password to ONE account only.
+
+        Password is stored hashed for JM FX login. Never applied to other accounts.
+        """
+        with self._lock:
+            if mt5_login is not None and str(mt5_login).strip():
+                login = normalize_mt5_login(mt5_login)
+                # Keep code aligned with MT5 login for this client.
+                old = account.code.upper()
+                if old in self._by_code and self._by_code[old] == account.id:
+                    self._by_code.pop(old, None)
+                account.code = login
+                account.mt5_login = login
+                self._by_code[login.upper()] = account.id
+            if mt5_server is not None:
+                account.mt5_server = str(mt5_server).strip()[:64]
+            if mt5_password is not None and str(mt5_password).strip():
+                if account.password_hash and not force_password:
+                    # Admin sync path uses force_password=True
+                    raise PermissionError("Password already set — use force_password")
+                account.password_hash = hash_password(str(mt5_password))
             self._save()
         return account
 
