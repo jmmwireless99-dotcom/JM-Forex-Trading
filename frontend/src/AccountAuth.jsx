@@ -215,7 +215,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                     setError('')
                   }}
                 />
-                <span>Link live MT5 account (optional — not for paper demos)</span>
+                <span>Link live MT4/MT5 account (optional — not for paper demos)</span>
               </label>
 
               {linkMt5 ? (
@@ -255,18 +255,18 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                     />
                   </label>
                   <label>
-                    MT5 account
+                    MT4 / MT5 account
                     <input
                       value={code}
                       onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                      placeholder="e.g. 25817283"
+                      placeholder="e.g. 25817283 or 893283499"
                       inputMode="numeric"
                       autoComplete="username"
                       required
                     />
                   </label>
                   <p className="meta">
-                    Live MT5 only for this login when the Windows bridge reports the same
+                    Live MT only for this login when the Windows bridge reports the same
                     account number. Other JM FX accounts stay paper.
                   </p>
                 </>

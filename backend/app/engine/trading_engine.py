@@ -297,10 +297,10 @@ class TradingEngine:
                 "connected_mt_login": self.connected_mt_login(),
                 "binding": "waiting_mt5",
                 "note": (
-                    "MT5 bridge offline — open MT5 + JM_Forex_Bridge EA + RUN_AGENT.bat"
+                    f"{(self.mode or 'mt5').upper()} bridge offline — open terminal + JM_Forex_Bridge EA + RUN_AGENT.bat"
                     if not self.mt_online()
                     else (
-                        "Connected MT5 login does not match this account "
+                        "Connected MT login does not match this account "
                         f"(connected={self.connected_mt_login()}, yours={acct.mt5_login or acct.code})"
                     )
                 ),
@@ -1110,10 +1110,10 @@ class TradingEngine:
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
             "note": (
-                "Bound to live MT5 — balance/equity/positions mirror the terminal"
+                "Bound to live MT — balance/equity/positions mirror the terminal"
                 if bound
                 else (
-                    "MT5 account — waiting for bridge (RUN_AGENT + EA). No paper deposit."
+                    "MT account — waiting for bridge (RUN_AGENT + EA). No paper deposit."
                     if mt5_client
                     else "Paper demo capital for this account only — other clients cannot see it"
                 )
@@ -1613,9 +1613,9 @@ class TradingEngine:
                 )
             else:
                 reason = (
-                    "This JM FX login is not bound to the connected MT5 terminal. "
-                    f"Connected MT5={self.connected_mt_login() or 'unknown'} · "
-                    f"your mt5_login={acct.mt5_login or acct.code}"
+                    "This JM FX login is not bound to the connected MT terminal. "
+                    f"Connected={self.connected_mt_login() or 'unknown'} · "
+                    f"your login={acct.mt5_login or acct.code}"
                 )
             rejected = Order(
                 symbol=request.symbol,
