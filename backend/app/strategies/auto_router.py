@@ -164,4 +164,10 @@ class AutoStrategyRouter:
                 "slot": "Off-hours",
                 "strategies": "Stand aside",
             },
+            {
+                "days": "Mon-Fri",
+                "utc": "every hour",
+                "slot": "Auto transfer",
+                "strategies": "Re-check session map each UTC hour — kusang lilipat",
+            },
         ]

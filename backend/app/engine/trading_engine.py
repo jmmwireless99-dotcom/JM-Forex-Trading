@@ -5,7 +5,7 @@ import math
 import random
 import time
 from collections import deque
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from app.brokers.market_data import MarketDataSimulator
@@ -109,6 +109,8 @@ class TradingEngine:
         self._last_transfer_note: str | None = None
         self._journaled_limit_ids: set[str] = set()
         self._london_signal_ids: dict[str, str] = {}  # order.id -> london_signal uuid
+        self._last_hourly_transfer_at: float = 0.0
+        self._last_transfer_hour_key: str | None = None
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -498,6 +500,9 @@ class TradingEngine:
             if target and target in STRATEGY_REGISTRY:
                 self._park_strategy(target, note=note)
                 self._last_session_slot = rec.get("session")
+            boot_ts = utcnow()
+            self._last_hourly_transfer_at = time.time()
+            self._last_transfer_hour_key = self._utc_hour_key(boot_ts)
         self.running = True
         self._started_at = time.time()
         self._task = asyncio.create_task(self._loop())
@@ -582,11 +587,11 @@ class TradingEngine:
             return [c.close for c in bars]
         return self.strategy.prices(symbol)
 
-    def recommended_now(self) -> dict:
+    def recommended_now(self, ts=None) -> dict:
         """Session clock + recommended session strategy."""
-        ts = self.last_tick_at or utcnow()
+        when = ts or self.last_tick_at or utcnow()
         prices = self._signal_prices()
-        rec = self.auto_router.recommend(ts, prices)
+        rec = self.auto_router.recommend(when, prices)
         return {
             **rec,
             "auto_enabled": self.auto_enabled,
@@ -597,9 +602,19 @@ class TradingEngine:
     def auto_status(self) -> dict:
         decision = self.auto_router.last_decision
         rec = self.recommended_now()
+        interval = max(60, int(self.settings.auto_transfer_interval_seconds))
+        last_at = self._last_hourly_transfer_at or None
+        next_in = None
+        if last_at:
+            next_in = max(0, round(interval - (time.time() - last_at)))
         return {
             "enabled": self.auto_enabled,
             "session_follow": self.auto_enabled,
+            "hourly_transfer": True,
+            "transfer_interval_seconds": interval,
+            "last_hourly_transfer_at": last_at,
+            "next_hourly_transfer_in_seconds": next_in,
+            "last_transfer_hour": self._last_transfer_hour_key,
             "active_strategy": self.active_name,
             "display": self.active_name,
             "session_slot": self._last_session_slot,
@@ -608,6 +623,74 @@ class TradingEngine:
             "recommended": rec,
             "schedule": self.auto_router.schedule_table(),
         }
+
+    def _utc_hour_key(self, ts) -> str:
+        utc = ts.astimezone(timezone.utc)
+        return utc.strftime("%Y-%m-%dT%H")
+
+    def _hourly_transfer_due(self, ts) -> bool:
+        """True on UTC hour roll, or when the transfer interval has elapsed."""
+        if not self.auto_enabled:
+            return False
+        hour_key = self._utc_hour_key(ts)
+        if hour_key != self._last_transfer_hour_key:
+            return True
+        interval = max(60, int(self.settings.auto_transfer_interval_seconds))
+        if self._last_hourly_transfer_at <= 0:
+            return True
+        return (time.time() - self._last_hourly_transfer_at) >= interval
+
+    async def _run_hourly_auto_transfer(self, tick: Tick) -> bool:
+        """Hourly session-follow: kusang lilipat to the strategy for this UTC hour."""
+        if not self.auto_enabled:
+            return False
+        if not self._hourly_transfer_due(tick.timestamp):
+            return False
+
+        previous = self.active_name
+        from_slot = self._last_session_slot
+        rec = self.recommended_now(tick.timestamp)
+        target = rec.get("transfer_to") or rec.get("strategy")
+        hour_key = self._utc_hour_key(tick.timestamp)
+        hour_label = hour_key[-2:]
+        stand_aside = False
+        if not target:
+            stand_aside = True
+            target, note = self._stand_aside_park_target(tick.timestamp)
+        else:
+            note = (
+                f"Hourly auto-transfer @ {hour_label}:00 UTC → {target} "
+                f"({rec.get('session')})"
+            )
+
+        switched = False
+        if target and target in STRATEGY_REGISTRY:
+            switched = self._park_strategy(target, note=note)
+            if not switched:
+                # Same strategy — still refresh the hourly note so UI shows the beat.
+                self._last_transfer_note = note
+            self._last_session_slot = rec.get("session")
+
+        self._last_hourly_transfer_at = time.time()
+        self._last_transfer_hour_key = hour_key
+
+        await self._emit("engine", self.status().model_dump(mode="json"))
+        await self._emit("auto", self.auto_status())
+        await self._emit(
+            "transfer",
+            {
+                "from": previous,
+                "to": self.active_name,
+                "from_slot": from_slot,
+                "to_slot": self._last_session_slot,
+                "strategy": self.active_name,
+                "hour_utc": hour_key,
+                "switched": switched,
+                "stand_aside": stand_aside,
+                "note": self._last_transfer_note,
+            },
+        )
+        return switched
 
     def _park_strategy(self, name: str, *, note: str) -> bool:
         """Switch active strategy. Returns True if changed."""
@@ -660,6 +743,9 @@ class TradingEngine:
         if target and target in STRATEGY_REGISTRY:
             switched = self._park_strategy(target, note=note)
             self._last_session_slot = rec.get("session")
+        ts = self.last_tick_at or utcnow()
+        self._last_hourly_transfer_at = time.time()
+        self._last_transfer_hour_key = self._utc_hour_key(ts)
         if start_engine and not self.running:
             await self.start()
         status = self.status().model_dump(mode="json")
@@ -1231,6 +1317,10 @@ class TradingEngine:
                 self.ticks_processed += 1
                 self.last_tick_at = tick.timestamp
                 self._recent_ticks[tick.symbol] = tick
+
+                # Hourly session auto-transfer — kusang lilipat every UTC hour.
+                if self.auto_enabled:
+                    await self._run_hourly_auto_transfer(tick)
 
                 # Paper books keep marking even when the MT bridge feeds ticks.
                 # Bound MT5 clients mirror the terminal — skip their paper broker.

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Avoid flip-flopping between strategies / overtrading paper noise
     strategy_stick_seconds: int = 300
     entry_cooldown_seconds: int = 120
+    # Re-run session auto-transfer at least this often (default: every hour).
+    # Also fires immediately when the UTC hour rolls, so strategies kusang lilipat.
+    auto_transfer_interval_seconds: int = 3600
     # Chart candles (M1) vs signal timeframe for entries (M5)
     candle_period_seconds: int = 60
     signal_period_seconds: int = 300

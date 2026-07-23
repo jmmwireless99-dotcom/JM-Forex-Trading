@@ -595,9 +595,9 @@ export default function App() {
             className="btn-ghost"
             disabled={busy}
             onClick={() => autoTransferBySession()}
-            title="Auto follow by session time (overrides manual lock)"
+            title="Auto follow by session — also re-checks every UTC hour by itself"
           >
-            Auto transfer (session)
+            Auto transfer (hourly)
           </button>
           <button
             className="btn-ghost"
@@ -672,6 +672,14 @@ export default function App() {
             </span>
             {autoInfo?.last_transfer ? (
               <span className="meta">Note: {autoInfo.last_transfer}</span>
+            ) : null}
+            {autoInfo?.hourly_transfer ? (
+              <span className="meta">
+                Hourly auto-transfer ON
+                {autoInfo.next_hourly_transfer_in_seconds != null
+                  ? ` · next check ~${Math.max(1, Math.ceil(autoInfo.next_hourly_transfer_in_seconds / 60))}m`
+                  : ''}
+              </span>
             ) : null}
           </div>
           )
@@ -1252,7 +1260,7 @@ export default function App() {
           </div>
 
           <div className="entry-rules entry-rules-compact">
-            <strong>Session schedule (Mon–Fri UTC)</strong>
+            <strong>Session schedule (Mon–Fri UTC) · auto-transfer every hour</strong>
             <ul className="auto-schedule">
               {(autoInfo?.schedule || []).map((row) => (
                 <li key={`${row.slot}-${row.utc}`}>
