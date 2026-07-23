@@ -209,11 +209,15 @@ export async function restoreAccountSession() {
 
 export async function registerAccount(options = {}) {
   const created = await api.createAccount({
-    label: options.label || 'Client demo',
+    label: options.label,
     deposit: options.deposit ?? 1000,
     follow_auto: options.follow_auto !== false,
     password: options.password,
     avatar: options.avatar || undefined,
+    first_name: options.first_name,
+    last_name: options.last_name,
+    email: options.email,
+    mt5_login: options.mt5_login,
   })
   const session = sessionFromAuthResponse(created)
   saveAccountSession(session)

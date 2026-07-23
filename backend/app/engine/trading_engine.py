@@ -125,6 +125,10 @@ class TradingEngine:
         follow_auto: bool = True,
         password: str | None = None,
         avatar: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        email: str | None = None,
+        mt5_login: str | None = None,
     ) -> dict[str, Any]:
         """Provision an isolated paper account for one client browser/session."""
         acct = self.accounts.create(
@@ -134,6 +138,10 @@ class TradingEngine:
             is_desk=False,
             password=password,
             avatar=avatar,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            mt5_login=mt5_login,
         )
         return {
             "ok": True,
@@ -142,13 +150,13 @@ class TradingEngine:
             "capital": self.capital_preview(acct.broker.deposit, account=acct),
             "trades": self._trades_payload(acct),
             "message": (
-                "New demo account created. Save your account code + password — "
-                "only this login can see its capital, trades, and history."
+                "Account created. Login with your MT5 account number + MT5 password. "
+                "Trade history stays on this login."
             ),
         }
 
     def login_client_account(self, *, code: str, password: str) -> dict[str, Any]:
-        """Authenticate by code + password. Trade history is never reset."""
+        """Authenticate by MT5 account + password. Trade history is never reset."""
         acct = self.accounts.authenticate(code, password)
         return {
             "ok": True,
@@ -156,7 +164,7 @@ class TradingEngine:
             "token": acct.token,
             "capital": self.capital_preview(account=acct),
             "trades": self._trades_payload(acct),
-            "message": f"Signed in as {acct.code} — trade history kept.",
+            "message": f"Signed in as {acct.mt5_login or acct.code} — trade history kept.",
         }
 
     def update_client_profile(

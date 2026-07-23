@@ -33,10 +33,14 @@ class CreateAccountBody(BaseModel):
     follow_auto: bool = True
     password: str | None = Field(default=None, min_length=6, max_length=128)
     avatar: str | None = None
+    first_name: str | None = Field(default=None, max_length=64)
+    last_name: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=120)
+    mt5_login: str | None = Field(default=None, max_length=16)
 
 
 class LoginAccountBody(BaseModel):
-    """Sign in with account code + password (history is never reset)."""
+    """Sign in with MT5 account number + password (history is never reset)."""
 
     code: str = Field(..., min_length=4, max_length=16)
     password: str = Field(..., min_length=6, max_length=128)
@@ -454,6 +458,10 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
             follow_auto=body.follow_auto,
             password=body.password,
             avatar=body.avatar,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            email=body.email,
+            mt5_login=body.mt5_login,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -461,7 +469,7 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
 
 @router.post("/accounts/login")
 async def login_account(body: LoginAccountBody) -> dict:
-    """Login with account code + password. Does not reset trade history."""
+    """Login with MT5 account + password. Does not reset trade history."""
     engine = get_engine()
     try:
         return engine.login_client_account(code=body.code, password=body.password)
@@ -483,6 +491,8 @@ async def lookup_account(code: str) -> dict:
         "label": acc.label,
         "avatar": acc.avatar or None,
         "has_password": bool(acc.password_hash),
+        "mt5_login": acc.mt5_login or acc.code,
+        "email": acc.email or None,
     }
 
 

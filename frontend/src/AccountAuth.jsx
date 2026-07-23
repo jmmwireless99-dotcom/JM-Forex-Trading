@@ -36,14 +36,17 @@ function AvatarMark({ avatar, label, code }) {
 }
 
 /**
- * Login / Register gate. Switching accounts only swaps the browser session —
- * server trade journals are never cleared.
+ * Login / Register gate.
+ * Username = MT5 account number · Password = MT5 password.
+ * Server stores a hash only — trade journals never cleared on login.
  */
 export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   const [tab, setTab] = useState(initialTab === 'register' ? 'register' : 'login')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
-  const [label, setLabel] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [deposit, setDeposit] = useState('1000')
   const [avatar, setAvatar] = useState('')
   const [busy, setBusy] = useState(false)
@@ -70,9 +73,9 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   }
 
   async function previewCode(nextCode) {
-    setCode(nextCode)
     const cleaned = String(nextCode || '').trim()
-    if (cleaned.length < 4) {
+    setCode(cleaned)
+    if (cleaned.length < 5) {
       setHint('')
       return
     }
@@ -94,13 +97,26 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
         const session = await loginAccount({ code, password })
         onAuthed(session)
       } else {
+        const mt5 = String(code || '').trim()
+        if (!/^\d{5,16}$/.test(mt5)) {
+          throw new Error('MT5 account must be 5–16 digits')
+        }
         if (!password || password.length < 6) {
-          throw new Error('Password must be at least 6 characters')
+          throw new Error('MT5 password must be at least 6 characters')
+        }
+        if (!firstName.trim() || !lastName.trim()) {
+          throw new Error('First name and last name are required')
+        }
+        if (!email.trim() || !email.includes('@')) {
+          throw new Error('Gmail / email is required')
         }
         const session = await registerAccount({
-          label: label || 'Client demo',
-          deposit: Number(deposit) || 1000,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
+          mt5_login: mt5,
           password,
+          deposit: Number(deposit) || 1000,
           avatar: avatar || undefined,
         })
         onAuthed(session)
@@ -119,7 +135,10 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           <h1 className="brand">
             JM <span>Forex</span>
           </h1>
-          <p>Demo account login — trade history stays with your account code.</p>
+          <p>
+            Client login — <strong>username = MT5 account</strong>,{' '}
+            <strong>password = MT5 password</strong>. History stays per account.
+          </p>
         </div>
 
         <div className="auth-tabs" role="tablist">
@@ -135,13 +154,13 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
             className={tab === 'register' ? 'on' : ''}
             onClick={() => setTab('register')}
           >
-            Register
+            Create account
           </button>
         </div>
 
         {recent.length && tab === 'login' ? (
           <div className="auth-recent">
-            <span className="meta">Switch account</span>
+            <span className="meta">Recent MT5 accounts</span>
             <div className="auth-recent-row">
               {recent.map((a) => (
                 <button
@@ -170,13 +189,48 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           {tab === 'register' ? (
             <>
               <label>
-                Display name
+                First name
                 <input
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. Joel Desk"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. Joel"
                   maxLength={64}
-                  autoComplete="nickname"
+                  autoComplete="given-name"
+                  required
+                />
+              </label>
+              <label>
+                Last name
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Manalo"
+                  maxLength={64}
+                  autoComplete="family-name"
+                  required
+                />
+              </label>
+              <label>
+                Gmail / email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@gmail.com"
+                  maxLength={120}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+              <label>
+                MT5 account
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                  placeholder="e.g. 25817283"
+                  inputMode="numeric"
+                  autoComplete="username"
+                  required
                 />
               </label>
               <label>
@@ -192,7 +246,11 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
               <label className="auth-logo-field">
                 Logo / avatar (optional)
                 <div className="auth-logo-row">
-                  <AvatarMark avatar={avatar} label={label} code="+" />
+                  <AvatarMark
+                    avatar={avatar}
+                    label={`${firstName} ${lastName}`.trim()}
+                    code={code || '+'}
+                  />
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onLogoPick} />
                   {avatar ? (
                     <button type="button" className="btn-ghost" onClick={() => setAvatar('')}>
@@ -204,11 +262,11 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
             </>
           ) : (
             <label>
-              Account code
+              MT5 account
               <input
                 value={code}
-                onChange={(e) => previewCode(e.target.value.toUpperCase())}
-                placeholder="e.g. DA4714"
+                onChange={(e) => previewCode(e.target.value.replace(/[^\dA-Za-z]/g, '').slice(0, 16))}
+                placeholder="e.g. 25817283"
                 autoComplete="username"
                 required
               />
@@ -217,12 +275,12 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           )}
 
           <label>
-            Password
+            MT5 password
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={tab === 'register' ? 'min 6 characters' : '••••••••'}
+              placeholder={tab === 'register' ? 'same as your MT5 password' : '••••••••'}
               autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
               required
               minLength={6}
@@ -237,8 +295,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
         </form>
 
         <p className="meta auth-foot">
-          Logout / Switch never deletes trades. History stays on your account code + password.
-          Use a recent account chip below to switch faster.
+          JM FX stores a password hash only (not plain MT5 password for broker login).
+          Each MT5 account has its own capital + trade history.
         </p>
       </div>
     </div>

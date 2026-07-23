@@ -27,6 +27,34 @@ def _short_code() -> str:
     return secrets.token_hex(3).upper()  # 6 chars
 
 
+def normalize_mt5_login(raw: str | None) -> str:
+    """MT5 login numbers are digits — used as JM FX username."""
+    s = str(raw or "").strip()
+    if not s:
+        raise ValueError("MT5 account is required")
+    if not s.isdigit() or not (5 <= len(s) <= 16):
+        raise ValueError("MT5 account must be 5–16 digits (e.g. 25817283)")
+    return s
+
+
+def normalize_email(raw: str | None) -> str:
+    s = str(raw or "").strip().lower()
+    if not s:
+        raise ValueError("Gmail / email is required")
+    if "@" not in s or "." not in s.split("@")[-1] or len(s) > 120:
+        raise ValueError("Enter a valid email (e.g. name@gmail.com)")
+    return s
+
+
+def normalize_person_name(raw: str | None, *, field: str) -> str:
+    s = " ".join(str(raw or "").strip().split())
+    if not s:
+        raise ValueError(f"{field} is required")
+    if len(s) > 64:
+        raise ValueError(f"{field} is too long")
+    return s
+
+
 @dataclass
 class PaperAccount:
     """One client's paper book: capital, positions, and trade log."""
@@ -45,6 +73,10 @@ class PaperAccount:
     avatar: str | None = None  # data-URL logo
     # When set, strategy auto-fills (incl. London Judas) use this lot size exactly.
     fixed_lots: float | None = None
+    first_name: str = ""
+    last_name: str = ""
+    email: str = ""
+    mt5_login: str = ""  # same as code for client MT5-linked accounts
 
     def profile_public(self) -> dict:
         """Safe profile fields (no token / password)."""
@@ -56,6 +88,10 @@ class PaperAccount:
             "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
             "fixed_lots": self.fixed_lots,
+            "first_name": self.first_name or "",
+            "last_name": self.last_name or "",
+            "email": self.email or "",
+            "mt5_login": self.mt5_login or self.code,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -68,6 +104,10 @@ class PaperAccount:
             "avatar": self.avatar or None,
             "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
+            "first_name": self.first_name or "",
+            "last_name": self.last_name or "",
+            "email": self.email or "",
+            "mt5_login": self.mt5_login or self.code,
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
             "balance": snap.balance,
@@ -132,6 +172,10 @@ class PaperAccountRegistry:
         is_desk: bool = False,
         password: str | None = None,
         avatar: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        email: str | None = None,
+        mt5_login: str | None = None,
     ) -> PaperAccount:
         amount = float(deposit if deposit is not None else self.settings.initial_balance)
         amount = max(50.0, min(amount, 1_000_000.0))
@@ -142,10 +186,36 @@ class PaperAccountRegistry:
         logo = None
         if avatar is not None:
             logo = normalize_avatar(avatar) or None
+
+        fn = ln = mail = mt5 = ""
+        code = _short_code()
+        mt5_raw = str(mt5_login).strip() if mt5_login is not None else ""
+        if not is_desk and mt5_raw:
+            # Client accounts linked to an MT5 login number.
+            fn = normalize_person_name(first_name, field="First name")
+            ln = normalize_person_name(last_name, field="Last name")
+            mail = normalize_email(email)
+            mt5 = normalize_mt5_login(mt5_raw)
+            code = mt5
+            if not pwd_hash:
+                raise ValueError("MT5 password is required (min 6 characters)")
+            with self._lock:
+                if mt5.upper() in self._by_code:
+                    raise ValueError("This MT5 account is already registered")
+                for acc in self._accounts.values():
+                    if (acc.email or "").lower() == mail:
+                        raise ValueError("This email is already registered")
+
+        display = (label or "").strip()
+        if not display and (fn or ln):
+            display = f"{fn} {ln}".strip()
+        if not display:
+            display = f"Demo {amount:,.0f}"
+
         acc = PaperAccount(
             id=str(uuid.uuid4()),
-            code=_short_code(),
-            label=(label or "").strip() or f"Demo {amount:,.0f}",
+            code=code,
+            label=display[:64],
             token=secrets.token_urlsafe(24),
             broker=broker,
             journal=journal,
@@ -154,19 +224,26 @@ class PaperAccountRegistry:
             is_desk=is_desk,
             password_hash=pwd_hash,
             avatar=logo,
+            first_name=fn,
+            last_name=ln,
+            email=mail,
+            mt5_login=mt5 or (code if not is_desk and str(code).isdigit() else ""),
         )
         with self._lock:
+            if acc.code.upper() in self._by_code:
+                raise ValueError("This MT5 account is already registered")
             self._accounts[acc.id] = acc
             self._by_token[acc.token] = acc.id
             self._by_code[acc.code.upper()] = acc.id
             self._save()
         log.info(
-            "paper account created id=%s code=%s deposit=%s desk=%s has_password=%s",
+            "paper account created id=%s code=%s deposit=%s desk=%s has_password=%s mt5=%s",
             acc.id,
             acc.code,
             amount,
             is_desk,
             bool(pwd_hash),
+            bool(mt5),
         )
         return acc
 
@@ -195,17 +272,18 @@ class PaperAccountRegistry:
         return acc
 
     def authenticate(self, code: str, password: str) -> PaperAccount:
-        """Login with account code + password. Never clears trade history."""
-        acc = self.get_by_code(code)
+        """Login with MT5 account (or legacy code) + password. Never clears history."""
+        key = (code or "").strip()
+        acc = self.get_by_code(key)
         if acc is None or acc.is_desk:
-            raise KeyError("Invalid account code or password")
+            raise KeyError("Invalid MT5 account or password")
         if not acc.password_hash:
             raise PermissionError(
                 "This account has no password yet. Open the desk on the device "
                 "that still has the session, then set a password in Profile."
             )
         if not verify_password(password, acc.password_hash):
-            raise PermissionError("Invalid account code or password")
+            raise PermissionError("Invalid MT5 account or password")
         return acc
 
     def update_profile(
@@ -313,6 +391,10 @@ class PaperAccountRegistry:
                         "fixed_lots": acc.fixed_lots,
                         "follow_auto": acc.follow_auto,
                         "is_desk": False,
+                        "first_name": acc.first_name or "",
+                        "last_name": acc.last_name or "",
+                        "email": acc.email or "",
+                        "mt5_login": acc.mt5_login or "",
                         "created_at": acc.created_at.isoformat(),
                         "deposit": snap.deposit,
                         "balance": snap.balance,
@@ -446,6 +528,10 @@ class PaperAccountRegistry:
                         if row.get("fixed_lots") is not None
                         else None
                     ),
+                    first_name=str(row.get("first_name") or ""),
+                    last_name=str(row.get("last_name") or ""),
+                    email=str(row.get("email") or ""),
+                    mt5_login=str(row.get("mt5_login") or row.get("code") or ""),
                 )
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc
