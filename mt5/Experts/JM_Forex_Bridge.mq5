@@ -43,12 +43,14 @@ void WriteStatus()
 {
    int h = FileOpenBridge(StatusFile, FILE_WRITE | FILE_REWRITE);
    if(h == INVALID_HANDLE) return;
+   // ok,balance,equity,positions,time,login
    string line = StringFormat(
-      "ok,%.2f,%.2f,%d,%s\n",
+      "ok,%.2f,%.2f,%d,%s,%I64d\n",
       AccountInfoDouble(ACCOUNT_BALANCE),
       AccountInfoDouble(ACCOUNT_EQUITY),
       PositionsTotal(),
-      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS)
+      TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS),
+      AccountInfoInteger(ACCOUNT_LOGIN)
    );
    FileWriteString(h, line);
    FileClose(h);

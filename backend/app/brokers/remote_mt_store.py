@@ -16,6 +16,7 @@ class RemoteMtState:
     last_push_at: float = 0.0
     agent_host: str = ""
     symbol: str = "XAUUSD"
+    mt_login: str = ""
     pending_command_csv: str = ""
     pending_command_id: str = ""
     pending_set_at: float = 0.0
@@ -42,6 +43,11 @@ def remote_push(
     with st.lock:
         if status_csv:
             st.status_csv = status_csv
+            # ok,balance,equity,positions,time[,login]
+            line = status_csv.strip().splitlines()[-1] if status_csv.strip() else ""
+            parts = line.split(",")
+            if len(parts) >= 6 and str(parts[5]).strip().isdigit():
+                st.mt_login = str(parts[5]).strip()
         if ticks_csv:
             st.ticks_csv = ticks_csv
         if positions_csv:
@@ -65,6 +71,7 @@ def remote_push(
             "last_push_at": st.last_push_at,
             "pending_command": bool(st.pending_command_csv),
             "command": pending,
+            "mt_login": st.mt_login or None,
             "age_seconds": 0.0,
         }
 
@@ -121,6 +128,13 @@ def remote_snapshot_info() -> dict:
             "age_seconds": round(age, 2) if age is not None else None,
             "agent_host": st.agent_host or None,
             "symbol": st.symbol,
+            "mt_login": st.mt_login or None,
             "pending_command": bool(st.pending_command_csv),
             "bridge_dir": "remote://windows-agent",
         }
+
+
+def remote_mt_login() -> str | None:
+    st = _STATE
+    with st.lock:
+        return st.mt_login or None

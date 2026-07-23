@@ -598,8 +598,16 @@ async def set_deposit(
 async def positions(account: PaperAccount = Depends(require_paper_account)) -> dict:
     engine = get_engine()
     open_pos = [p.model_dump(mode="json") for p in engine.open_positions(account)]
-    all_pos = [p.model_dump(mode="json") for p in account.broker.all_positions()]
-    return {"account_id": account.id, "open": open_pos, "all": all_pos}
+    if engine.is_mt_bound(account):
+        all_pos = open_pos
+    else:
+        all_pos = [p.model_dump(mode="json") for p in account.broker.all_positions()]
+    return {
+        "account_id": account.id,
+        "open": open_pos,
+        "all": all_pos,
+        "mt_bound": engine.is_mt_bound(account),
+    }
 
 
 @router.get("/orders")

@@ -223,7 +223,7 @@ class TradingEngine:
         }
 
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
-        if account is None and self.using_mt():
+        if self.is_mt_bound(account):
             return self.mt.snapshot()
         acct = account or self._desk
         return acct.broker.snapshot()
@@ -232,8 +232,25 @@ class TradingEngine:
         acct = account or self._desk
         if account is None and self.using_mt():
             snap = self.mt.snapshot().model_dump(mode="json")
-            return {**snap, "account_id": None, "account_code": None}
-        return acct.snapshot_payload()
+            return {
+                **snap,
+                "account_id": None,
+                "account_code": self.connected_mt_login(),
+                "mt5_login": self.connected_mt_login(),
+                "mt_bound": True,
+            }
+        if account is not None and self.is_mt_bound(account):
+            snap = self.mt.snapshot().model_dump(mode="json")
+            return {
+                **snap,
+                **acct.profile_public(),
+                "paper": False,
+                "mt_bound": True,
+                "mt5_login": acct.mt5_login or acct.code,
+            }
+        payload = acct.snapshot_payload()
+        payload["mt_bound"] = False
+        return payload
 
     def trade_logs(
         self,
@@ -262,6 +279,8 @@ class TradingEngine:
 
     def open_positions(self, account: PaperAccount | None = None) -> list[Position]:
         if account is None and self.using_mt():
+            return self.mt.open_positions()
+        if account is not None and self.is_mt_bound(account):
             return self.mt.open_positions()
         acct = account or self._desk
         return acct.broker.open_positions()
@@ -293,6 +312,35 @@ class TradingEngine:
 
     def using_mt(self) -> bool:
         return self.mode in {"mt4", "mt5"} and self.mt_online()
+
+    def connected_mt_login(self) -> str | None:
+        """MT5 account number reported by the Windows bridge EA (if available)."""
+        if not self.mt:
+            return None
+        try:
+            from app.brokers.remote_mt_store import remote_mt_login
+
+            login = remote_mt_login()
+            if login:
+                return str(login).strip()
+        except Exception:
+            pass
+        return None
+
+    def is_mt_bound(self, account: PaperAccount | None) -> bool:
+        """True when this JM FX client mirrors the live connected MT5 terminal."""
+        if account is None:
+            return self.using_mt()
+        if not self.using_mt() or not self.mt:
+            return False
+        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
+        if not want.isdigit():
+            return False
+        have = self.connected_mt_login()
+        if have:
+            return have == want
+        # Older EA without login field: single-terminal agent binds mt5_login clients.
+        return True
 
     def _live_gold_mid(self, symbol: str) -> float | None:
         """Live gold mid for paper desk sync (display + paper fills near TV)."""
@@ -446,6 +494,7 @@ class TradingEngine:
             "mt_configured": self.mt is not None,
             "mt_online": self.mt_online(),
             "mt_platform": self.mode if self.mode in {"mt4", "mt5"} else self._mt_platform,
+            "mt_login": self.connected_mt_login(),
             "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
             "using_live_feed": self.using_mt(),
             "paper_sync_live_gold": bool(
@@ -876,7 +925,8 @@ class TradingEngine:
     ) -> dict:
         """Show how risk / lot sizing scales with a paper deposit amount."""
         acct = account or self._desk
-        amount = float(deposit if deposit is not None else acct.broker.deposit)
+        snap = self.account_snapshot(acct)
+        amount = float(deposit if deposit is not None else snap.deposit or snap.balance)
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
         stop_pips = float(self.settings.default_stop_loss_pips)
@@ -886,10 +936,13 @@ class TradingEngine:
         pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
         suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
         suggested_lots = max(0.01, round(suggested, 2))
+        bound = self.is_mt_bound(acct)
         return {
             "deposit": round(amount, 2),
             "currency": self.settings.base_currency,
-            "paper": not self.using_mt(),
+            "paper": not bound,
+            "mt_bound": bound,
+            "mt5_login": (acct.mt5_login or acct.code) if bound else None,
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
@@ -900,7 +953,11 @@ class TradingEngine:
             "suggested_lots": suggested_lots,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-            "note": "Paper demo capital for this account only — other clients cannot see it",
+            "note": (
+                "Bound to live MT5 — balance/equity/positions mirror the terminal"
+                if bound
+                else "Paper demo capital for this account only — other clients cannot see it"
+            ),
         }
 
     async def set_paper_deposit(
@@ -916,6 +973,10 @@ class TradingEngine:
         closed (and journaled) then balance is set to the new deposit.
         """
         acct = account or self._desk
+        if self.is_mt_bound(acct):
+            raise ValueError(
+                "This account is bound to live MT5 — change deposit on the MT5 terminal, not here."
+            )
         if self.using_mt():
             raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
         async with self._lock:
@@ -1040,7 +1101,7 @@ class TradingEngine:
     ) -> Position | None:
         acct = account or self._desk
         async with self._lock:
-            if self.using_mt():
+            if self.is_mt_bound(acct):
                 ack = self.mt.close_all()
                 await self._emit("account", self.account_payload(acct))
                 await self._emit(
@@ -1063,6 +1124,8 @@ class TradingEngine:
                     status=PositionStatus.CLOSED,
                     close_reason="mt_close",
                 )
+            if self.using_mt() and not self.is_mt_bound(acct):
+                return None
             closed = acct.broker.close_position(position_id, reason="manual")
             if closed:
                 acct.risk.record_realized_pnl(closed.realized_pnl)
@@ -1368,7 +1431,7 @@ class TradingEngine:
 
         request.lots = decision.adjusted_lots or request.lots
 
-        if self.using_mt():
+        if self.is_mt_bound(acct):
             order = self.mt.place_order(request)
             pos = (
                 self._latest_open(request.symbol, request.side, acct)
@@ -1385,7 +1448,31 @@ class TradingEngine:
                     strategy=request.strategy,
                     comment=request.comment,
                     status=OrderStatus.REJECTED,
-                    reject_reason=f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA",
+                    reject_reason=f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA + RUN_AGENT",
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
+                )
+                return rejected
+            if self.using_mt() and not self.is_mt_bound(acct):
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=(
+                        "This JM FX login is not bound to the connected MT5 terminal. "
+                        f"Connected MT5={self.connected_mt_login() or 'unknown'} · "
+                        f"your mt5_login={acct.mt5_login or acct.code}"
+                    ),
                     stop_loss=request.stop_loss,
                     take_profit=request.take_profit,
                 )
