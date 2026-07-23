@@ -39,6 +39,8 @@ function pnlClass(n) {
 function normalizeStrategy(label) {
   if (!label) return 'manual_only'
   if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
+  // London Judas is session-auto only — hide from manual picker.
+  if (label === 'London_Judas_Sweep') return 'manual_only'
   return label
 }
 
@@ -378,25 +380,7 @@ export default function App() {
     await run(async () => {
       const res = await api.setStrategy(strategy)
       setOrderNote(
-        strategy === 'London_Judas_Sweep'
-          ? 'London Judas locked (manual) — session auto-follow OFF. Entries 07:00–11:00 UTC only.'
-          : res?.message || `Strategy set to ${strategy} (session auto-follow OFF)`,
-      )
-      return res
-    })
-  }
-
-  async function lockLondonJudas() {
-    markStrategyChoice('London_Judas_Sweep')
-    await run(async () => {
-      const res = await api.setStrategy('London_Judas_Sweep')
-      try {
-        await api.start('London_Judas_Sweep')
-      } catch {
-        /* engine may already be running */
-      }
-      setOrderNote(
-        'London Judas locked · manual mode. Entries 07:00–11:00 UTC only.',
+        res?.message || `Strategy set to ${strategy} (session auto-follow OFF)`,
       )
       return res
     })
@@ -561,7 +545,12 @@ export default function App() {
             onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC', 'London_Judas_Sweep']).map((name) => (
+            {(strategies.length
+              ? strategies
+              : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']
+            )
+              .filter((name) => name !== 'London_Judas_Sweep')
+              .map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
                   ? 'manual_only (no auto signals)'
@@ -569,9 +558,7 @@ export default function App() {
                     ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
                     : name === 'Liquidity_Sweep_SMC'
                       ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                      : name === 'London_Judas_Sweep'
-                        ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                        : name}
+                      : name}
               </option>
             ))}
           </select>
@@ -582,14 +569,6 @@ export default function App() {
             title="Lock selected strategy and turn OFF session auto-follow"
           >
             Apply strategy (manual)
-          </button>
-          <button
-            className="btn-primary"
-            disabled={busy}
-            onClick={() => lockLondonJudas()}
-            title="Lock London Judas Sweep — manual mode, your lot size"
-          >
-            Lock London Judas
           </button>
           <button
             className="btn-ghost"
@@ -664,7 +643,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: London_Judas_Sweep · EMA_RSI · SMC · manual
+              Auto schedule: Asia/NY EMA · London Judas · Overlap SMC
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
