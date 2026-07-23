@@ -4,8 +4,8 @@
 //| Same CSV protocol as MT4 JM_Forex_Bridge.mq4                     |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex"
-#property version   "1.00"
-#property description "JM Forex AI bridge for MT5 — executes Python signals"
+#property version   "1.01"
+#property description "JM Forex AI bridge for MT5 - executes Python signals"
 
 #include <Trade/Trade.mqh>
 
