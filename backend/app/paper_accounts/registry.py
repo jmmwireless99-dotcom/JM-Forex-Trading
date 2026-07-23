@@ -254,11 +254,14 @@ class PaperAccountRegistry:
     @staticmethod
     def _restore_mt5_login(row: dict) -> str:
         """Restore explicit MT5 link only — never treat random paper codes as MT5."""
-        raw = str(row.get("mt5_login") or "").strip()
-        if raw.isdigit() and 5 <= len(raw) <= 16:
-            return raw
+        # If the field exists (including empty string), honor it. Empty = paper.
+        if "mt5_login" in row:
+            raw = str(row.get("mt5_login") or "").strip()
+            if raw.isdigit() and 5 <= len(raw) <= 16:
+                return raw
+            return ""
+        # Legacy rows without mt5_login key: digit username + profile = MT5 link.
         code = str(row.get("code") or "").strip()
-        # Legacy MT5 registrations always stored email + digit username as code.
         if (
             code.isdigit()
             and 5 <= len(code) <= 16
