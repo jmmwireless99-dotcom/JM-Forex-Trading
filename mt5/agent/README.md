@@ -1,26 +1,15 @@
 # JM Forex ↔ MT5 Auto Trade (Windows agent)
 
-## Requirements
-- Vantage MT5 logged in (demo OK)
-- `JM_Forex_Bridge` EA on **XAUUSD** chart (`UseCommonFolder=true`, Algo Trading ON)
-- Python 3.10+ on the same Windows PC
+**No Python required** — uses PowerShell (built into Windows).
 
 ## Steps
-1. Download EA: https://jmtechsolution.cloud/fx/downloads/JM_Forex_Bridge.mq5
-2. Download agent zip: https://jmtechsolution.cloud/fx/downloads/jm-mt-agent.zip
-3. Unzip → copy `config.example.json` to `config.json`
-4. Put the bridge token in `config.json` → `bridge_token`
-5. Leave `files_dir` empty (auto: `%APPDATA%\MetaQuotes\Terminal\Common\Files`)
-6. Double-click **RUN_AGENT.bat** — keep it open
-7. On FX desk: mode **mt5** → Apply mode
-
-## Check
-```
-https://jmtechsolution.cloud/fx/api/mt/status
-```
-Wanted: `"online": true`, `"remote_bridge": true`
+1. Download: https://jmtechsolution.cloud/fx/downloads/jm-mt-agent.zip
+2. Extract All
+3. Open folder `jm-mt-agent` (config.json already filled)
+4. Double-click **RUN_AGENT.bat** — keep the black window open
+5. MT5: `JM_Forex_Bridge` on **XAUUSD**, Algo Trading ON, `UseCommonFolder=true`
+6. Check: https://jmtechsolution.cloud/fx/api/mt/status → `"online": true`
 
 ## Notes
-- Cloud desk (Linux) cannot see your Windows folder — this agent is the link.
-- Logout / close agent = MT offline (desk falls back / rejects MT orders).
-- Never commit `config.json` with a real token.
+- Do **not** paste JSON into CMD / Win+R / browser docs pages
+- If Windows blocks script: right-click `jm_mt_agent.ps1` → Properties → Unblock
