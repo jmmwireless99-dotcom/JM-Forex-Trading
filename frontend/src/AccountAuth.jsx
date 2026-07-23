@@ -37,16 +37,18 @@ function AvatarMark({ avatar, label, code }) {
 
 /**
  * Login / Register gate.
- * Username = MT5 account number · Password = MT5 password.
- * Server stores a hash only — trade journals never cleared on login.
+ * Default = paper demo. Optional: link live MT5 login (e.g. Joel) for bridge sync.
  */
 export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   const [tab, setTab] = useState(initialTab === 'register' ? 'register' : 'login')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
+  const [label, setLabel] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
+  const [deposit, setDeposit] = useState('1000')
+  const [linkMt5, setLinkMt5] = useState(false)
   const [avatar, setAvatar] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,7 +76,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   async function previewCode(nextCode) {
     const cleaned = String(nextCode || '').trim()
     setCode(cleaned)
-    if (cleaned.length < 5) {
+    if (cleaned.length < 4) {
       setHint('')
       return
     }
@@ -95,7 +97,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
       if (tab === 'login') {
         const session = await loginAccount({ code, password })
         onAuthed(session)
-      } else {
+      } else if (linkMt5) {
         const mt5 = String(code || '').trim()
         if (!/^\d{5,16}$/.test(mt5)) {
           throw new Error('MT5 account must be 5–16 digits')
@@ -104,10 +106,10 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           throw new Error('MT5 password must be at least 6 characters')
         }
         if (!firstName.trim() || !lastName.trim()) {
-          throw new Error('First name and last name are required')
+          throw new Error('First name and last name are required for MT5 link')
         }
         if (!email.trim() || !email.includes('@')) {
-          throw new Error('Gmail / email is required')
+          throw new Error('Gmail / email is required for MT5 link')
         }
         const session = await registerAccount({
           first_name: firstName.trim(),
@@ -116,6 +118,24 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           mt5_login: mt5,
           password,
           avatar: avatar || undefined,
+        })
+        onAuthed(session)
+      } else {
+        if (!password || password.length < 6) {
+          throw new Error('Password must be at least 6 characters')
+        }
+        const amount = Number(deposit)
+        if (!Number.isFinite(amount) || amount < 50) {
+          throw new Error('Paper deposit must be at least 50')
+        }
+        const session = await registerAccount({
+          label: label.trim() || undefined,
+          deposit: amount,
+          password,
+          avatar: avatar || undefined,
+          first_name: firstName.trim() || undefined,
+          last_name: lastName.trim() || undefined,
+          email: email.trim() || undefined,
         })
         onAuthed(session)
       }
@@ -134,9 +154,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
             JM <span>Forex</span>
           </h1>
           <p>
-            Client login — <strong>username = MT5 account</strong>,{' '}
-            <strong>password = MT5 password</strong>. Balance comes from live MT5
-            (bridge/API) — no paper deposit.
+            Default accounts are <strong>paper demo</strong>. Link an MT5 login only if
+            you want live terminal sync (one bridge terminal at a time).
           </p>
         </div>
 
@@ -159,7 +178,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
 
         {recent.length && tab === 'login' ? (
           <div className="auth-recent">
-            <span className="meta">Recent MT5 accounts</span>
+            <span className="meta">Recent accounts</span>
             <div className="auth-recent-row">
               {recent.map((a) => (
                 <button
@@ -187,57 +206,107 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
         <form className="auth-form" onSubmit={submit}>
           {tab === 'register' ? (
             <>
-              <label>
-                First name
+              <label className="auth-check">
                 <input
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="e.g. Joel"
-                  maxLength={64}
-                  autoComplete="given-name"
-                  required
+                  type="checkbox"
+                  checked={linkMt5}
+                  onChange={(e) => {
+                    setLinkMt5(e.target.checked)
+                    setError('')
+                  }}
                 />
+                <span>Link live MT5 account (optional — not for paper demos)</span>
               </label>
-              <label>
-                Last name
-                <input
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="e.g. Manalo"
-                  maxLength={64}
-                  autoComplete="family-name"
-                  required
-                />
-              </label>
-              <label>
-                Gmail / email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@gmail.com"
-                  maxLength={120}
-                  autoComplete="email"
-                  required
-                />
-              </label>
-              <label>
-                MT5 account
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                  placeholder="e.g. 25817283"
-                  inputMode="numeric"
-                  autoComplete="username"
-                  required
-                />
-              </label>
+
+              {linkMt5 ? (
+                <>
+                  <label>
+                    First name
+                    <input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="e.g. Joel"
+                      maxLength={64}
+                      autoComplete="given-name"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Last name
+                    <input
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="e.g. Madera"
+                      maxLength={64}
+                      autoComplete="family-name"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Gmail / email
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@gmail.com"
+                      maxLength={120}
+                      autoComplete="email"
+                      required
+                    />
+                  </label>
+                  <label>
+                    MT5 account
+                    <input
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                      placeholder="e.g. 25817283"
+                      inputMode="numeric"
+                      autoComplete="username"
+                      required
+                    />
+                  </label>
+                  <p className="meta">
+                    Live MT5 only for this login when the Windows bridge reports the same
+                    account number. Other JM FX accounts stay paper.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Display name (optional)
+                    <input
+                      value={label}
+                      onChange={(e) => setLabel(e.target.value)}
+                      placeholder="e.g. Demo Desk"
+                      maxLength={64}
+                      autoComplete="nickname"
+                    />
+                  </label>
+                  <label>
+                    Paper deposit (USD)
+                    <input
+                      type="number"
+                      min={50}
+                      max={1000000}
+                      step={50}
+                      value={deposit}
+                      onChange={(e) => setDeposit(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <p className="meta">
+                    Paper capital + trades are private to this account. Save the account
+                    code you get after create.
+                  </p>
+                </>
+              )}
+
               <label className="auth-logo-field">
                 Logo / avatar (optional)
                 <div className="auth-logo-row">
                   <AvatarMark
                     avatar={avatar}
-                    label={`${firstName} ${lastName}`.trim()}
+                    label={label || `${firstName} ${lastName}`.trim()}
                     code={code || '+'}
                   />
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onLogoPick} />
@@ -248,18 +317,14 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                   ) : null}
                 </div>
               </label>
-              <p className="meta">
-                Walang paper deposit. Kapag naka-connect ang MT5 bridge, lalabas ang
-                tunay na balance / trades ng MT5 account na ito.
-              </p>
             </>
           ) : (
             <label>
-              MT5 account
+              Account code / MT5 login
               <input
                 value={code}
                 onChange={(e) => previewCode(e.target.value.replace(/[^\dA-Za-z]/g, '').slice(0, 16))}
-                placeholder="e.g. 25817283"
+                placeholder="paper code or MT5 number"
                 autoComplete="username"
                 required
               />
@@ -268,12 +333,16 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           )}
 
           <label>
-            MT5 password
+            Password
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={tab === 'register' ? 'same as your MT5 password' : '••••••••'}
+              placeholder={
+                tab === 'register' && linkMt5
+                  ? 'same as your MT5 password'
+                  : '••••••••'
+              }
               autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
               required
               minLength={6}
@@ -288,8 +357,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
         </form>
 
         <p className="meta auth-foot">
-          Binding = Windows agent + JM_Forex_Bridge EA (API bridge). JM FX stores a
-          password hash only. Each MT5 login keeps its own trade history.
+          MT5 sync needs Windows agent + JM_Forex_Bridge EA on the matching terminal.
+          Paper accounts never use that terminal.
         </p>
       </div>
     </div>

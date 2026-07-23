@@ -63,7 +63,7 @@ class TradingEngine:
             settings.symbols,
             live_noise=settings.paper_live_noise,
         )
-        if settings.paper_sync_live_gold and settings.execution_mode == "paper":
+        if settings.paper_sync_live_gold:
             self.market.set_live_mid_provider(self._live_gold_mid)
         self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
         requested = settings.default_strategy or "manual_only"
@@ -358,7 +358,9 @@ class TradingEngine:
         self.mode = mode
         self.settings.execution_mode = mode
         self.mt, self._mt_platform = resolve_mt_bridge(self.settings)
-        if mode == "paper" and self.settings.paper_sync_live_gold:
+        # Keep live-gold mid for paper books even when MT bridge mode is enabled.
+        # Global mt4/mt5 only means the Windows agent is available for bound accounts.
+        if self.settings.paper_sync_live_gold:
             self.market.set_live_mid_provider(self._live_gold_mid)
         else:
             self.market.set_live_mid_provider(None)
@@ -384,26 +386,32 @@ class TradingEngine:
         return None
 
     def is_mt5_client(self, account: PaperAccount | None) -> bool:
-        """Client registered with an MT5 login number (live-bound account)."""
+        """True only when the client explicitly linked an MT5 login (not paper demo)."""
         if account is None:
             return False
-        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
-        return want.isdigit()
+        want = str(getattr(account, "mt5_login", None) or "").strip()
+        return want.isdigit() and 5 <= len(want) <= 16
 
     def is_mt_bound(self, account: PaperAccount | None) -> bool:
-        """True when this JM FX client mirrors the live connected MT5 terminal."""
+        """True when this JM FX client mirrors the live connected MT5 terminal.
+
+        Only the account whose mt5_login matches the bridge's ACCOUNT_LOGIN is bound
+        (e.g. Joel 25817283). Paper demos and other MT5 logins never inherit that
+        terminal. If the EA omits login, nobody is bound (safer than binding everyone).
+        """
         if account is None:
-            return self.using_mt()
+            return False
         if not self.using_mt() or not self.mt:
             return False
         if not self.is_mt5_client(account):
             return False
-        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
+        want = str(getattr(account, "mt5_login", None) or "").strip()
         have = self.connected_mt_login()
-        if have:
-            return have == want
-        # Older EA without login field: single-terminal agent binds mt5_login clients.
-        return True
+        return bool(have) and have == want
+
+    def uses_paper_book(self, account: PaperAccount | None) -> bool:
+        """Paper capital / fills — everyone except the live-bound MT5 account."""
+        return not self.is_mt_bound(account) and not self.is_mt5_client(account)
 
     def _live_gold_mid(self, symbol: str) -> float | None:
         """Live gold mid for paper desk sync (display + paper fills near TV)."""
@@ -425,7 +433,7 @@ class TradingEngine:
         if self.signal_candles.closed_history(self.settings.symbols[0], 10):
             return
         # Pin paper mid to live gold BEFORE seeding so EMA history sits near TV price.
-        if self.settings.paper_sync_live_gold and self.settings.execution_mode == "paper":
+        if self.settings.paper_sync_live_gold:
             self.market.pull_live_mids(force=True)
         symbol = self.settings.symbols[0]
         mid = self.market.last_mids().get(symbol, 2350.0)
@@ -560,9 +568,7 @@ class TradingEngine:
             "mt_login": self.connected_mt_login(),
             "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
             "using_live_feed": self.using_mt(),
-            "paper_sync_live_gold": bool(
-                self.settings.paper_sync_live_gold and self.mode == "paper"
-            ),
+            "paper_sync_live_gold": bool(self.settings.paper_sync_live_gold),
             "paper_mid": mids.get(self.settings.symbols[0]),
             "candle_period_seconds": self.candles.period_seconds,
             "signal_period_seconds": self.signal_candles.period_seconds,
@@ -1041,12 +1047,10 @@ class TradingEngine:
         closed (and journaled) then balance is set to the new deposit.
         """
         acct = account or self._desk
-        if self.is_mt_bound(acct):
+        if self.is_mt_bound(acct) or self.is_mt5_client(acct):
             raise ValueError(
-                "This account is bound to live MT5 — change deposit on the MT5 terminal, not here."
+                "This account is linked to live MT5 — change deposit on the MT5 terminal, not here."
             )
-        if self.using_mt():
-            raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
         async with self._lock:
             closed = acct.broker.set_deposit(float(amount), close_positions=reset)
             for position in closed:
@@ -1122,7 +1126,7 @@ class TradingEngine:
         """Attach / update SL & TP on an open position (manual desk helper)."""
         acct = account or self._desk
         async with self._lock:
-            if self.using_mt():
+            if self.is_mt_bound(acct) or self.is_mt5_client(acct):
                 return None  # MT modify not supported via file bridge yet
             pos = next(
                 (p for p in acct.broker.open_positions() if p.id == position_id),
@@ -1192,7 +1196,7 @@ class TradingEngine:
                     status=PositionStatus.CLOSED,
                     close_reason="mt_close",
                 )
-            if self.using_mt() and not self.is_mt_bound(acct):
+            if self.is_mt5_client(acct) and not self.is_mt_bound(acct):
                 return None
             closed = acct.broker.close_position(position_id, reason="manual")
             if closed:
@@ -1228,21 +1232,25 @@ class TradingEngine:
                 self.last_tick_at = tick.timestamp
                 self._recent_ticks[tick.symbol] = tick
 
-                if not self.using_mt():
-                    for acct in self.accounts.all():
-                        closed = acct.broker.update_tick(tick)
-                        for position in closed:
-                            acct.risk.record_realized_pnl(position.realized_pnl)
-                            await self._journal_close(position, acct)
-                            await self._emit(
-                                "position_closed",
-                                {
-                                    **position.model_dump(mode="json"),
-                                    "account_id": acct.id,
-                                },
-                            )
-                        acct.journal.update_open_pnl(acct.broker.open_positions())
-                        await self._sync_limit_fills(acct)
+                # Paper books keep marking even when the MT bridge feeds ticks.
+                # Bound MT5 clients mirror the terminal — skip their paper broker.
+                for acct in self.accounts.all():
+                    if not self.uses_paper_book(acct):
+                        continue
+                    closed = acct.broker.update_tick(tick)
+                    for position in closed:
+                        acct.risk.record_realized_pnl(position.realized_pnl)
+                        await self._journal_close(position, acct)
+                        await self._emit(
+                            "position_closed",
+                            {
+                                **position.model_dump(mode="json"),
+                                "account_id": acct.id,
+                            },
+                        )
+                    acct.journal.update_open_pnl(acct.broker.open_positions())
+                    await self._sync_limit_fills(acct)
+                if any(self.uses_paper_book(a) for a in self.accounts.all()):
                     await self._london_kill_switch(tick)
 
                 closed_candle, forming = self.candles.update(tick)
@@ -1347,9 +1355,9 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Auto signals fan out to each client account with that account's capital/risk.
-        # Desk book never receives client auto fills.
-        targets = self.accounts.auto_followers() if not self.using_mt() else [self._desk]
+        # Auto signals fan out per client: paper demos fill on paper; only the
+        # MT5-bound login (e.g. Joel) routes to the Windows terminal.
+        targets = self.accounts.auto_followers()
         if not targets:
             return
         for acct in targets:
@@ -1387,7 +1395,7 @@ class TradingEngine:
 
         if (
             signal.order_type == OrderType.LIMIT
-            and not self.using_mt()
+            and self.uses_paper_book(account)
             and account.broker.pending_orders()
         ):
             # One pending limit at a time; filled opens may already exist.
@@ -1459,7 +1467,7 @@ class TradingEngine:
         acct = account or self._desk
         tick = tick or self._recent_ticks.get(request.symbol)
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
-        if tick is not None and not self.using_mt():
+        if tick is not None and self.uses_paper_book(acct):
             acct.broker._last_ticks[tick.symbol] = tick
         honor_lots = bool(acct.fixed_lots is not None) or (
             (request.strategy or "").lower() == "manual"
@@ -1507,51 +1515,39 @@ class TradingEngine:
                 else None
             )
             await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
+        elif self.is_mt5_client(acct):
+            # Linked MT5 login that is not the connected terminal — never paper-fill.
+            if not self.mt_online():
+                reason = (
+                    f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA + RUN_AGENT"
+                )
+            else:
+                reason = (
+                    "This JM FX login is not bound to the connected MT5 terminal. "
+                    f"Connected MT5={self.connected_mt_login() or 'unknown'} · "
+                    f"your mt5_login={acct.mt5_login or acct.code}"
+                )
+            rejected = Order(
+                symbol=request.symbol,
+                side=request.side,
+                lots=request.lots,
+                strategy=request.strategy,
+                comment=request.comment,
+                status=OrderStatus.REJECTED,
+                reject_reason=reason,
+                stop_loss=request.stop_loss,
+                take_profit=request.take_profit,
+            )
+            await self._journal_fill(
+                rejected, signal_db_id=signal_db_id, account=acct
+            )
+            await self._emit(
+                "order",
+                {**rejected.model_dump(mode="json"), "account_id": acct.id},
+            )
+            return rejected
         else:
-            if self.mode in {"mt4", "mt5"} and not self.mt_online():
-                rejected = Order(
-                    symbol=request.symbol,
-                    side=request.side,
-                    lots=request.lots,
-                    strategy=request.strategy,
-                    comment=request.comment,
-                    status=OrderStatus.REJECTED,
-                    reject_reason=f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA + RUN_AGENT",
-                    stop_loss=request.stop_loss,
-                    take_profit=request.take_profit,
-                )
-                await self._journal_fill(
-                    rejected, signal_db_id=signal_db_id, account=acct
-                )
-                await self._emit(
-                    "order",
-                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
-                )
-                return rejected
-            if self.using_mt() and not self.is_mt_bound(acct):
-                rejected = Order(
-                    symbol=request.symbol,
-                    side=request.side,
-                    lots=request.lots,
-                    strategy=request.strategy,
-                    comment=request.comment,
-                    status=OrderStatus.REJECTED,
-                    reject_reason=(
-                        "This JM FX login is not bound to the connected MT5 terminal. "
-                        f"Connected MT5={self.connected_mt_login() or 'unknown'} · "
-                        f"your mt5_login={acct.mt5_login or acct.code}"
-                    ),
-                    stop_loss=request.stop_loss,
-                    take_profit=request.take_profit,
-                )
-                await self._journal_fill(
-                    rejected, signal_db_id=signal_db_id, account=acct
-                )
-                await self._emit(
-                    "order",
-                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
-                )
-                return rejected
+            # Paper demo — independent of global MT bridge mode.
             order = acct.broker.place_order(request)
             pos = None
             if order.status == OrderStatus.FILLED:

@@ -91,7 +91,7 @@ class PaperAccount:
             "first_name": self.first_name or "",
             "last_name": self.last_name or "",
             "email": self.email or "",
-            "mt5_login": self.mt5_login or self.code,
+            "mt5_login": self.mt5_login or "",
             "created_at": self.created_at.isoformat(),
         }
 
@@ -107,7 +107,7 @@ class PaperAccount:
             "first_name": self.first_name or "",
             "last_name": self.last_name or "",
             "email": self.email or "",
-            "mt5_login": self.mt5_login or self.code,
+            "mt5_login": self.mt5_login or "",
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
             "balance": snap.balance,
@@ -227,7 +227,7 @@ class PaperAccountRegistry:
             first_name=fn,
             last_name=ln,
             email=mail,
-            mt5_login=mt5 or (code if not is_desk and str(code).isdigit() else ""),
+            mt5_login=mt5,
         )
         with self._lock:
             if acc.code.upper() in self._by_code:
@@ -250,6 +250,23 @@ class PaperAccountRegistry:
     def get(self, account_id: str) -> PaperAccount | None:
         with self._lock:
             return self._accounts.get(account_id)
+
+    @staticmethod
+    def _restore_mt5_login(row: dict) -> str:
+        """Restore explicit MT5 link only — never treat random paper codes as MT5."""
+        raw = str(row.get("mt5_login") or "").strip()
+        if raw.isdigit() and 5 <= len(raw) <= 16:
+            return raw
+        code = str(row.get("code") or "").strip()
+        # Legacy MT5 registrations always stored email + digit username as code.
+        if (
+            code.isdigit()
+            and 5 <= len(code) <= 16
+            and str(row.get("email") or "").strip()
+            and str(row.get("first_name") or "").strip()
+        ):
+            return code
+        return ""
 
     def get_by_token(self, token: str) -> PaperAccount | None:
         with self._lock:
@@ -276,14 +293,14 @@ class PaperAccountRegistry:
         key = (code or "").strip()
         acc = self.get_by_code(key)
         if acc is None or acc.is_desk:
-            raise KeyError("Invalid MT5 account or password")
+            raise KeyError("Invalid account or password")
         if not acc.password_hash:
             raise PermissionError(
                 "This account has no password yet. Open the desk on the device "
                 "that still has the session, then set a password in Profile."
             )
         if not verify_password(password, acc.password_hash):
-            raise PermissionError("Invalid MT5 account or password")
+            raise PermissionError("Invalid account or password")
         return acc
 
     def update_profile(
@@ -531,7 +548,7 @@ class PaperAccountRegistry:
                     first_name=str(row.get("first_name") or ""),
                     last_name=str(row.get("last_name") or ""),
                     email=str(row.get("email") or ""),
-                    mt5_login=str(row.get("mt5_login") or row.get("code") or ""),
+                    mt5_login=self._restore_mt5_login(row),
                 )
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc

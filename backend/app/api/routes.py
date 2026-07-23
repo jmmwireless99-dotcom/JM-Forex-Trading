@@ -491,7 +491,7 @@ async def lookup_account(code: str) -> dict:
         "label": acc.label,
         "avatar": acc.avatar or None,
         "has_password": bool(acc.password_hash),
-        "mt5_login": acc.mt5_login or acc.code,
+        "mt5_login": acc.mt5_login or None,
         "email": acc.email or None,
     }
 

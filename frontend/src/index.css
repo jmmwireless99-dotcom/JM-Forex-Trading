@@ -1159,6 +1159,19 @@ select {
   font-size: 0.92rem;
 }
 
+.auth-form label.auth-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  grid-template-columns: none;
+}
+
+.auth-form label.auth-check input[type='checkbox'] {
+  width: auto;
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
 .auth-form input,
 .acct-form input[type='text'],
 .acct-form input[type='password'],
