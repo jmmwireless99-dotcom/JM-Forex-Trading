@@ -104,6 +104,24 @@ def create_app() -> FastAPI:
             async def favicon_svg() -> FileResponse:
                 return FileResponse(favicon)
 
+        downloads = static_dir / "downloads"
+        if downloads.exists():
+
+            @app.get("/downloads/{filename}")
+            async def download_file(filename: str) -> FileResponse:
+                # Bridge EA + other install helpers for Windows MT5 users.
+                safe = Path(filename).name
+                target = downloads / safe
+                if not target.exists() or not target.is_file():
+                    from fastapi import HTTPException
+
+                    raise HTTPException(status_code=404, detail="File not found")
+                return FileResponse(
+                    target,
+                    filename=safe,
+                    media_type="application/octet-stream",
+                )
+
         @app.get("/")
         async def spa_index() -> FileResponse:
             return FileResponse(static_dir / "index.html")
