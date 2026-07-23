@@ -99,8 +99,12 @@ def main() -> int:
     cfg = load_config()
     token = (cfg.get("bridge_token") or "").strip()
     if not token or token.startswith("PASTE_"):
-        print("ERROR: set bridge_token in config.json (ask Joel / server admin).")
+        print("ERROR: set bridge_token in config.json")
         print("File:", Path(__file__).resolve().parent / "config.json")
+        print()
+        print("Buksan ang config.json sa Notepad (HUWAG i-paste sa CMD).")
+        print("Halimbawa:")
+        print('  "bridge_token": "your-token-here"')
         return 1
 
     files_dir = Path(cfg["files_dir"])
