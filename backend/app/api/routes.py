@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from datetime import timezone
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from app.api.account_deps import require_paper_account
 from app.api.deps import get_engine
 from app.brokers.mt_bridge import resolve_mt_bridge
+from app.brokers.remote_mt_store import (
+    remote_clear_command,
+    remote_poll_command,
+    remote_push,
+    remote_snapshot_info,
+)
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
 from app.paper_accounts import PaperAccount
@@ -86,6 +92,18 @@ class DepositBody(BaseModel):
 
     amount: float = Field(..., gt=0, le=1_000_000)
     reset: bool = True  # close opens; trade log history is always kept
+
+
+class RemoteMtPushBody(BaseModel):
+    """Windows agent → cloud: EA CSV snapshots."""
+
+    status_csv: str = ""
+    ticks_csv: str = ""
+    positions_csv: str = ""
+    ack_csv: str = ""
+    symbol: str = "XAUUSD"
+    agent_host: str = ""
+    clear_command_id: str | None = None
 
 
 class PositionStopsBody(BaseModel):
@@ -184,18 +202,24 @@ async def mt_status() -> dict:
     bridge, platform = resolve_mt_bridge(settings)
     info = engine.connection_info()
     if bridge is None:
+        hint = (
+            "Enable JM_MT_REMOTE_BRIDGE=true + run Windows agent, "
+            "or set JM_MT5_BRIDGE_DIR to Terminal Common\\Files"
+        )
         return {
             "configured": False,
             "online": False,
             "execution_mode": settings.execution_mode,
             "platform": platform,
             "bridge_dir": "",
-            "hint": "Set JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR to Terminal Common\\Files",
+            "remote_bridge": bool(settings.mt_remote_bridge),
+            "hint": hint,
             **info,
         }
     online = bridge.is_online()
     tick = bridge.read_tick() if online else None
     snap = bridge.snapshot() if online else None
+    remote_info = remote_snapshot_info() if settings.mt_remote_bridge else {}
     return {
         "configured": True,
         "online": online,
@@ -206,6 +230,8 @@ async def mt_status() -> dict:
         "tick": tick.model_dump(mode="json") if tick else None,
         "account": snap.model_dump(mode="json") if snap else None,
         "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+        "remote_bridge": bool(settings.mt_remote_bridge),
+        **remote_info,
         **info,
     }
 
@@ -216,9 +242,48 @@ async def mt_ping() -> dict:
     settings = get_settings()
     bridge, _ = resolve_mt_bridge(settings)
     if bridge is None:
-        raise HTTPException(status_code=400, detail="MT bridge dir not configured")
+        raise HTTPException(status_code=400, detail="MT bridge not configured")
     ack = bridge.ping()
     return {"ok": ack.ok, "command_id": ack.command_id, "detail": ack.detail}
+
+
+def _require_bridge_token(x_jm_bridge_token: str | None = Header(default=None)) -> None:
+    settings = get_settings()
+    expected = (settings.mt_bridge_token or "").strip()
+    if not settings.mt_remote_bridge:
+        raise HTTPException(status_code=503, detail="Remote MT bridge disabled on server")
+    if not expected:
+        raise HTTPException(status_code=503, detail="JM_MT_BRIDGE_TOKEN not set on server")
+    if not x_jm_bridge_token or x_jm_bridge_token.strip() != expected:
+        raise HTTPException(status_code=401, detail="Invalid bridge token")
+
+
+@router.post("/mt/remote/push")
+async def mt_remote_push(
+    body: RemoteMtPushBody,
+    _: None = Depends(_require_bridge_token),
+) -> dict:
+    """Windows agent pushes EA CSV files to the cloud desk."""
+    result = remote_push(
+        status_csv=body.status_csv,
+        ticks_csv=body.ticks_csv,
+        positions_csv=body.positions_csv,
+        ack_csv=body.ack_csv,
+        symbol=body.symbol,
+        agent_host=body.agent_host,
+    )
+    if body.clear_command_id:
+        remote_clear_command(body.clear_command_id)
+    # Refresh engine bridge pointer if mode is mt5/mt4
+    engine = get_engine()
+    info = engine.connection_info()
+    return {**result, "execution_mode": info.get("mode"), "mt_online": info.get("mt_online")}
+
+
+@router.get("/mt/remote/poll")
+async def mt_remote_poll(_: None = Depends(_require_bridge_token)) -> dict:
+    """Windows agent polls for OPEN/CLOSE/PING commands from the desk."""
+    return remote_poll_command()
 
 
 @router.post("/execution/mode")

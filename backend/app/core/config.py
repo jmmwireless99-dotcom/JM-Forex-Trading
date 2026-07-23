@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     mt5_bridge_dir: str = ""
     mt4_symbol: str = "XAUUSD"
     mt_symbol: str = "XAUUSD"
+    # Cloud ↔ Windows agent (MT5 on PC, FX desk on VPS)
+    # JM_MT_REMOTE_BRIDGE=true  JM_MT_BRIDGE_TOKEN=<secret>
+    mt_remote_bridge: bool = False
+    mt_bridge_token: str = ""
+    mt_bridge_online_seconds: float = 8.0
 
     # Postgres persistence (empty = in-memory only, desk still works)
     # JM_DATABASE_URL=postgresql+psycopg://jm:jm@127.0.0.1:5432/jm_forex
