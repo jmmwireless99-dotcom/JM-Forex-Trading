@@ -53,13 +53,19 @@ def remote_push(
         if agent_host:
             st.agent_host = agent_host
         st.last_push_at = time.time()
-        age = 0.0
+        pending = None
+        if st.pending_command_csv:
+            pending = {
+                "id": st.pending_command_id,
+                "csv": st.pending_command_csv,
+            }
         return {
             "ok": True,
             "online": True,
             "last_push_at": st.last_push_at,
             "pending_command": bool(st.pending_command_csv),
-            "age_seconds": age,
+            "command": pending,
+            "age_seconds": 0.0,
         }
 
 

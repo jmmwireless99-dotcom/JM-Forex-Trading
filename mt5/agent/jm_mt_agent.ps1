@@ -160,10 +160,18 @@ while ($true) {
       Write-Host ("[" + $ts + "] push ok=" + $okVal + " status=" + $st + " ticks=" + $tk)
     }
 
-    $poll = Invoke-JmApi -Method "GET" -Url ($api + "/mt/remote/poll") -Token $token
-    if ($null -ne $poll.command) {
-      $cmdCsv = [string]$poll.command.csv
-      $cmdId = [string]$poll.command.id
+    # Prefer command piggybacked on push response (more reliable than separate poll)
+    $cmdObj = $null
+    if ($null -ne $push.command) {
+      $cmdObj = $push.command
+    } else {
+      $poll = Invoke-JmApi -Method "GET" -Url ($api + "/mt/remote/poll") -Token $token
+      if ($null -ne $poll.command) { $cmdObj = $poll.command }
+    }
+
+    if ($null -ne $cmdObj) {
+      $cmdCsv = [string]$cmdObj.csv
+      $cmdId = [string]$cmdObj.id
       if ((-not [string]::IsNullOrWhiteSpace($cmdCsv)) -and (-not [string]::IsNullOrWhiteSpace($cmdId)) -and ($cmdId -ne $lastCmdId)) {
         Write-JmFile $commandF $cmdCsv
         $lastCmdId = $cmdId

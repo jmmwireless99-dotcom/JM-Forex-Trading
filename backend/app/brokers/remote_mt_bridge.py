@@ -38,7 +38,7 @@ class RemoteMetaTraderBridge:
     def is_online(self, max_age_seconds: float = 8.0) -> bool:
         return remote_is_online(max_age_seconds=max_age_seconds)
 
-    def ping(self, timeout: float = 8.0) -> BridgeAck:
+    def ping(self, timeout: float = 15.0) -> BridgeAck:
         return self._send("PING", timeout=timeout)
 
     def read_tick(self) -> Tick | None:
@@ -146,7 +146,7 @@ class RemoteMetaTraderBridge:
         self,
         action: str,
         *fields: str,
-        timeout: float = 8.0,
+        timeout: float = 15.0,
         command_id: str | None = None,
     ) -> BridgeAck:
         if not self.is_online():
