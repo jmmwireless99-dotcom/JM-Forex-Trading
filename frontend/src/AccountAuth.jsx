@@ -47,7 +47,6 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
-  const [deposit, setDeposit] = useState('1000')
   const [avatar, setAvatar] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -116,7 +115,6 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           email: email.trim(),
           mt5_login: mt5,
           password,
-          deposit: Number(deposit) || 1000,
           avatar: avatar || undefined,
         })
         onAuthed(session)
@@ -137,7 +135,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           </h1>
           <p>
             Client login — <strong>username = MT5 account</strong>,{' '}
-            <strong>password = MT5 password</strong>. History stays per account.
+            <strong>password = MT5 password</strong>. Balance comes from live MT5
+            (bridge/API) — no paper deposit.
           </p>
         </div>
 
@@ -233,16 +232,6 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                   required
                 />
               </label>
-              <label>
-                Starting deposit (paper)
-                <input
-                  type="number"
-                  min={50}
-                  max={1000000}
-                  value={deposit}
-                  onChange={(e) => setDeposit(e.target.value)}
-                />
-              </label>
               <label className="auth-logo-field">
                 Logo / avatar (optional)
                 <div className="auth-logo-row">
@@ -259,6 +248,10 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                   ) : null}
                 </div>
               </label>
+              <p className="meta">
+                Walang paper deposit. Kapag naka-connect ang MT5 bridge, lalabas ang
+                tunay na balance / trades ng MT5 account na ito.
+              </p>
             </>
           ) : (
             <label>
@@ -295,8 +288,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
         </form>
 
         <p className="meta auth-foot">
-          JM FX stores a password hash only (not plain MT5 password for broker login).
-          Each MT5 account has its own capital + trade history.
+          Binding = Windows agent + JM_Forex_Bridge EA (API bridge). JM FX stores a
+          password hash only. Each MT5 login keeps its own trade history.
         </p>
       </div>
     </div>

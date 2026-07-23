@@ -130,7 +130,15 @@ class TradingEngine:
         email: str | None = None,
         mt5_login: str | None = None,
     ) -> dict[str, Any]:
-        """Provision an isolated paper account for one client browser/session."""
+        """Provision an isolated account for one client browser/session.
+
+        MT5-linked clients (mt5_login set) do not use paper deposit — live MT5
+        equity is shown when the Windows bridge is online and bound.
+        """
+        mt5 = str(mt5_login or "").strip()
+        if mt5:
+            # Internal stub only — never shown as capital for MT5 clients.
+            deposit = 50.0
         acct = self.accounts.create(
             deposit=deposit,
             label=label,
@@ -145,13 +153,18 @@ class TradingEngine:
         )
         return {
             "ok": True,
-            "account": acct.snapshot_payload(),
+            "account": self.account_payload(acct),
             "token": acct.token,
-            "capital": self.capital_preview(acct.broker.deposit, account=acct),
+            "capital": self.capital_preview(account=acct),
             "trades": self._trades_payload(acct),
             "message": (
-                "Account created. Login with your MT5 account number + MT5 password. "
-                "Trade history stays on this login."
+                "MT5 account linked. Login with your MT5 number + password. "
+                "Balance comes from live MT5 when the bridge agent is online — no paper deposit."
+                if mt5
+                else (
+                    "New demo account created. Save your account code + password — "
+                    "only this login can see its capital, trades, and history."
+                )
             ),
         }
 
@@ -160,7 +173,7 @@ class TradingEngine:
         acct = self.accounts.authenticate(code, password)
         return {
             "ok": True,
-            "account": acct.snapshot_payload(),
+            "account": self.account_payload(acct),
             "token": acct.token,
             "capital": self.capital_preview(account=acct),
             "trades": self._trades_payload(acct),
@@ -225,6 +238,18 @@ class TradingEngine:
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if self.is_mt_bound(account):
             return self.mt.snapshot()
+        if account is not None and self.is_mt5_client(account):
+            return AccountSnapshot(
+                balance=0.0,
+                equity=0.0,
+                margin_used=0.0,
+                free_margin=0.0,
+                open_positions=0,
+                daily_pnl=0.0,
+                currency=self.settings.base_currency,
+                deposit=0.0,
+                paper=False,
+            )
         acct = account or self._desk
         return acct.broker.snapshot()
 
@@ -238,18 +263,49 @@ class TradingEngine:
                 "account_code": self.connected_mt_login(),
                 "mt5_login": self.connected_mt_login(),
                 "mt_bound": True,
+                "binding": "live_mt5",
             }
-        if account is not None and self.is_mt_bound(account):
-            snap = self.mt.snapshot().model_dump(mode="json")
+        if account is not None and self.is_mt5_client(account):
+            # MT5-linked clients never show fake paper deposit as capital.
+            if self.is_mt_bound(account):
+                snap = self.mt.snapshot().model_dump(mode="json")
+                return {
+                    **snap,
+                    **acct.profile_public(),
+                    "paper": False,
+                    "mt_bound": True,
+                    "mt_online": True,
+                    "mt5_login": acct.mt5_login or acct.code,
+                    "binding": "live_mt5",
+                }
             return {
-                **snap,
                 **acct.profile_public(),
+                "balance": 0.0,
+                "equity": 0.0,
+                "margin_used": 0.0,
+                "free_margin": 0.0,
+                "open_positions": 0,
+                "daily_pnl": 0.0,
+                "currency": self.settings.base_currency,
+                "deposit": 0.0,
                 "paper": False,
-                "mt_bound": True,
+                "mt_bound": False,
+                "mt_online": self.mt_online(),
                 "mt5_login": acct.mt5_login or acct.code,
+                "connected_mt_login": self.connected_mt_login(),
+                "binding": "waiting_mt5",
+                "note": (
+                    "MT5 bridge offline — open MT5 + JM_Forex_Bridge EA + RUN_AGENT.bat"
+                    if not self.mt_online()
+                    else (
+                        "Connected MT5 login does not match this account "
+                        f"(connected={self.connected_mt_login()}, yours={acct.mt5_login or acct.code})"
+                    )
+                ),
             }
         payload = acct.snapshot_payload()
         payload["mt_bound"] = False
+        payload["binding"] = "paper"
         return payload
 
     def trade_logs(
@@ -327,15 +383,22 @@ class TradingEngine:
             pass
         return None
 
+    def is_mt5_client(self, account: PaperAccount | None) -> bool:
+        """Client registered with an MT5 login number (live-bound account)."""
+        if account is None:
+            return False
+        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
+        return want.isdigit()
+
     def is_mt_bound(self, account: PaperAccount | None) -> bool:
         """True when this JM FX client mirrors the live connected MT5 terminal."""
         if account is None:
             return self.using_mt()
         if not self.using_mt() or not self.mt:
             return False
-        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
-        if not want.isdigit():
+        if not self.is_mt5_client(account):
             return False
+        want = str(getattr(account, "mt5_login", None) or account.code or "").strip()
         have = self.connected_mt_login()
         if have:
             return have == want
@@ -937,26 +1000,31 @@ class TradingEngine:
         suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
         suggested_lots = max(0.01, round(suggested, 2))
         bound = self.is_mt_bound(acct)
+        mt5_client = self.is_mt5_client(acct)
         return {
-            "deposit": round(amount, 2),
+            "deposit": round(amount, 2) if not mt5_client or bound else 0.0,
             "currency": self.settings.base_currency,
-            "paper": not bound,
+            "paper": not mt5_client and not bound,
             "mt_bound": bound,
-            "mt5_login": (acct.mt5_login or acct.code) if bound else None,
+            "mt5_login": (acct.mt5_login or acct.code) if mt5_client else None,
             "risk_per_trade_pct": risk_pct,
-            "risk_per_trade_usd": round(risk_usd, 2),
+            "risk_per_trade_usd": round(risk_usd, 2) if (bound or not mt5_client) else 0.0,
             "max_daily_loss_pct": daily_pct,
             "max_daily_loss_usd": round(daily_usd, 2) if daily_usd is not None else None,
             "daily_loss_limit_enabled": daily_pct > 0,
             "default_stop_loss_pips": stop_pips,
             "default_take_profit_pips": tp_pips,
-            "suggested_lots": suggested_lots,
+            "suggested_lots": suggested_lots if (bound or not mt5_client) else 0.01,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
             "note": (
                 "Bound to live MT5 — balance/equity/positions mirror the terminal"
                 if bound
-                else "Paper demo capital for this account only — other clients cannot see it"
+                else (
+                    "MT5 account — waiting for bridge (RUN_AGENT + EA). No paper deposit."
+                    if mt5_client
+                    else "Paper demo capital for this account only — other clients cannot see it"
+                )
             ),
         }
 
