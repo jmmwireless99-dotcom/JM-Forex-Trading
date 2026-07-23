@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { api, clearAccountSession } from './api'
+import { useEffect, useRef, useState } from 'react'
+import { api, clearAccountSession, loadRecentAccounts } from './api'
 import { AvatarMark, fileToDataUrl } from './AccountAuth'
 
 /**
- * Profile drawer: logo, rename, change password, logout / switch.
- * None of these actions clear the server trade journal.
+ * Account bar: always-visible Logout / Switch + profile editor.
+ * Does not clear trade history on the server.
  */
-export default function AccountProfile({ meta, onUpdated, onLogout }) {
+export default function AccountProfile({ meta, onUpdated, onLogout, onSwitchAccount }) {
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState(meta?.label || '')
   const [avatar, setAvatar] = useState(meta?.avatar || '')
@@ -15,6 +15,30 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    setLabel(meta?.label || '')
+    setAvatar(meta?.avatar || '')
+  }, [meta?.label, meta?.avatar, meta?.code])
+
+  useEffect(() => {
+    if (!open) return undefined
+    function onDoc(e) {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   function syncFromMeta() {
     setLabel(meta?.label || '')
@@ -60,7 +84,7 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
       if (meta?.has_password) body.current_password = currentPassword
       const res = await api.changePassword(body)
       onUpdated?.({
-        ...meta,
+        ...(meta || {}),
         has_password: true,
       })
       setCurrentPassword('')
@@ -84,26 +108,65 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
   }
 
   function logout() {
+    setOpen(false)
     clearAccountSession()
     onLogout?.()
   }
 
+  function switchAccount() {
+    setOpen(false)
+    clearAccountSession()
+    onSwitchAccount?.()
+  }
+
+  const recentCount = loadRecentAccounts().filter((a) => a.code && a.code !== meta?.code).length
+
   return (
-    <div className="acct-profile">
-      <button
-        type="button"
-        className="acct-profile-trigger"
-        onClick={() => {
-          syncFromMeta()
-          setOpen((v) => !v)
-        }}
-      >
-        <AvatarMark avatar={meta?.avatar} label={meta?.label} code={meta?.code} />
-        <span className="acct-profile-text">
-          <strong>{meta?.label || 'Demo'}</strong>
-          <em>{meta?.code || '—'}</em>
-        </span>
-      </button>
+    <div className="acct-bar" ref={panelRef}>
+      <div className="acct-bar-main">
+        <button
+          type="button"
+          className="acct-profile-trigger"
+          onClick={() => {
+            syncFromMeta()
+            setOpen((v) => !v)
+          }}
+          title="Open account profile"
+        >
+          <AvatarMark avatar={meta?.avatar} label={meta?.label} code={meta?.code} />
+          <span className="acct-profile-text">
+            <strong>{meta?.label || 'Demo'}</strong>
+            <em>{meta?.code || '—'}</em>
+          </span>
+        </button>
+
+        <div className="acct-bar-actions">
+          <button type="button" className="btn-ghost acct-bar-btn" disabled={busy} onClick={() => {
+            syncFromMeta()
+            setOpen(true)
+          }}>
+            Profile
+          </button>
+          <button
+            type="button"
+            className="btn-ghost acct-bar-btn"
+            disabled={busy}
+            onClick={switchAccount}
+            title="Logout and pick another account (history kept)"
+          >
+            Switch{recentCount ? ` (${recentCount})` : ''}
+          </button>
+          <button
+            type="button"
+            className="btn-danger acct-bar-btn"
+            disabled={busy}
+            onClick={logout}
+            title="Logout this browser session (trade history kept on server)"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
 
       {open ? (
         <div className="acct-profile-panel" role="dialog" aria-label="Account profile">
@@ -114,8 +177,8 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
             </button>
           </div>
           <p className="meta">
-            Code <code>{meta?.code}</code> — logout / switch / rename / password never wipe trade
-            history.
+            Code <code>{meta?.code}</code> — Logout / Switch never wipe trade history. Set a
+            password to login on another device.
           </p>
 
           <form className="acct-form" onSubmit={saveProfile}>
@@ -141,7 +204,7 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
           </form>
 
           <form className="acct-form" onSubmit={savePassword}>
-            <h4>{meta?.has_password ? 'Change password' : 'Set password'}</h4>
+            <h4>{meta?.has_password ? 'Change password' : 'Set password (needed to switch devices)'}</h4>
             {meta?.has_password ? (
               <label>
                 Current password
@@ -154,7 +217,10 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
                 />
               </label>
             ) : (
-              <p className="meta">Set a password so you can login / switch devices later.</p>
+              <p className="meta">
+                Walang password pa ang account na ito — i-set mo para makapag-login / switch
+                later.
+              </p>
             )}
             <label>
               New password
@@ -176,8 +242,11 @@ export default function AccountProfile({ meta, onUpdated, onLogout }) {
           {note ? <div className="ok-banner">{note}</div> : null}
 
           <div className="acct-profile-actions">
-            <button type="button" className="btn-ghost" disabled={busy} onClick={logout}>
-              Logout / switch account
+            <button type="button" className="btn-ghost" disabled={busy} onClick={switchAccount}>
+              Switch account
+            </button>
+            <button type="button" className="btn-danger" disabled={busy} onClick={logout}>
+              Logout
             </button>
           </div>
         </div>

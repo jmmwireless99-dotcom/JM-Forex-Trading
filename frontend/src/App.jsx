@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import AccountAuth from './AccountAuth'
 import AccountProfile from './AccountProfile'
-import { api, connectFeed, restoreAccountSession, saveAccountSession, loadAccountSession } from './api'
+import {
+  api,
+  clearAccountSession,
+  connectFeed,
+  loadAccountSession,
+  restoreAccountSession,
+  saveAccountSession,
+} from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -110,6 +117,7 @@ export default function App() {
   const [accountMeta, setAccountMeta] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [sessionBoot, setSessionBoot] = useState(0)
+  const [authTab, setAuthTab] = useState('login')
   const accountIdRef = useRef(null)
 
   useEffect(() => {
@@ -295,7 +303,12 @@ export default function App() {
     setSessionBoot((n) => n + 1)
   }
 
-  function handleLogout() {
+  function endSession(nextTab = 'login') {
+    try {
+      clearAccountSession()
+    } catch {
+      /* ignore */
+    }
     accountIdRef.current = null
     setAccountMeta(null)
     setAccount(emptyAccount)
@@ -304,7 +317,18 @@ export default function App() {
     setTradeSummary(null)
     setCapital(null)
     setError('')
+    setOrderNote('')
+    setAuthTab(nextTab)
+    setAuthReady(true)
     setSessionBoot((n) => n + 1)
+  }
+
+  function handleLogout() {
+    endSession('login')
+  }
+
+  function handleSwitchAccount() {
+    endSession('login')
   }
 
   function handleProfileUpdated(next) {
@@ -492,7 +516,7 @@ export default function App() {
   if (!accountMeta?.id) {
     return (
       <div className="app">
-        <AccountAuth onAuthed={handleAuthed} />
+        <AccountAuth key={authTab} initialTab={authTab} onAuthed={handleAuthed} />
       </div>
     )
   }
@@ -512,6 +536,7 @@ export default function App() {
             meta={accountMeta}
             onUpdated={handleProfileUpdated}
             onLogout={handleLogout}
+            onSwitchAccount={handleSwitchAccount}
           />
         </div>
         <p>

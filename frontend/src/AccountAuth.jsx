@@ -39,8 +39,8 @@ function AvatarMark({ avatar, label, code }) {
  * Login / Register gate. Switching accounts only swaps the browser session —
  * server trade journals are never cleared.
  */
-export default function AccountAuth({ onAuthed }) {
-  const [tab, setTab] = useState('login')
+export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
+  const [tab, setTab] = useState(initialTab === 'register' ? 'register' : 'login')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [label, setLabel] = useState('')
@@ -50,6 +50,10 @@ export default function AccountAuth({ onAuthed }) {
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
   const [recent, setRecent] = useState(() => loadRecentAccounts())
+
+  useEffect(() => {
+    setTab(initialTab === 'register' ? 'register' : 'login')
+  }, [initialTab])
 
   useEffect(() => {
     setRecent(loadRecentAccounts())
@@ -233,8 +237,8 @@ export default function AccountAuth({ onAuthed }) {
         </form>
 
         <p className="meta auth-foot">
-          Logout / switch account never deletes trades. History is tied to your account code +
-          password.
+          Logout / Switch never deletes trades. History stays on your account code + password.
+          Use a recent account chip below to switch faster.
         </p>
       </div>
     </div>

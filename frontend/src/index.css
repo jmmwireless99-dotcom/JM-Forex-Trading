@@ -96,7 +96,7 @@ button:disabled {
 .brand-lockup {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem 1.25rem;
 }
 
@@ -1236,9 +1236,21 @@ select {
   font-size: 1.15rem;
 }
 
-.acct-profile {
+.acct-bar {
   position: relative;
   margin-left: auto;
+  flex: 1 1 280px;
+  min-width: min(100%, 280px);
+  max-width: 520px;
+  z-index: 30;
+}
+
+.acct-bar-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
 .acct-profile-trigger {
@@ -1250,6 +1262,20 @@ select {
   background: rgba(8, 20, 18, 0.55);
   color: var(--sand);
   padding: 0.35rem 0.85rem 0.35rem 0.35rem;
+}
+
+.acct-bar-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.acct-bar-btn {
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .acct-profile-text {
@@ -1323,13 +1349,27 @@ select {
 }
 
 @media (max-width: 720px) {
-  .acct-profile {
+  .acct-bar {
     margin-left: 0;
-    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .acct-bar-main {
+    justify-content: stretch;
   }
 
   .acct-profile-trigger {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .acct-bar-actions {
     width: 100%;
+  }
+
+  .acct-bar-btn {
+    flex: 1 1 auto;
   }
 
   .acct-profile-panel {
