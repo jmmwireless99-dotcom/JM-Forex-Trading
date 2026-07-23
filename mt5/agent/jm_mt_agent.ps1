@@ -31,7 +31,9 @@ function Read-JmFile([string]$FilePath) {
 
 function Write-JmFile([string]$FilePath, [string]$Text) {
   $tmp = $FilePath + ".tmp"
-  [System.IO.File]::WriteAllText($tmp, $Text)
+  # Important: no UTF-8 BOM — MT5 EA expects ANSI/plain text CSV
+  $enc = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($tmp, $Text, $enc)
   Move-Item -LiteralPath $tmp -Destination $FilePath -Force
 }
 
