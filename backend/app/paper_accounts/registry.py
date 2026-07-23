@@ -45,9 +45,14 @@ class PaperAccount:
     avatar: str | None = None  # data-URL logo
     # When set, strategy auto-fills (incl. London Judas) use this lot size exactly.
     fixed_lots: float | None = None
+    # Per-account strategy: "auto" (session follow) | strategy id | "manual_only"
+    strategy_pref: str = "auto"
+    # In-memory only — entry cooldown after a fill for this account.
+    entry_cooldown_until: float = 0.0
 
     def profile_public(self) -> dict:
         """Safe profile fields (no token / password)."""
+        pref = (self.strategy_pref or "auto").strip() or "auto"
         return {
             "account_id": self.id,
             "account_code": self.code,
@@ -56,6 +61,10 @@ class PaperAccount:
             "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
             "fixed_lots": self.fixed_lots,
+            "strategy_pref": pref,
+            "strategy_mode": "auto" if pref == "auto" else (
+                "off" if pref in {"manual_only", "off"} else "manual"
+            ),
             "created_at": self.created_at.isoformat(),
         }
 
@@ -75,6 +84,7 @@ class PaperAccount:
             "open_positions": snap.open_positions,
             "trades_logged": self.journal.summary().get("total", 0),
             "fixed_lots": self.fixed_lots,
+            "strategy_pref": (self.strategy_pref or "auto").strip() or "auto",
         }
 
     def snapshot_payload(self) -> dict:
@@ -132,6 +142,7 @@ class PaperAccountRegistry:
         is_desk: bool = False,
         password: str | None = None,
         avatar: str | None = None,
+        strategy_pref: str | None = None,
     ) -> PaperAccount:
         amount = float(deposit if deposit is not None else self.settings.initial_balance)
         amount = max(50.0, min(amount, 1_000_000.0))
@@ -142,6 +153,7 @@ class PaperAccountRegistry:
         logo = None
         if avatar is not None:
             logo = normalize_avatar(avatar) or None
+        pref = self._normalize_strategy_pref(strategy_pref) if strategy_pref else "auto"
         acc = PaperAccount(
             id=str(uuid.uuid4()),
             code=_short_code(),
@@ -150,10 +162,11 @@ class PaperAccountRegistry:
             broker=broker,
             journal=journal,
             risk=risk,
-            follow_auto=follow_auto and not is_desk,
+            follow_auto=(follow_auto and not is_desk and pref != "manual_only"),
             is_desk=is_desk,
             password_hash=pwd_hash,
             avatar=logo,
+            strategy_pref=pref if not is_desk else "manual_only",
         )
         with self._lock:
             self._accounts[acc.id] = acc
@@ -270,6 +283,60 @@ class PaperAccountRegistry:
             self._save()
         return account
 
+    @staticmethod
+    def _normalize_strategy_pref(name: str | None) -> str:
+        from app.strategies import STRATEGY_REGISTRY, create_strategy
+
+        raw = (name or "auto").strip()
+        if not raw or raw.lower() in {"auto", "session", "auto_transfer", "auto_gold"}:
+            return "auto"
+        if raw.lower() in {"off", "none", "manual", "manual_only"}:
+            return "manual_only"
+        # Resolve aliases via create_strategy factory
+        resolved = create_strategy(raw).name
+        if resolved not in STRATEGY_REGISTRY and resolved != "manual_only":
+            raise ValueError(f"Unknown strategy: {name}")
+        return resolved
+
+    def set_strategy_pref(self, account: PaperAccount, name: str) -> PaperAccount:
+        """Lock this account to a strategy, auto session-follow, or off. Keeps history."""
+        pref = self._normalize_strategy_pref(name)
+        with self._lock:
+            account.strategy_pref = pref
+            account.follow_auto = pref == "auto" or (
+                pref != "manual_only" and pref != "off"
+            )
+            if pref == "manual_only":
+                account.follow_auto = False
+            self._save()
+        return account
+
+    def accepts_strategy_signal(
+        self,
+        account: PaperAccount,
+        *,
+        signal_strategy: str,
+        session_strategy: str | None,
+        allow_trading: bool,
+    ) -> bool:
+        """Whether this account should take a fill for the given signal strategy."""
+        import time as _time
+
+        if account.is_desk:
+            return False
+        pref = (account.strategy_pref or "auto").strip() or "auto"
+        if pref in {"manual_only", "off"}:
+            return False
+        if _time.time() < float(account.entry_cooldown_until or 0):
+            return False
+        if pref == "auto":
+            if not account.follow_auto:
+                return False
+            if not allow_trading or not session_strategy:
+                return False
+            return signal_strategy == session_strategy
+        return signal_strategy == pref
+
     def list_public(self) -> list[dict]:
         with self._lock:
             return [a.public_info() for a in self._accounts.values() if not a.is_desk]
@@ -311,6 +378,7 @@ class PaperAccountRegistry:
                         "password_hash": acc.password_hash,
                         "avatar": acc.avatar,
                         "fixed_lots": acc.fixed_lots,
+                        "strategy_pref": acc.strategy_pref or "auto",
                         "follow_auto": acc.follow_auto,
                         "is_desk": False,
                         "created_at": acc.created_at.isoformat(),
@@ -446,7 +514,17 @@ class PaperAccountRegistry:
                         if row.get("fixed_lots") is not None
                         else None
                     ),
+                    strategy_pref=self._normalize_strategy_pref(
+                        row.get("strategy_pref") or ("auto" if row.get("follow_auto", True) else "manual_only")
+                    ),
                 )
+                # Keep follow_auto aligned with preference for legacy rows.
+                if acc.strategy_pref == "manual_only":
+                    acc.follow_auto = False
+                elif acc.strategy_pref == "auto":
+                    acc.follow_auto = bool(row.get("follow_auto", True))
+                else:
+                    acc.follow_auto = True
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc
                 self._by_token[acc.token] = acc.id

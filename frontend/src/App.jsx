@@ -156,6 +156,16 @@ export default function App() {
         if (acc.deposit != null) setDepositInput(String(acc.deposit))
         else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
         if (acc.fixed_lots != null) setManualLots(String(acc.fixed_lots))
+        if (acc.strategy_pref) {
+          const pref = acc.strategy_pref
+          if (pref === 'auto') {
+            /* keep UI select; show via badge */
+          } else if (pref !== 'manual_only') {
+            clearStrategyDirty(pref)
+          } else {
+            clearStrategyDirty('manual_only')
+          }
+        }
         setAccountMeta((prev) => ({
           ...(prev || {}),
           id: acc.account_id || prev?.id,
@@ -163,6 +173,7 @@ export default function App() {
           label: acc.account_label || prev?.label,
           avatar: acc.avatar || prev?.avatar || '',
           has_password: Boolean(acc.has_password),
+          strategy_pref: acc.strategy_pref || 'auto',
         }))
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
@@ -352,11 +363,11 @@ export default function App() {
 
   async function applyStrategy() {
     await run(async () => {
-      const res = await api.setStrategy(strategy)
+      const res = await api.setAccountStrategy(strategy)
+      if (res?.account) setAccount(res.account)
       setOrderNote(
-        strategy === 'London_Judas_Sweep'
-          ? 'London Judas locked (manual) — session auto-follow OFF. Entries 07:00–11:00 UTC only.'
-          : res?.message || `Strategy set to ${strategy} (session auto-follow OFF)`,
+        res?.message ||
+          `This account only → ${strategy}. Other accounts unchanged.`,
       )
       return res
     })
@@ -365,14 +376,24 @@ export default function App() {
   async function lockLondonJudas() {
     markStrategyChoice('London_Judas_Sweep')
     await run(async () => {
-      const res = await api.setStrategy('London_Judas_Sweep')
-      try {
-        await api.start('London_Judas_Sweep')
-      } catch {
-        /* engine may already be running */
-      }
+      const res = await api.setAccountStrategy('London_Judas_Sweep')
+      if (res?.account) setAccount(res.account)
       setOrderNote(
-        'London Judas locked · manual mode. Use your lot size below for Judas fills. Window 07:00–11:00 UTC.',
+        res?.message ||
+          'This account locked to London Judas. Other accounts keep their own strategy.',
+      )
+      return res
+    })
+  }
+
+  async function enableAccountAuto() {
+    markStrategyChoice('manual_only') // UI select can stay; pref is auto
+    await run(async () => {
+      const res = await api.setAccountStrategy('auto')
+      if (res?.account) setAccount(res.account)
+      setOrderNote(
+        res?.message ||
+          'This account follows session auto-transfer. Other accounts unchanged.',
       )
       return res
     })
@@ -394,11 +415,7 @@ export default function App() {
   }
 
   async function autoTransferBySession() {
-    await run(async () => {
-      const res = await api.autoTransfer()
-      if (res?.message) setOrderNote(res.message)
-      return res
-    })
+    await enableAccountAuto()
   }
 
   async function applyDeposit(amount) {
@@ -547,47 +564,72 @@ export default function App() {
             Apply mode
           </button>
           <select
-            value={strategy}
-            onChange={(e) => markStrategyChoice(e.target.value)}
+            value={
+              strategyDirty
+                ? strategy
+                : account?.strategy_pref === 'auto'
+                  ? 'auto'
+                  : account?.strategy_pref || strategy
+            }
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === 'auto') {
+                enableAccountAuto()
+              } else {
+                markStrategyChoice(v)
+                run(async () => {
+                  const res = await api.setAccountStrategy(v)
+                  if (res?.account) setAccount(res.account)
+                  setOrderNote(res?.message || `This account → ${v}`)
+                  clearStrategyDirty(v === 'manual_only' ? 'manual_only' : v)
+                  return res
+                })
+              }
+            }}
             disabled={busy}
+            title="Strategy for THIS logged-in account only"
           >
-            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC', 'London_Judas_Sweep']).map((name) => (
+            <option value="auto">auto (session transfer — this account)</option>
+            {(strategies.length
+              ? strategies
+              : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC', 'London_Judas_Sweep']
+            ).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
-                  ? 'manual_only (no auto signals)'
+                  ? 'manual_only (no auto signals — this account)'
                   : name === 'EMA_RSI_Scalp'
-                    ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
+                    ? 'EMA_RSI_Scalp (this account)'
                     : name === 'Liquidity_Sweep_SMC'
-                      ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
+                      ? 'Liquidity_Sweep_SMC (this account)'
                       : name === 'London_Judas_Sweep'
-                        ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                        : name}
+                        ? 'London_Judas_Sweep (this account · 07-11 UTC)'
+                        : `${name} (this account)`}
               </option>
             ))}
           </select>
           <button
             className="btn-ghost"
-            disabled={busy}
+            disabled={busy || strategy === 'auto'}
             onClick={() => applyStrategy()}
-            title="Lock selected strategy and turn OFF session auto-follow"
+            title="Apply selected strategy to THIS account only"
           >
-            Apply strategy (manual)
+            Apply to my account
           </button>
           <button
             className="btn-primary"
             disabled={busy}
             onClick={() => lockLondonJudas()}
-            title="Lock London Judas Sweep — manual mode, your lot size"
+            title="Lock THIS account to London Judas"
           >
-            Lock London Judas
+            My account → Judas
           </button>
           <button
             className="btn-ghost"
             disabled={busy}
-            onClick={() => autoTransferBySession()}
-            title="Auto follow by session time (overrides manual lock)"
+            onClick={() => enableAccountAuto()}
+            title="THIS account follows session auto-transfer"
           >
-            Auto transfer (session)
+            My account → Auto
           </button>
           <button
             className="btn-ghost"
@@ -612,8 +654,13 @@ export default function App() {
         {error ? <div className="error-banner">{error}</div> : null}
         <div className="status-row">
           <span>
-            Strategy: {status?.active_strategy || autoInfo?.display || '—'}
-            {strategyDirty ? ` · selected ${strategy} (not applied)` : ''}
+            My strategy:{' '}
+            {account?.strategy_pref === 'auto'
+              ? `auto → ${autoInfo?.decision?.strategy || desk?.recommended_now?.strategy || 'session'}`
+              : account?.strategy_pref || status?.active_strategy || '—'}
+            {strategyDirty && account?.strategy_pref !== strategy && strategy !== 'auto'
+              ? ` · selected ${strategy} (not applied)`
+              : ''}
           </span>
           <span>
             Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
@@ -798,19 +845,25 @@ export default function App() {
       <section className="panel manual-settings" aria-label="Manual strategy settings">
         <div className="deposit-head">
           <div>
-            <h2>Manual settings · London Judas + lots</h2>
+            <h2>My account strategy + lots</h2>
             <p className="meta">
-              <strong>Lock London Judas</strong> = strategy fixed, session auto-follow OFF.
-              Entries only 07:00–11:00 UTC. Your lot size below applies to Judas fills and
-              manual Buy/Sell (history not reset).
+              Strategy applies to <strong>this login only</strong> (e.g. Juan = scalp, you =
+              Judas). Pick <strong>auto</strong> for session transfer on your account.
+              Lot size below is for your fills. History never resets.
             </p>
           </div>
-          <span className={`badge ${!autoInfo?.enabled && appliedStrategy === 'London_Judas_Sweep' ? 'badge-live' : ''}`}>
-            {!autoInfo?.enabled && appliedStrategy === 'London_Judas_Sweep'
-              ? 'JUDAS MANUAL'
-              : autoInfo?.enabled
-                ? 'SESSION AUTO'
-                : appliedStrategy || '—'}
+          <span
+            className={`badge ${
+              account?.strategy_pref && account.strategy_pref !== 'manual_only'
+                ? 'badge-live'
+                : ''
+            }`}
+          >
+            {account?.strategy_pref === 'auto'
+              ? 'MY AUTO'
+              : account?.strategy_pref === 'London_Judas_Sweep'
+                ? 'MY JUDAS'
+                : account?.strategy_pref || '—'}
           </span>
         </div>
         <div className="manual-controls">
@@ -827,17 +880,19 @@ export default function App() {
             />
           </label>
           <button type="button" className="btn-primary" disabled={busy} onClick={() => saveManualLots()}>
-            Save lots for Judas
+            Save lots
           </button>
-          <button type="button" className="btn-ghost" disabled={busy} onClick={() => lockLondonJudas()}>
-            Lock London Judas
+          <button type="button" className="btn-ghost" disabled={busy} onClick={() => applyStrategy()}>
+            Apply selected strategy
+          </button>
+          <button type="button" className="btn-ghost" disabled={busy} onClick={() => enableAccountAuto()}>
+            Use auto transfer
           </button>
           <span className="meta">
             Saved lots:{' '}
             {account.fixed_lots != null ? Number(account.fixed_lots).toFixed(2) : 'risk-based (not set)'}
             {' · '}
-            Active: {status?.active_strategy || '—'}
-            {autoInfo?.enabled ? ' · auto ON' : ' · auto OFF'}
+            Pref: {account?.strategy_pref || 'auto'}
           </span>
         </div>
       </section>

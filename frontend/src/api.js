@@ -141,6 +141,9 @@ export const api = {
     }),
   setTradeSettings: (body) =>
     request('/account/settings', { method: 'POST', body: JSON.stringify(body) }),
+  setAccountStrategy: (name) =>
+    request('/account/strategy', { method: 'POST', body: JSON.stringify({ name }) }),
+  getAccountStrategy: () => request('/account/strategy'),
   positions: () => request('/positions'),
   orders: () => request('/orders'),
   trades: (limit = 100) => request(`/trades?limit=${limit}`),
