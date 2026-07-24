@@ -211,7 +211,17 @@ export default function App() {
             if (msg.data?.mode) setMode(msg.data.mode)
             if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
           }
-          if (msg.event === 'account') setAccount(msg.data)
+          if (msg.event === 'account') {
+            setAccount(msg.data)
+            setAccountMeta((prev) => ({
+              ...(prev || {}),
+              mt_platform: msg.data?.mt_platform ?? prev?.mt_platform ?? null,
+              mt5_login: msg.data?.mt5_login ?? prev?.mt5_login ?? null,
+              binding: msg.data?.binding ?? prev?.binding ?? null,
+              label: msg.data?.account_label || prev?.label,
+              code: msg.data?.account_code || prev?.code,
+            }))
+          }
           if (msg.event === 'positions') {
             const list = Array.isArray(msg.data)
               ? msg.data
