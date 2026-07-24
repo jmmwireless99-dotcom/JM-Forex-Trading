@@ -592,6 +592,9 @@ class TradingEngine:
         if self.running:
             return
         self._seed_candle_history()
+        # Always-on desk: boot with session auto-follow whenever configured.
+        if self.settings.auto_strategy:
+            self.auto_enabled = True
         if self.auto_enabled:
             rec = self.recommended_now()
             target = rec.get("transfer_to") or rec.get("strategy")

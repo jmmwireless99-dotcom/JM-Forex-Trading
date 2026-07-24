@@ -81,9 +81,17 @@ def strategy_catalog() -> list[dict]:
             "name": "EMA + RSI Scalp",
             "sessions": [
                 "Asia (UTC 00–07 / PH 8AM–3PM)",
+                "London wind-down / close (UTC 11–13)",
                 "New York (UTC 16–20 / PH 12–4AM)",
+                "Off-hours (UTC 20–24)",
             ],
-            "session_slots": ["asia", "new_york"],
+            "session_slots": [
+                "asia",
+                "london_wind_down",
+                "london_close",
+                "new_york",
+                "off_hours",
+            ],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",

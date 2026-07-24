@@ -54,14 +54,11 @@ class AutoStrategyRouter:
     def __init__(self, *, news_filter: bool = True, **_: object) -> None:
         self.news_filter = news_filter
         self.last_decision: AutoDecision | None = None
-        # Single source of truth: FULL_SESSION_SLOTS in session.py
+        # Single source of truth: FULL_SESSION_SLOTS in session.py (Mon–Fri always-on).
         self.session_map: dict[str, str | None] = {
             **{k: v for k, v in SESSION_STRATEGY.items()},
-            "london_wind_down": None,
-            "london_close": None,
             "friday_late": None,
             "weekend": None,
-            "off_hours": None,
             "outside_asia_desk": None,
         }
 

@@ -47,13 +47,13 @@ function sessionLabel(raw) {
   const map = {
     asia: 'Asia (UTC 00–07 / PH 8AM–3PM)',
     london: 'London (UTC 07–11 / PH 3–7PM)',
-    london_wind_down: 'London wind-down (UTC 11–12 / PH 7–8PM)',
-    london_close: 'London kill (UTC 12–13 / PH 8–9PM)',
+    london_wind_down: 'London wind-down · EMA (UTC 11–12)',
+    london_close: 'London close · EMA + kill (UTC 12–13)',
     london_ny_overlap: 'London/NY overlap (UTC 13–16 / PH 9PM–12AM)',
     new_york: 'New York (UTC 16–20 / PH 12–4AM)',
     friday_late: 'Friday late',
     weekend: 'Weekend',
-    off_hours: 'Off-hours (UTC 20–24 / PH 4–8AM)',
+    off_hours: 'Off-hours · EMA (UTC 20–24 / PH 4–8AM)',
     outside_asia_desk: 'Outside Asia desk',
     asia_off: 'Asia / off',
     hourly: 'Hourly auto-transfer',
@@ -691,7 +691,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Auto schedule (hourly): Asia/NY EMA · London Judas · Overlap SMC
+              Auto schedule (hourly, always-on): Asia/NY/off EMA · London Judas · Overlap SMC
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||

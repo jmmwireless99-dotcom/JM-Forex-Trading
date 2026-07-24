@@ -44,7 +44,8 @@ class SessionSlot:
         return f"{ph_start:02d}:00-{ph_end_h:02d}:59"
 
 
-# Canonical Mon–Fri map — auto-transfer re-reads this every UTC hour.
+# Canonical Mon–Fri map — always-on auto: every weekday slot has a strategy.
+# Weekend still stands aside. London kill switch still cancels Judas limits at 12:00 UTC.
 FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
     SessionSlot(
         label="asia",
@@ -69,18 +70,18 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="London wind-down",
         utc_start=11,
         utc_end=12,
-        strategy=None,
-        tier=SessionTier.AVOID,
-        reason="London wind-down (UTC 11:00–11:59 / PH 19:00–19:59) — no new Judas entries before kill",
+        strategy="EMA_RSI_Scalp",
+        tier=SessionTier.ALLOWED,
+        reason="London wind-down (UTC 11:00–11:59 / PH 19:00–19:59) — EMA auto while Judas cools",
     ),
     SessionSlot(
         label="london_close",
         slot="London close",
         utc_start=12,
         utc_end=13,
-        strategy=None,
-        tier=SessionTier.AVOID,
-        reason="London kill hour (UTC 12:00–12:59 / PH 20:00–20:59) — cancel limits, no new entries",
+        strategy="EMA_RSI_Scalp",
+        tier=SessionTier.ALLOWED,
+        reason="London close (UTC 12:00–12:59 / PH 20:00–20:59) — kill Judas limits + EMA auto",
     ),
     SessionSlot(
         label="london_ny_overlap",
@@ -105,9 +106,9 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="Off-hours",
         utc_start=20,
         utc_end=24,
-        strategy=None,
-        tier=SessionTier.AVOID,
-        reason="Off-hours (UTC 20:00–23:59 / PH 04:00–07:59) — spreads widen, skip new entries",
+        strategy="EMA_RSI_Scalp",
+        tier=SessionTier.ALLOWED,
+        reason="Off-hours (UTC 20:00–23:59 / PH 04:00–07:59) — EMA auto when setup appears",
     ),
 )
 
@@ -159,15 +160,16 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map aligned with strategy clocks (UTC + PH).
+    """Full desk map — Mon–Fri always-on auto strategy by UTC hour.
 
     Asia 00:00–06:59 — EMA_RSI
     London 07:00–10:59 — Judas sweep/entry
-    London wind-down 11:00–11:59 — stand aside (pre-kill)
-    London close 12:00–12:59 — kill pending
+    London wind-down 11:00–11:59 — EMA auto (Judas cools)
+    London close 12:00–12:59 — kill Judas limits + EMA auto
     Overlap 13:00–15:59 — SMC
     New York 16:00–19:59 — EMA_RSI
-    Off-hours / weekend — stand aside
+    Off-hours 20:00–23:59 — EMA auto when setup appears
+    Weekend — stand aside
     Auto-transfer re-applies this map every UTC hour.
     """
     utc = ts.astimezone(timezone.utc)
@@ -235,13 +237,7 @@ def schedule_table() -> list[dict]:
             "ph": slot.ph_range,
             "slot": slot.slot,
             "session": slot.label,
-            "strategies": slot.strategy or (
-                "Stand aside (pre-kill)"
-                if slot.label == "london_wind_down"
-                else "Stand aside (kill limits)"
-                if slot.label == "london_close"
-                else "Stand aside"
-            ),
+            "strategies": slot.strategy or "Stand aside",
         }
         for slot in FULL_SESSION_SLOTS
     ]
@@ -252,7 +248,17 @@ def schedule_table() -> list[dict]:
             "ph": "every hour (:00 PH+8)",
             "slot": "Auto transfer",
             "session": "hourly",
-            "strategies": "Re-check time session each UTC hour — kusang lilipat ang strategy",
+            "strategies": "Always-on auto — re-check time session each UTC hour",
+        }
+    )
+    rows.append(
+        {
+            "days": "Sat-Sun",
+            "utc": "all day",
+            "ph": "all day",
+            "slot": "Weekend",
+            "session": "weekend",
+            "strategies": "Stand aside (market closed)",
         }
     )
     return rows

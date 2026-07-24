@@ -30,21 +30,22 @@ def test_london_judas_window():
     assert session_allows_entry(ts) is True
 
 
-def test_london_wind_down_before_kill():
-    # 11:30 UTC — strategy entry window closed; stand aside before 12:00 kill
+def test_london_wind_down_keeps_ema_auto():
+    # 11:30 UTC — Judas cools; EMA stays armed for always-on auto
     ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_wind_down"
-    assert session_allows_entry(ts) is False
+    assert session_allows_entry(ts) is True
 
 
-def test_london_kill_hour_stand_aside():
-    # 12:00 UTC — kill pending, no new strategy entries
+def test_london_close_keeps_ema_auto():
+    # 12:00 UTC — Judas limits still killed; EMA auto remains allowed
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_close"
+    assert session_allows_entry(ts) is True
 
 
 def test_overlap_prime():
@@ -76,9 +77,11 @@ def test_schedule_table_has_ph_and_hourly_row():
     assert any(r["session"] == "london_ny_overlap" and r["strategies"] == "Liquidity_Sweep_SMC" for r in rows)
     asia = next(r for r in rows if r["session"] == "asia")
     assert asia["ph"] == "08:00-14:59"
-    hourly = rows[-1]
+    hourly = next(r for r in rows if r["session"] == "hourly")
     assert hourly["slot"] == "Auto transfer"
     assert "hour" in hourly["utc"].lower()
+    assert any(r["session"] == "london_close" and r["strategies"] == "EMA_RSI_Scalp" for r in rows)
+    assert any(r["session"] == "off_hours" and r["strategies"] == "EMA_RSI_Scalp" for r in rows)
 
 
 def test_weekend_avoided():
