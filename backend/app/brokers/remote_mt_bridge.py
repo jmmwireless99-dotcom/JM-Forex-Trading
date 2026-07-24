@@ -11,6 +11,7 @@ from pathlib import Path
 from app.brokers.mt4_bridge import BridgeAck
 from app.brokers.remote_mt_store import (
     get_remote_mt_state,
+    normalize_platform,
     remote_clear_command,
     remote_is_online,
     remote_set_command,
@@ -31,18 +32,21 @@ from app.models.domain import (
 class RemoteMetaTraderBridge:
     """Same behavior as MT4FileBridge, but state comes from the Windows agent."""
 
-    def __init__(self, symbol: str = "XAUUSD") -> None:
+    def __init__(self, symbol: str = "XAUUSD", platform: str = "mt5") -> None:
         self.symbol = (symbol or "XAUUSD").upper()
-        self.bridge_dir = Path("remote://windows-agent")
+        self.platform = normalize_platform(platform)
+        self.bridge_dir = Path(f"remote://windows-agent/{self.platform}")
 
     def is_online(self, max_age_seconds: float = 8.0) -> bool:
-        return remote_is_online(max_age_seconds=max_age_seconds)
+        return remote_is_online(
+            max_age_seconds=max_age_seconds, platform=self.platform
+        )
 
     def ping(self, timeout: float = 15.0) -> BridgeAck:
         return self._send("PING", timeout=timeout)
 
     def read_tick(self) -> Tick | None:
-        st = get_remote_mt_state()
+        st = get_remote_mt_state(self.platform)
         with st.lock:
             raw = st.ticks_csv.strip()
         if not raw:
@@ -58,7 +62,7 @@ class RemoteMetaTraderBridge:
     def snapshot(self) -> AccountSnapshot:
         balance = equity = 0.0
         open_positions = 0
-        st = get_remote_mt_state()
+        st = get_remote_mt_state(self.platform)
         with st.lock:
             raw = st.status_csv.strip()
         if raw:
@@ -80,7 +84,7 @@ class RemoteMetaTraderBridge:
         )
 
     def open_positions(self) -> list[Position]:
-        st = get_remote_mt_state()
+        st = get_remote_mt_state(self.platform)
         with st.lock:
             raw = st.positions_csv.strip()
         if not raw:
@@ -133,7 +137,7 @@ class RemoteMetaTraderBridge:
         if ack.ok:
             order.status = OrderStatus.FILLED
             order.filled_at = utcnow()
-            order.comment = f"mt5:{ack.detail}"
+            order.comment = f"{self.platform}:{ack.detail}"
         else:
             order.status = OrderStatus.REJECTED
             order.reject_reason = ack.detail or "MT remote bridge error"
@@ -153,25 +157,25 @@ class RemoteMetaTraderBridge:
             return BridgeAck(
                 command_id or "none",
                 "ERR",
-                "windows_agent_offline — run jm_mt_agent.py on the MT5 PC",
+                f"windows_agent_offline — run agent for {self.platform}",
             )
         cmd_id = command_id or uuid.uuid4().hex[:12]
         row = ",".join([cmd_id, action, *fields])
         payload = "id,action,symbol,side,lots,sl,tp,comment\n" + row + "\n"
-        remote_set_command(cmd_id, payload)
+        remote_set_command(cmd_id, payload, platform=self.platform)
 
         deadline = time.time() + timeout
         while time.time() < deadline:
             ack = self._read_ack()
             if ack and ack.command_id == cmd_id:
-                remote_clear_command(cmd_id)
+                remote_clear_command(cmd_id, platform=self.platform)
                 return ack
             time.sleep(0.2)
-        remote_clear_command(cmd_id)
-        return BridgeAck(cmd_id, "ERR", "timeout_waiting_mt5_ack")
+        remote_clear_command(cmd_id, platform=self.platform)
+        return BridgeAck(cmd_id, "ERR", f"timeout_waiting_{self.platform}_ack")
 
     def _read_ack(self) -> BridgeAck | None:
-        st = get_remote_mt_state()
+        st = get_remote_mt_state(self.platform)
         with st.lock:
             raw = st.ack_csv.strip()
         if not raw:

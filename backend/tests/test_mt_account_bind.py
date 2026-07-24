@@ -11,16 +11,17 @@ from app.paper_accounts.registry import PaperAccountRegistry
 
 
 def _reset_store():
-    st = get_remote_mt_state()
-    with st.lock:
-        st.status_csv = ""
-        st.ticks_csv = ""
-        st.positions_csv = ""
-        st.ack_csv = ""
-        st.last_push_at = 0.0
-        st.mt_login = ""
-        st.pending_command_csv = ""
-        st.pending_command_id = ""
+    for plat in ("mt4", "mt5"):
+        st = get_remote_mt_state(plat)
+        with st.lock:
+            st.status_csv = ""
+            st.ticks_csv = ""
+            st.positions_csv = ""
+            st.ack_csv = ""
+            st.last_push_at = 0.0
+            st.mt_login = ""
+            st.pending_command_csv = ""
+            st.pending_command_id = ""
 
 
 def _engine(tmp_path, *, online: bool = True):
@@ -91,7 +92,7 @@ def test_mt5_client_offline_hides_paper_deposit(tmp_path):
     assert payload["paper"] is False
     assert payload["balance"] == 0.0
     assert payload["deposit"] == 0.0
-    assert payload["binding"] == "waiting_mt5"
+    assert payload["binding"] == "waiting_mt"
     assert payload["mt_bound"] is False
 
 
@@ -124,7 +125,7 @@ def test_other_mt5_login_not_bound_to_joel_terminal(tmp_path):
     assert engine.is_mt5_client(other) is True
     assert engine.is_mt_bound(other) is False
     payload = engine.account_payload(other)
-    assert payload["binding"] == "waiting_mt5"
+    assert payload["binding"] == "waiting_mt"
     assert payload["balance"] == 0.0
 
 

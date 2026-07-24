@@ -16,11 +16,11 @@ input int    InpMagic            = 260719;
 input int    InpSlippagePoints   = 30;
 input int    InpPollMs           = 500;
 input bool   UseCommonFolder     = true;   // true = Terminal Common\\Files
-input string CommandFile         = "jm_command.csv";
-input string StatusFile          = "jm_status.csv";
-input string PositionsFile       = "jm_positions.csv";
-input string TickFile            = "jm_ticks.csv";
-input string AckFile             = "jm_ack.csv";
+input string CommandFile         = "jm4_command.csv";
+input string StatusFile          = "jm4_status.csv";
+input string PositionsFile       = "jm4_positions.csv";
+input string TickFile            = "jm4_ticks.csv";
+input string AckFile             = "jm4_ack.csv";
 
 datetime g_last_cmd_seen = 0;
 string   g_last_cmd_id   = "";

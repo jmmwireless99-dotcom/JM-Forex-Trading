@@ -112,19 +112,27 @@ def main() -> int:
     symbol = str(cfg.get("symbol") or "XAUUSD").upper()
     poll_s = max(0.25, float(cfg.get("poll_ms", 500)) / 1000.0)
     host = socket.gethostname()
+    platform = str(cfg.get("platform") or "mt5").strip().lower()
+    if platform not in {"mt4", "mt5"}:
+        platform = "mt5"
+    prefix = str(cfg.get("file_prefix") or "").strip()
+    if not prefix:
+        prefix = "jm4_" if platform == "mt4" else "jm_"
 
-    status_f = files_dir / "jm_status.csv"
-    ticks_f = files_dir / "jm_ticks.csv"
-    positions_f = files_dir / "jm_positions.csv"
-    command_f = files_dir / "jm_command.csv"
-    ack_f = files_dir / "jm_ack.csv"
+    status_f = files_dir / f"{prefix}status.csv"
+    ticks_f = files_dir / f"{prefix}ticks.csv"
+    positions_f = files_dir / f"{prefix}positions.csv"
+    command_f = files_dir / f"{prefix}command.csv"
+    ack_f = files_dir / f"{prefix}ack.csv"
 
-    print("JM Forex MT5 remote agent")
-    print("  API     :", api)
-    print("  Files   :", files_dir)
-    print("  Symbol  :", symbol)
-    print("  Host    :", host)
-    print("Keep MT5 open with JM_Forex_Bridge EA on the chart. Ctrl+C to stop.")
+    print(f"JM Forex {platform.upper()} remote agent")
+    print("  API      :", api)
+    print("  Platform :", platform)
+    print("  Prefix   :", prefix)
+    print("  Files    :", files_dir)
+    print("  Symbol   :", symbol)
+    print("  Host     :", host)
+    print(f"Keep {platform.upper()} open with JM_Forex_Bridge EA. Ctrl+C to stop.")
     print("-" * 60)
 
     if not files_dir.exists():
@@ -159,6 +167,7 @@ def main() -> int:
                     "ack_csv": ack_csv,
                     "symbol": symbol,
                     "agent_host": host,
+                    "platform": platform,
                     "clear_command_id": clear_id,
                 },
             )
@@ -166,19 +175,26 @@ def main() -> int:
             if ok_pushes == 1 or ok_pushes % 20 == 0:
                 online = push.get("ok")
                 print(
-                    f"[{time.strftime('%H:%M:%S')}] push ok={online} "
+                    f"[{time.strftime('%H:%M:%S')}] {platform} push ok={online} "
                     f"status={'yes' if status_csv else 'NO'} "
-                    f"ticks={'yes' if ticks_csv else 'NO'}"
+                    f"ticks={'yes' if ticks_csv else 'NO'} "
+                    f"login={push.get('mt_login')}"
                 )
 
-            poll = http_json("GET", f"{api}/mt/remote/poll", token)
-            cmd = (poll or {}).get("command")
+            cmd = (push or {}).get("command")
+            if not cmd:
+                poll = http_json(
+                    "GET", f"{api}/mt/remote/poll?platform={platform}", token
+                )
+                cmd = (poll or {}).get("command")
             if cmd and cmd.get("csv"):
                 cmd_id = str(cmd.get("id") or "")
                 if cmd_id and cmd_id != last_cmd_id:
                     write_text(command_f, cmd["csv"])
                     last_cmd_id = cmd_id
-                    print(f"[{time.strftime('%H:%M:%S')}] command → EA id={cmd_id}")
+                    print(
+                        f"[{time.strftime('%H:%M:%S')}] {platform} command → EA id={cmd_id}"
+                    )
 
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="ignore")

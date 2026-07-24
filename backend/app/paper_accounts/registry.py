@@ -76,7 +76,8 @@ class PaperAccount:
     first_name: str = ""
     last_name: str = ""
     email: str = ""
-    mt5_login: str = ""  # same as code for client MT5-linked accounts
+    mt5_login: str = ""  # same as code for client MT-linked accounts
+    mt_platform: str = ""  # "mt4" | "mt5" | "" (paper)
 
     def profile_public(self) -> dict:
         """Safe profile fields (no token / password)."""
@@ -92,6 +93,7 @@ class PaperAccount:
             "last_name": self.last_name or "",
             "email": self.email or "",
             "mt5_login": self.mt5_login or "",
+            "mt_platform": self.mt_platform or None,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -108,6 +110,7 @@ class PaperAccount:
             "last_name": self.last_name or "",
             "email": self.email or "",
             "mt5_login": self.mt5_login or "",
+            "mt_platform": self.mt_platform or None,
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
             "balance": snap.balance,
@@ -176,6 +179,7 @@ class PaperAccountRegistry:
         last_name: str | None = None,
         email: str | None = None,
         mt5_login: str | None = None,
+        mt_platform: str | None = None,
     ) -> PaperAccount:
         amount = float(deposit if deposit is not None else self.settings.initial_balance)
         amount = max(50.0, min(amount, 1_000_000.0))
@@ -188,20 +192,23 @@ class PaperAccountRegistry:
             logo = normalize_avatar(avatar) or None
 
         fn = ln = mail = mt5 = ""
+        platform = ""
         code = _short_code()
         mt5_raw = str(mt5_login).strip() if mt5_login is not None else ""
         if not is_desk and mt5_raw:
-            # Client accounts linked to an MT5 login number.
+            # Client accounts linked to an MT4/MT5 login number.
             fn = normalize_person_name(first_name, field="First name")
             ln = normalize_person_name(last_name, field="Last name")
             mail = normalize_email(email)
             mt5 = normalize_mt5_login(mt5_raw)
             code = mt5
+            plat_raw = str(mt_platform or "mt5").strip().lower()
+            platform = "mt4" if plat_raw in {"mt4", "4", "mql4"} else "mt5"
             if not pwd_hash:
-                raise ValueError("MT5 password is required (min 6 characters)")
+                raise ValueError("MT password is required (min 6 characters)")
             with self._lock:
                 if mt5.upper() in self._by_code:
-                    raise ValueError("This MT5 account is already registered")
+                    raise ValueError("This MT account is already registered")
                 for acc in self._accounts.values():
                     if (acc.email or "").lower() == mail:
                         raise ValueError("This email is already registered")
@@ -228,6 +235,7 @@ class PaperAccountRegistry:
             last_name=ln,
             email=mail,
             mt5_login=mt5,
+            mt_platform=platform,
         )
         with self._lock:
             if acc.code.upper() in self._by_code:
@@ -415,6 +423,7 @@ class PaperAccountRegistry:
                         "last_name": acc.last_name or "",
                         "email": acc.email or "",
                         "mt5_login": acc.mt5_login or "",
+                        "mt_platform": acc.mt_platform or "",
                         "created_at": acc.created_at.isoformat(),
                         "deposit": snap.deposit,
                         "balance": snap.balance,
@@ -552,6 +561,16 @@ class PaperAccountRegistry:
                     last_name=str(row.get("last_name") or ""),
                     email=str(row.get("email") or ""),
                     mt5_login=self._restore_mt5_login(row),
+                    mt_platform=(
+                        "mt4"
+                        if str(row.get("mt_platform") or "").strip().lower()
+                        in {"mt4", "4", "mql4"}
+                        else (
+                            "mt5"
+                            if self._restore_mt5_login(row)
+                            else ""
+                        )
+                    ),
                 )
                 risk.reset_daily(broker.balance)
                 self._accounts[acc.id] = acc

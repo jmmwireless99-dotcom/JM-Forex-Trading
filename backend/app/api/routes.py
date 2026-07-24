@@ -37,6 +37,7 @@ class CreateAccountBody(BaseModel):
     last_name: str | None = Field(default=None, max_length=64)
     email: str | None = Field(default=None, max_length=120)
     mt5_login: str | None = Field(default=None, max_length=16)
+    mt_platform: str | None = Field(default=None, max_length=8)  # mt4 | mt5
 
 
 class LoginAccountBody(BaseModel):
@@ -107,6 +108,7 @@ class RemoteMtPushBody(BaseModel):
     ack_csv: str = ""
     symbol: str = "XAUUSD"
     agent_host: str = ""
+    platform: str = "mt5"  # mt4 | mt5
     clear_command_id: str | None = None
 
 
@@ -275,9 +277,10 @@ async def mt_remote_push(
         ack_csv=body.ack_csv,
         symbol=body.symbol,
         agent_host=body.agent_host,
+        platform=body.platform,
     )
     if body.clear_command_id:
-        remote_clear_command(body.clear_command_id)
+        remote_clear_command(body.clear_command_id, platform=body.platform)
     # Refresh engine bridge pointer if mode is mt5/mt4
     engine = get_engine()
     info = engine.connection_info()
@@ -285,9 +288,12 @@ async def mt_remote_push(
 
 
 @router.get("/mt/remote/poll")
-async def mt_remote_poll(_: None = Depends(_require_bridge_token)) -> dict:
+async def mt_remote_poll(
+    platform: str = "mt5",
+    _: None = Depends(_require_bridge_token),
+) -> dict:
     """Windows agent polls for OPEN/CLOSE/PING commands from the desk."""
-    return remote_poll_command()
+    return remote_poll_command(platform=platform)
 
 
 @router.post("/execution/mode")
@@ -462,6 +468,7 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
             last_name=body.last_name,
             email=body.email,
             mt5_login=body.mt5_login,
+            mt_platform=body.mt_platform,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

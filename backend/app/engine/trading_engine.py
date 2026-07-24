@@ -9,7 +9,7 @@ from datetime import timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from app.brokers.market_data import MarketDataSimulator
-from app.brokers.mt_bridge import resolve_mt_bridge
+from app.brokers.mt_bridge import resolve_dual_remote_bridges, resolve_mt_bridge
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
@@ -91,6 +91,7 @@ class TradingEngine:
             maxlen=max(settings.candle_history, 200),
         )
         self.mt, detected = resolve_mt_bridge(settings)
+        self.bridges = resolve_dual_remote_bridges(settings)
         self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
         self.running = False
         self.ticks_processed = 0
@@ -102,6 +103,9 @@ class TradingEngine:
         self._recent_ticks: dict[str, Tick] = {}
         self._lock = asyncio.Lock()
         self._mt_platform = detected
+        if self.bridges and self.mode in self.bridges:
+            self.mt = self.bridges[self.mode]
+            self._mt_platform = self.mode
         self._last_auto_key: str | None = None
         self._last_strategy_switch_at: float = 0.0
         self._entry_cooldown_until: float = 0.0
@@ -131,15 +135,16 @@ class TradingEngine:
         last_name: str | None = None,
         email: str | None = None,
         mt5_login: str | None = None,
+        mt_platform: str | None = None,
     ) -> dict[str, Any]:
         """Provision an isolated account for one client browser/session.
 
-        MT5-linked clients (mt5_login set) do not use paper deposit — live MT5
+        MT-linked clients (mt5_login set) do not use paper deposit — live MT
         equity is shown when the Windows bridge is online and bound.
         """
         mt5 = str(mt5_login or "").strip()
         if mt5:
-            # Internal stub only — never shown as capital for MT5 clients.
+            # Internal stub only — never shown as capital for MT clients.
             deposit = 50.0
         acct = self.accounts.create(
             deposit=deposit,
@@ -152,7 +157,9 @@ class TradingEngine:
             last_name=last_name,
             email=email,
             mt5_login=mt5_login,
+            mt_platform=mt_platform,
         )
+        plat = acct.mt_platform or ("mt5" if mt5 else "")
         return {
             "ok": True,
             "account": self.account_payload(acct),
@@ -160,8 +167,8 @@ class TradingEngine:
             "capital": self.capital_preview(account=acct),
             "trades": self._trades_payload(acct),
             "message": (
-                "MT5 account linked. Login with your MT5 number + password. "
-                "Balance comes from live MT5 when the bridge agent is online — no paper deposit."
+                f"{plat.upper()} account linked. Login with your MT number + password. "
+                "Balance comes from live MT when the matching bridge agent is online — no paper deposit."
                 if mt5
                 else (
                     "New demo account created. Save your account code + password — "
@@ -239,7 +246,9 @@ class TradingEngine:
 
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if self.is_mt_bound(account):
-            return self.mt.snapshot()
+            bridge = self.bridge_for_account(account)
+            if bridge is not None:
+                return bridge.snapshot()
         if account is not None and self.is_mt5_client(account):
             return AccountSnapshot(
                 balance=0.0,
@@ -258,28 +267,43 @@ class TradingEngine:
     def account_payload(self, account: PaperAccount | None = None) -> dict[str, Any]:
         acct = account or self._desk
         if account is None and self.using_mt():
-            snap = self.mt.snapshot().model_dump(mode="json")
+            # Desk overview: prefer MT5, else MT4
+            bridge = None
+            if self.bridges:
+                bridge = (
+                    self.bridges["mt5"]
+                    if self.bridges["mt5"].is_online()
+                    else self.bridges.get("mt4")
+                )
+            bridge = bridge or self.mt
+            snap = bridge.snapshot().model_dump(mode="json") if bridge else {}
+            plat = getattr(bridge, "platform", self._mt_platform)
             return {
                 **snap,
                 "account_id": None,
-                "account_code": self.connected_mt_login(),
-                "mt5_login": self.connected_mt_login(),
+                "account_code": self.connected_mt_login(plat if plat in {"mt4", "mt5"} else None),
+                "mt5_login": self.connected_mt_login(plat if plat in {"mt4", "mt5"} else None),
                 "mt_bound": True,
-                "binding": "live_mt5",
+                "mt_platform": plat,
+                "binding": f"live_{plat}" if plat in {"mt4", "mt5"} else "live_mt",
             }
         if account is not None and self.is_mt5_client(account):
-            # MT5-linked clients never show fake paper deposit as capital.
+            plat = self.account_mt_platform(account) or "mt5"
+            # MT-linked clients never show fake paper deposit as capital.
             if self.is_mt_bound(account):
-                snap = self.mt.snapshot().model_dump(mode="json")
+                bridge = self.bridge_for_account(account)
+                snap = bridge.snapshot().model_dump(mode="json") if bridge else {}
                 return {
                     **snap,
                     **acct.profile_public(),
                     "paper": False,
                     "mt_bound": True,
                     "mt_online": True,
+                    "mt_platform": plat,
                     "mt5_login": acct.mt5_login or acct.code,
-                    "binding": "live_mt5",
+                    "binding": f"live_{plat}",
                 }
+            connected = self.connected_mt_login(plat)
             return {
                 **acct.profile_public(),
                 "balance": 0.0,
@@ -292,22 +316,32 @@ class TradingEngine:
                 "deposit": 0.0,
                 "paper": False,
                 "mt_bound": False,
-                "mt_online": self.mt_online(),
+                "mt_online": bool(
+                    self.bridges.get(plat).is_online()
+                    if self.bridges and plat in self.bridges
+                    else self.mt_online()
+                ),
+                "mt_platform": plat,
                 "mt5_login": acct.mt5_login or acct.code,
-                "connected_mt_login": self.connected_mt_login(),
-                "binding": "waiting_mt5",
+                "connected_mt_login": connected,
+                "binding": "waiting_mt",
                 "note": (
-                    f"{(self.mode or 'mt5').upper()} bridge offline — open terminal + JM_Forex_Bridge EA + RUN_AGENT.bat"
-                    if not self.mt_online()
+                    f"{plat.upper()} bridge offline — open {plat.upper()} + JM_Forex_Bridge EA + RUN_AGENT_{plat.upper()}.bat"
+                    if not (
+                        self.bridges.get(plat).is_online()
+                        if self.bridges and plat in self.bridges
+                        else False
+                    )
                     else (
-                        "Connected MT login does not match this account "
-                        f"(connected={self.connected_mt_login()}, yours={acct.mt5_login or acct.code})"
+                        f"Connected {plat.upper()} login does not match this account "
+                        f"(connected={connected}, yours={acct.mt5_login or acct.code})"
                     )
                 ),
             }
         payload = acct.snapshot_payload()
         payload["mt_bound"] = False
         payload["binding"] = "paper"
+        payload["mt_platform"] = None
         return payload
 
     def trade_logs(
@@ -336,10 +370,19 @@ class TradingEngine:
         }
 
     def open_positions(self, account: PaperAccount | None = None) -> list[Position]:
-        if account is None and self.using_mt():
-            return self.mt.open_positions()
         if account is not None and self.is_mt_bound(account):
-            return self.mt.open_positions()
+            bridge = self.bridge_for_account(account)
+            if bridge is not None:
+                return bridge.open_positions()
+        if account is None and self.using_mt():
+            bridge = self.mt
+            if self.bridges:
+                bridge = (
+                    self.bridges["mt5"]
+                    if self.bridges["mt5"].is_online()
+                    else self.bridges.get("mt4") or self.mt
+                )
+            return bridge.open_positions() if bridge else []
         acct = account or self._desk
         return acct.broker.open_positions()
 
@@ -360,6 +403,10 @@ class TradingEngine:
         self.mode = mode
         self.settings.execution_mode = mode
         self.mt, self._mt_platform = resolve_mt_bridge(self.settings)
+        self.bridges = resolve_dual_remote_bridges(self.settings)
+        if self.bridges and mode in self.bridges:
+            self.mt = self.bridges[mode]
+            self._mt_platform = mode
         # Keep live-gold mid for paper books even when MT bridge mode is enabled.
         # Global mt4/mt5 only means the Windows agent is available for bound accounts.
         if self.settings.paper_sync_live_gold:
@@ -368,51 +415,95 @@ class TradingEngine:
             self.market.set_live_mid_provider(None)
 
     def mt_online(self) -> bool:
+        if self.bridges:
+            return any(b.is_online() for b in self.bridges.values())
         return bool(self.mt and self.mt.is_online())
 
     def using_mt(self) -> bool:
+        # Dual remote: either platform online counts as live feed available.
+        if self.bridges:
+            return self.mt_online()
         return self.mode in {"mt4", "mt5"} and self.mt_online()
 
-    def connected_mt_login(self) -> str | None:
-        """MT5 account number reported by the Windows bridge EA (if available)."""
-        if not self.mt:
+    def account_mt_platform(self, account: PaperAccount | None) -> str | None:
+        """Which live terminal this account is linked to (mt4/mt5)."""
+        if account is None or not self.is_mt5_client(account):
             return None
+        raw = str(getattr(account, "mt_platform", None) or "").strip().lower()
+        if raw in {"mt4", "mt5"}:
+            return raw
+        # Infer from whichever bridge currently reports this login.
+        want = str(account.mt5_login or "").strip()
         try:
             from app.brokers.remote_mt_store import remote_mt_login
 
-            login = remote_mt_login()
-            if login:
-                return str(login).strip()
+            if want and remote_mt_login("mt4") == want:
+                return "mt4"
+            if want and remote_mt_login("mt5") == want:
+                return "mt5"
+        except Exception:
+            pass
+        return "mt5"
+
+    def bridge_for_account(self, account: PaperAccount | None):
+        """Remote bridge for a live-linked account, or None."""
+        plat = self.account_mt_platform(account)
+        if not plat:
+            return None
+        if self.bridges and plat in self.bridges:
+            return self.bridges[plat]
+        if self.mt and self._mt_platform == plat:
+            return self.mt
+        return None
+
+    def connected_mt_login(self, platform: str | None = None) -> str | None:
+        """Account number reported by a Windows bridge EA."""
+        try:
+            from app.brokers.remote_mt_store import remote_mt_login
+
+            if platform:
+                login = remote_mt_login(platform)
+                return str(login).strip() if login else None
+            # Prefer primary mode, then whichever is online.
+            for plat in (self.mode if self.mode in {"mt4", "mt5"} else None, "mt5", "mt4"):
+                if not plat:
+                    continue
+                login = remote_mt_login(plat)
+                if login:
+                    return str(login).strip()
         except Exception:
             pass
         return None
 
     def is_mt5_client(self, account: PaperAccount | None) -> bool:
-        """True only when the client explicitly linked an MT5 login (not paper demo)."""
+        """True only when the client explicitly linked an MT login (not paper demo)."""
         if account is None:
             return False
         want = str(getattr(account, "mt5_login", None) or "").strip()
         return want.isdigit() and 5 <= len(want) <= 16
 
     def is_mt_bound(self, account: PaperAccount | None) -> bool:
-        """True when this JM FX client mirrors the live connected MT5 terminal.
+        """True when this JM FX client mirrors its live MT4 or MT5 terminal.
 
-        Only the account whose mt5_login matches the bridge's ACCOUNT_LOGIN is bound
-        (e.g. Joel 25817283). Paper demos and other MT5 logins never inherit that
-        terminal. If the EA omits login, nobody is bound (safer than binding everyone).
+        Joel (mt_platform=mt5, login=25817283) binds only to the MT5 agent.
+        An MT4-linked account binds only to the MT4 agent. Both can be always-on.
         """
         if account is None:
             return False
-        if not self.using_mt() or not self.mt:
-            return False
         if not self.is_mt5_client(account):
             return False
+        plat = self.account_mt_platform(account)
+        if not plat:
+            return False
+        bridge = self.bridge_for_account(account)
+        if bridge is None or not bridge.is_online():
+            return False
         want = str(getattr(account, "mt5_login", None) or "").strip()
-        have = self.connected_mt_login()
+        have = self.connected_mt_login(plat)
         return bool(have) and have == want
 
     def uses_paper_book(self, account: PaperAccount | None) -> bool:
-        """Paper capital / fills — everyone except the live-bound MT5 account."""
+        """Paper capital / fills — everyone except a live-bound MT account."""
         return not self.is_mt_bound(account) and not self.is_mt5_client(account)
 
     def _live_gold_mid(self, symbol: str) -> float | None:
@@ -565,14 +656,30 @@ class TradingEngine:
 
     def connection_info(self) -> dict:
         mids = self.market.last_mids()
+        platforms = {}
+        if self.bridges:
+            try:
+                from app.brokers.remote_mt_store import remote_snapshot_info
+
+                platforms = {
+                    "mt5": remote_snapshot_info("mt5"),
+                    "mt4": remote_snapshot_info("mt4"),
+                }
+            except Exception:
+                platforms = {}
+        primary_login = self.connected_mt_login(
+            self.mode if self.mode in {"mt4", "mt5"} else None
+        )
         return {
             "mode": self.mode,
-            "mt_configured": self.mt is not None,
+            "mt_configured": self.mt is not None or bool(self.bridges),
             "mt_online": self.mt_online(),
             "mt_platform": self.mode if self.mode in {"mt4", "mt5"} else self._mt_platform,
-            "mt_login": self.connected_mt_login(),
+            "mt_login": primary_login,
             "bridge_dir": str(self.mt.bridge_dir) if self.mt else "",
             "using_live_feed": self.using_mt(),
+            "platforms": platforms,
+            "dual_bridge": bool(self.bridges),
             "paper_sync_live_gold": bool(self.settings.paper_sync_live_gold),
             "paper_mid": mids.get(self.settings.symbols[0]),
             "candle_period_seconds": self.candles.period_seconds,
@@ -1260,7 +1367,8 @@ class TradingEngine:
         acct = account or self._desk
         async with self._lock:
             if self.is_mt_bound(acct):
-                ack = self.mt.close_all()
+                bridge = self.bridge_for_account(acct) or self.mt
+                ack = bridge.close_all()
                 await self._emit("account", self.account_payload(acct))
                 await self._emit(
                     "positions",
@@ -1305,7 +1413,16 @@ class TradingEngine:
             raise
 
     async def _next_ticks(self) -> list[Tick]:
-        if self.using_mt():
+        if self.bridges:
+            # Prefer MT5 ticks for the desk feed; fall back to MT4.
+            for plat in ("mt5", "mt4"):
+                bridge = self.bridges.get(plat)
+                if bridge and bridge.is_online():
+                    tick = bridge.read_tick()
+                    if tick:
+                        return [tick]
+            return []
+        if self.using_mt() and self.mt:
             tick = self.mt.read_tick()
             return [tick] if tick else []
         return self.market.next_ticks()
@@ -1598,7 +1715,8 @@ class TradingEngine:
         request.lots = decision.adjusted_lots or request.lots
 
         if self.is_mt_bound(acct):
-            order = self.mt.place_order(request)
+            bridge = self.bridge_for_account(acct) or self.mt
+            order = bridge.place_order(request)
             pos = (
                 self._latest_open(request.symbol, request.side, acct)
                 if order.status == OrderStatus.FILLED
@@ -1606,15 +1724,19 @@ class TradingEngine:
             )
             await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
         elif self.is_mt5_client(acct):
-            # Linked MT5 login that is not the connected terminal — never paper-fill.
-            if not self.mt_online():
+            # Linked MT login that is not bound to its platform — never paper-fill.
+            plat = self.account_mt_platform(acct) or "mt5"
+            bridge = self.bridges.get(plat) if self.bridges else None
+            online = bool(bridge and bridge.is_online())
+            if not online:
                 reason = (
-                    f"{self.mode.upper()} bridge offline — attach JM_Forex_Bridge EA + RUN_AGENT"
+                    f"{plat.upper()} bridge offline — attach JM_Forex_Bridge EA + "
+                    f"RUN_AGENT_{plat.upper()}.bat"
                 )
             else:
                 reason = (
-                    "This JM FX login is not bound to the connected MT terminal. "
-                    f"Connected={self.connected_mt_login() or 'unknown'} · "
+                    f"This JM FX login is not bound to the connected {plat.upper()} terminal. "
+                    f"Connected={self.connected_mt_login(plat) or 'unknown'} · "
                     f"your login={acct.mt5_login or acct.code}"
                 )
             rejected = Order(

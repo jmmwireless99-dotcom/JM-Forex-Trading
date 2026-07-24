@@ -49,6 +49,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
   const [email, setEmail] = useState('')
   const [deposit, setDeposit] = useState('1000')
   const [linkMt5, setLinkMt5] = useState(false)
+  const [mtPlatform, setMtPlatform] = useState('mt5')
   const [avatar, setAvatar] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -116,6 +117,7 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
           last_name: lastName.trim(),
           email: email.trim(),
           mt5_login: mt5,
+          mt_platform: mtPlatform === 'mt4' ? 'mt4' : 'mt5',
           password,
           avatar: avatar || undefined,
         })
@@ -221,6 +223,17 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
               {linkMt5 ? (
                 <>
                   <label>
+                    Platform
+                    <select
+                      value={mtPlatform}
+                      onChange={(e) => setMtPlatform(e.target.value)}
+                      required
+                    >
+                      <option value="mt5">MT5 (e.g. Joel always-on)</option>
+                      <option value="mt4">MT4 (separate always-on)</option>
+                    </select>
+                  </label>
+                  <label>
                     First name
                     <input
                       value={firstName}
@@ -266,8 +279,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                     />
                   </label>
                   <p className="meta">
-                    Live MT only for this login when the Windows bridge reports the same
-                    account number. Other JM FX accounts stay paper.
+                    Joel = MT5 always-on. Gumawa ng hiwalay na account para sa MT4 always-on.
+                    Parehong pwedeng online (dalawang agent window).
                   </p>
                 </>
               ) : (

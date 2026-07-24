@@ -218,6 +218,7 @@ export async function registerAccount(options = {}) {
     last_name: options.last_name,
     email: options.email,
     mt5_login: options.mt5_login,
+    mt_platform: options.mt_platform,
   })
   const session = sessionFromAuthResponse(created)
   saveAccountSession(session)

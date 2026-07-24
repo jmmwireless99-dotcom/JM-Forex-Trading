@@ -94,19 +94,31 @@ if ($null -ne $cfg.poll_ms) {
 }
 if ($pollMs -lt 250) { $pollMs = 250 }
 
-$statusF = Join-Path $filesDir "jm_status.csv"
-$ticksF = Join-Path $filesDir "jm_ticks.csv"
-$positionsF = Join-Path $filesDir "jm_positions.csv"
-$commandF = Join-Path $filesDir "jm_command.csv"
-$ackF = Join-Path $filesDir "jm_ack.csv"
+$platform = [string]$cfg.platform
+if ([string]::IsNullOrWhiteSpace($platform)) { $platform = "mt5" }
+$platform = $platform.ToLower()
+if (($platform -ne "mt4") -and ($platform -ne "mt5")) { $platform = "mt5" }
+
+$prefix = [string]$cfg.file_prefix
+if ([string]::IsNullOrWhiteSpace($prefix)) {
+  if ($platform -eq "mt4") { $prefix = "jm4_" } else { $prefix = "jm_" }
+}
+
+$statusF = Join-Path $filesDir ($prefix + "status.csv")
+$ticksF = Join-Path $filesDir ($prefix + "ticks.csv")
+$positionsF = Join-Path $filesDir ($prefix + "positions.csv")
+$commandF = Join-Path $filesDir ($prefix + "command.csv")
+$ackF = Join-Path $filesDir ($prefix + "ack.csv")
 $hostName = $env:COMPUTERNAME
 
-Write-Host "JM Forex MT5 remote agent (PowerShell)"
-Write-Host ("  API     : " + $api)
-Write-Host ("  Files   : " + $filesDir)
-Write-Host ("  Symbol  : " + $symbol)
-Write-Host ("  Host    : " + $hostName)
-Write-Host "Keep MT5 open with JM_Forex_Bridge EA. Ctrl+C to stop."
+Write-Host ("JM Forex " + $platform.ToUpper() + " remote agent (PowerShell)")
+Write-Host ("  API      : " + $api)
+Write-Host ("  Platform : " + $platform)
+Write-Host ("  Prefix   : " + $prefix)
+Write-Host ("  Files    : " + $filesDir)
+Write-Host ("  Symbol   : " + $symbol)
+Write-Host ("  Host     : " + $hostName)
+Write-Host ("Keep " + $platform.ToUpper() + " open with JM_Forex_Bridge EA. Ctrl+C to stop.")
 Write-Host "------------------------------------------------------------"
 
 if (-not (Test-Path $filesDir)) {
@@ -145,6 +157,7 @@ while ($true) {
       ack_csv = $ackCsv
       symbol = $symbol
       agent_host = $hostName
+      platform = $platform
     }
     if ($null -ne $clearId) {
       $pushBody["clear_command_id"] = $clearId
@@ -159,7 +172,8 @@ while ($true) {
       if (-not [string]::IsNullOrWhiteSpace($ticksCsv)) { $tk = "yes" }
       $ts = Get-Date -Format "HH:mm:ss"
       $okVal = $push.ok
-      Write-Host ("[" + $ts + "] push ok=" + $okVal + " status=" + $st + " ticks=" + $tk)
+      $loginVal = $push.mt_login
+      Write-Host ("[" + $ts + "] " + $platform + " push ok=" + $okVal + " status=" + $st + " ticks=" + $tk + " login=" + $loginVal)
     }
 
     # Prefer command piggybacked on push response (more reliable than separate poll)
@@ -167,7 +181,7 @@ while ($true) {
     if ($null -ne $push.command) {
       $cmdObj = $push.command
     } else {
-      $poll = Invoke-JmApi -Method "GET" -Url ($api + "/mt/remote/poll") -Token $token
+      $poll = Invoke-JmApi -Method "GET" -Url ($api + "/mt/remote/poll?platform=" + $platform) -Token $token
       if ($null -ne $poll.command) { $cmdObj = $poll.command }
     }
 
@@ -178,7 +192,7 @@ while ($true) {
         Write-JmFile $commandF $cmdCsv
         $lastCmdId = $cmdId
         $ts = Get-Date -Format "HH:mm:ss"
-        Write-Host ("[" + $ts + "] command -> EA id=" + $cmdId)
+        Write-Host ("[" + $ts + "] " + $platform + " command -> EA id=" + $cmdId)
       }
     }
   } catch {
