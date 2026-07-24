@@ -1,0 +1,53 @@
+JM Forex — BAGONG MT5 BRIDGE (v1.05)
+====================================
+
+Para kay JOEL MADERA (MT5 login 25817283)
+Desk: https://jmtechsolution.cloud/fx/
+
+DOWNLOADS
+---------
+Agent + EA zip:
+  https://jmtechsolution.cloud/fx/downloads/jm-mt5-bridge.zip
+
+EA only (kung may agent ka na):
+  https://jmtechsolution.cloud/fx/downloads/JM_Forex_Bridge.mq5
+
+SETUP (Windows PC na may MT5)
+-----------------------------
+1) I-Extract All ang jm-mt5-bridge.zip (hal. Desktop\jm-mt5-bridge)
+
+2) MT5 → File → Open Data Folder → MQL5\Experts\
+   - Copy JM_Forex_Bridge.mq5 dito
+   - MetaEditor → Compile (F7) hanggang 0 errors
+   - I-drag ang JM_Forex_Bridge sa XAUUSD chart
+   - Inputs: UseCommonFolder = true
+   - Common tab: ✅ Allow Algo Trading
+   - Toolbar: Algo Trading = GREEN / ON
+   - Chart comment dapat: trade_ok=YES
+
+3) Agent
+   - Double-click RUN_AGENT_MT5.bat
+   - Huwag isara ang window
+   - Dapat may "push ok=True" at status=yes ticks=yes
+
+4) Check online
+   https://jmtechsolution.cloud/fx/api/mt/status
+   - platforms.mt5.online = true
+   - mt_login = 25817283
+   - trade_ok = true (o walang trade_block)
+
+KUNG trade_ok=NO
+----------------
+- I-click Algo Trading toolbar OFF → ON
+- Alisin EA sa chart → i-attach ulit
+- Tools → Options → Expert Advisors → Allow algorithmic trading
+- Experts tab: basahin ang "block=..." reason
+
+FILES (huwag galawin)
+---------------------
+Common\Files\
+  jm_status.csv  jm_ticks.csv  jm_positions.csv
+  jm_command.csv jm_ack.csv
+
+Token ay naka-preset na sa config.mt5.json.
+Kailangan: Python 3 (py -3) sa Windows.

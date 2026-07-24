@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jm-forex-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jm
+      POSTGRES_PASSWORD: jm_scalp_2026
+      POSTGRES_DB: jm_forex
+    ports:
+      - "5432:5432"
+    volumes:
+      - jm_forex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jm -d jm_forex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  jm-forex:
+    build: .
+    container_name: jm-forex
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      JM_APP_NAME: "JM Forex"
+      JM_DEFAULT_STRATEGY: manual_only
+      JM_AUTO_STRATEGY: "false"
+      JM_DEFAULT_SYMBOLS: XAUUSD
+      JM_INITIAL_BALANCE: "1000"
+      JM_MAX_RISK_PER_TRADE_PCT: "0.5"
+      JM_MAX_OPEN_POSITIONS: "1"
+      JM_SESSION_FILTER: "true"
+      JM_NEWS_FILTER: "true"
+      JM_EXECUTION_MODE: paper
+      JM_STATIC_DIR: /app/static
+      JM_DATABASE_URL: postgresql+psycopg://jm:jm_scalp_2026@postgres:5432/jm_forex
+      JM_DATABASE_AUTO_MIGRATE: "true"
+      JM_DATABASE_SEED_ON_BOOT: "true"
+    volumes:
+      - jm_forex_data:/data
+
+volumes:
+  jm_forex_data:
+  jm_forex_pgdata:
