@@ -229,8 +229,8 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                       onChange={(e) => setMtPlatform(e.target.value)}
                       required
                     >
-                      <option value="mt5">MT5 (e.g. Joel always-on)</option>
-                      <option value="mt4">MT4 (separate always-on)</option>
+                      <option value="mt5">MT5 only (Joel Madera)</option>
+                      <option value="mt4">MT4 — bagong/hiwalay na account</option>
                     </select>
                   </label>
                   <label>
@@ -272,15 +272,15 @@ export default function AccountAuth({ onAuthed, initialTab = 'login' }) {
                     <input
                       value={code}
                       onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 16))}
-                      placeholder="e.g. 25817283 or 893283499"
+                      placeholder={mtPlatform === 'mt4' ? 'MT4 login number' : 'e.g. 25817283'}
                       inputMode="numeric"
                       autoComplete="username"
                       required
                     />
                   </label>
                   <p className="meta">
-                    Joel = MT5 always-on. Gumawa ng hiwalay na account para sa MT4 always-on.
-                    Parehong pwedeng online (dalawang agent window).
+                    JOEL MADERA = MT5 only (walang MT4 sa account niya).
+                    Para sa MT4, gumawa ng bagong JM FX account — Platform MT4.
                   </p>
                 </>
               ) : (

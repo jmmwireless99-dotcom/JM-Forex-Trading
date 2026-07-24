@@ -4,8 +4,8 @@ Same PC can run **both** bridges at once:
 
 | Account | Platform | Agent |
 |---|---|---|
-| Joel `25817283` | MT5 | `RUN_AGENT_MT5.bat` |
-| Your MT4 login | MT4 | `RUN_AGENT_MT4.bat` |
+| JOEL MADERA `25817283` | MT5 only | `RUN_AGENT_MT5.bat` |
+| Your own MT4 JM FX account | MT4 | `RUN_AGENT_MT4.bat` |
 
 Files do not collide:
 - MT5 EA → `jm_status.csv`, `jm_ticks.csv`, …
@@ -24,7 +24,7 @@ Files do not collide:
    - `platforms.mt4.online` + your MT4 login  
 
 ## JM FX logins
-- Joel MT5: username = MT5 account, password = MT5 password  
-- MT4 account: Create account → Link live MT4/MT5 → choose **MT4**, enter MT4 login/password  
+- **Joel = MT5 only** — huwag i-link ang MT4 sa account ni Joel  
+- **MT4:** gumawa ng **bagong** JM FX account → Link live → Platform **MT4** → MT4 login/password  
 
 Paper demos stay paper. Only matching login binds to each terminal.
