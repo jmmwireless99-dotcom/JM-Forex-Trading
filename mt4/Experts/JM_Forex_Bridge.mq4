@@ -6,7 +6,7 @@
 #property strict
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
-#property version   "1.05"
+#property version   "1.06"
 #property description "JM Forex MT4 bridge — Common Files CSV + AutoTrading"
 
 input string InpSymbol           = "XAUUSD";   // Chart/symbol (auto-resolves broker suffix)
@@ -69,7 +69,7 @@ void UpdateChartComment()
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
    Comment(
-      "JM Forex MT4 Bridge v1.05\n",
+      "JM Forex MT4 Bridge v1.06\n",
       "Symbol: ", g_symbol, "\n",
       "Login: ", IntegerToString(AccountNumber()), "\n",
       "trade_ok=", ok, "\n",
@@ -190,6 +190,37 @@ bool CloseAllMagic()
    return ok;
 }
 
+bool CloseOppositeMagic(string side)
+{
+   bool ok = true;
+   int want = (side == "BUY") ? OP_SELL : OP_BUY;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != InpMagic) continue;
+      if(OrderSymbol() != g_symbol) continue;
+      if(OrderType() != want) continue;
+      double price = (want == OP_BUY) ? MarketInfo(g_symbol, MODE_BID)
+                                      : MarketInfo(g_symbol, MODE_ASK);
+      if(!OrderClose(OrderTicket(), OrderLots(), price, InpSlippagePoints, clrOrange))
+         ok = false;
+   }
+   return ok;
+}
+
+bool HasSameSideMagic(string side)
+{
+   int want = (side == "BUY") ? OP_BUY : OP_SELL;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderMagicNumber() != InpMagic) continue;
+      if(OrderSymbol() != g_symbol) continue;
+      if(OrderType() == want) return true;
+   }
+   return false;
+}
+
 void ProcessCommandLine(string line)
 {
    // id,action,symbol,side,lots,sl,tp,comment
@@ -263,8 +294,14 @@ void ProcessCommandLine(string line)
       return;
    }
 
-   // One position policy — close opposite/same before new open
-   CloseAllMagic();
+   if(HasSameSideMagic(side))
+   {
+      WriteAck(cmd_id, "OK", "already_open_same_side");
+      return;
+   }
+
+   // Only flatten the opposite side (anti-flip churn).
+   CloseOppositeMagic(side);
 
    double price = (cmd == OP_BUY) ? MarketInfo(g_symbol, MODE_ASK)
                                   : MarketInfo(g_symbol, MODE_BID);
@@ -336,7 +373,7 @@ int OnInit()
    WritePositions();
    UpdateChartComment();
    string block = TradeBlockReason();
-   Print("JM Forex MT4 Bridge v1.05 ready on ", g_symbol,
+   Print("JM Forex MT4 Bridge v1.06 ready on ", g_symbol,
          " | folder=", UseCommonFolder ? "COMMON" : "TERMINAL",
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,

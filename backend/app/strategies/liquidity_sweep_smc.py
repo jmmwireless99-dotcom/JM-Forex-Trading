@@ -139,6 +139,10 @@ class LiquiditySweepSmcStrategy(Strategy):
         self._structure_bars: list[Candle] = []
         self._sweep: SweepMemory | None = None
         self._fired_keys: set[str] = set()
+        # One bias commitment per UTC day — blocks SELL↔BUY whipsaws.
+        self._day_bias: dict[date, str] = {}
+        self._entries_today: dict[date, int] = {}
+        self.max_entries_per_day: int = 2
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -289,8 +293,30 @@ class LiquiditySweepSmcStrategy(Strategy):
         if self.require_sweep and sweep is None:
             self.last_block_reason = "Waiting for Asia/PDH/swing liquidity sweep"
             return None
+        # Require MSS to confirm the sweep — bare sweep-bias caused flip losses.
+        if sweep is not None and mss_bias is None:
+            self.last_block_reason = "Sweep locked — waiting MSS confirm"
+            return None
+        if sweep is not None and mss_bias is not None and mss_bias != sweep.bias:
+            self.last_block_reason = (
+                f"Sweep {sweep.bias} vs MSS {mss_bias} conflict — no entry"
+            )
+            return None
+        bias = (sweep.bias if sweep else None) or mss_bias
         if bias is None:
-            self.last_block_reason = "Sweep locked — waiting MSS"
+            self.last_block_reason = "No sweep/MSS bias"
+            return None
+
+        taken = self._day_bias.get(day)
+        if taken and taken != bias:
+            self.last_block_reason = (
+                f"Already committed {taken} today — skip opposite {bias}"
+            )
+            return None
+        if self._entries_today.get(day, 0) >= self.max_entries_per_day:
+            self.last_block_reason = (
+                f"SMC daily cap reached ({self.max_entries_per_day})"
+            )
             return None
 
         # Require real FVG/OB retest — no synthetic current-candle OB
@@ -324,11 +350,12 @@ class LiquiditySweepSmcStrategy(Strategy):
             self.last_block_reason = "Already taken this SMC zone today"
             return None
         self._fired_keys.add(key)
+        self._day_bias[day] = bias
+        self._entries_today[day] = self._entries_today.get(day, 0) + 1
 
         side = Side.BUY if bias == "BUY" else Side.SELL
         reason = (
-            f"SMC {side.value} · {sweep.label} · "
-            f"{'MSS' if mss_bias else 'sweep-bias'} · {entry_zone.kind} entry"
+            f"SMC {side.value} · {sweep.label} · MSS confirm · {entry_zone.kind} entry"
         )
         self.last_checklist.append(
             f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"

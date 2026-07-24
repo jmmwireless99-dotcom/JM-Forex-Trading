@@ -57,6 +57,8 @@ SEED_STRATEGIES: list[dict] = [
             "entry_zones": ["FVG", "ORDER_BLOCK"],
             "require_sweep": True,
             "require_zone_retest": True,
+            "require_mss_confirm": True,
+            "max_entries_per_day": 2,
             "reward_r": 1.8,
             "min_stop_atr": 1.1,
             "min_tp_atr": 2.0,

@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq5                                              |
-//| JM Forex ↔ cloud desk (MT5) — v1.05                              |
+//| JM Forex ↔ cloud desk (MT5) — v1.06                              |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
-#property version   "1.05"
+        #property version   "1.06"
 #property description "JM Forex MT5 bridge — Common Files CSV + Algo Trading"
 #property strict
 
@@ -73,7 +73,7 @@ void UpdateChartComment()
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
    Comment(
-      "JM Forex MT5 Bridge v1.05\n",
+      "JM Forex MT5 Bridge v1.06\n",
       "Symbol: ", g_symbol, "\n",
       "Login: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
       "trade_ok=", ok, "\n",
@@ -188,6 +188,50 @@ bool CloseAllMagic()
    return ok;
 }
 
+bool CloseOppositeMagic(string side)
+{
+   // Close only the opposite side — do not flatten a same-direction position.
+   bool ok = true;
+   long want_type = (side == "BUY") ? POSITION_TYPE_SELL : POSITION_TYPE_BUY;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != g_symbol)
+         continue;
+      if(PositionGetInteger(POSITION_TYPE) != want_type)
+         continue;
+      if(!trade.PositionClose(ticket))
+         ok = false;
+   }
+   return ok;
+}
+
+bool HasSameSideMagic(string side)
+{
+   long want_type = (side == "BUY") ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != g_symbol)
+         continue;
+      if(PositionGetInteger(POSITION_TYPE) == want_type)
+         return true;
+   }
+   return false;
+}
+
 void ProcessCommandLine(string line)
 {
    string parts[];
@@ -248,7 +292,15 @@ void ProcessCommandLine(string line)
       return;
    }
 
-   CloseAllMagic();
+   // Already in a same-direction JM trade — do not churn / re-enter.
+   if(HasSameSideMagic(side))
+   {
+      WriteAck(cmd_id, "OK", "already_open_same_side");
+      return;
+   }
+
+   // Only flatten the opposite side (anti-flip churn on every signal).
+   CloseOppositeMagic(side);
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpSlippagePoints);
    trade.SetTypeFillingBySymbol(g_symbol);
