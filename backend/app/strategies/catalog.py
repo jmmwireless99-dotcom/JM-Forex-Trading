@@ -91,21 +91,21 @@ def strategy_catalog() -> list[dict]:
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
-                "EMA 200 trend filter + EMA 20/50 pullback zone + RSI 14 + "
-                "engulfing / pin confirmation only (no soft body)."
+                "Best EMA pullback: EMA200 + clear EMA20/50 stack + RSI + "
+                "engulf/pin · SL beyond EMA50 · TP ≈2.5R."
             ),
             "entry_rules": [
-                "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
-                "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
+                "Uptrend: price above EMA200, EMA20 ≥ EMA50, clear EMA separation.",
+                "Downtrend: price below EMA200, EMA20 ≤ EMA50, clear EMA separation.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 40–50 for BUY; RSI 50–60 for SELL.",
                 "Confirm with engulfing or pin bar only.",
-                "Cooldown spacing ≥12 M5 bars; no auto reverse — holds to SL/TP.",
+                "BUY or SELL whenever confluence is complete — no daily trade cap.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (~1.5×ATR / ~2.8×ATR, R≈2.2).",
+                "SL beyond EMA50/structure (capped) · TP ≥2.5R / ~3×ATR.",
             ],
             "parameters": seed_params("EMA_RSI_Scalp"),
             "safety": [
@@ -115,7 +115,7 @@ def strategy_catalog() -> list[dict]:
                 "Daily loss kill-switch disabled by default (JM_MAX_DAILY_LOSS_PCT=0).",
             ],
             "order_type": "MARKET",
-            "reward_r": 2.2,
+            "reward_r": 2.5,
         },
         {
             "id": "Liquidity_Sweep_SMC",
@@ -126,20 +126,20 @@ def strategy_catalog() -> list[dict]:
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
-                "Smart Money Concepts: sweep Asia H/L (00–06), PDH/PDL, or recent "
-                "swing → MSS → FVG or Order Block retest (max 1 entry/day)."
+                "Best SMC: sweep Asia H/L / PDH-PDL / swing → MSS → FVG/OB retest · "
+                "SL beyond sweep · unlimited quality BUY/SELL."
             ),
             "entry_rules": [
                 "Mark liquidity: Asian High/Low (00:00–06:00 UTC) + PDH/PDL + recent swings.",
                 "Sweep: wick beyond level then close back inside (liquidity grab).",
                 "Structure shift: MSS must confirm the sweep bias.",
-                "Entry only on retest of real FVG or Order Block aligned with bias.",
-                "Max 1 SMC entry per UTC day — no opposite bias flip.",
+                "Entry on FVG (preferred) or Order Block retest aligned with bias.",
+                "No daily trade limit — every complete setup may fire (BUY or SELL).",
             ],
             "entry_flow": [
                 "Detect sweep of ASIAN_HIGH/PDH/SWING_HIGH (SELL) or LOW side (BUY).",
                 "Require MSS confirmation on last 20 M5 bars.",
-                "Enter on FVG/OB retest → MARKET.",
+                "Enter on FVG/OB retest → MARKET · SL beyond sweep extreme · TP ≈2.5R.",
             ],
             "parameters": seed_params("Liquidity_Sweep_SMC"),
             "safety": [
@@ -149,7 +149,7 @@ def strategy_catalog() -> list[dict]:
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
             "order_type": "MARKET",
-            "reward_r": 2.2,
+            "reward_r": 2.5,
         },
         _MANUAL_CARD,
     ]
@@ -159,7 +159,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "London_Judas_Sweep — Asia 00-06 · $0.80–$3.00 sweep · FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 · EMA20/50 retest · RSI 40-50/50-60 · engulf/pin · hold SL/TP",
-        "Liquidity_Sweep_SMC — Asia/PDH/swing sweep · MSS · FVG/OB · max 1/day",
+        "EMA_RSI_Scalp — EMA200 · clear EMA20/50 · RSI · engulf/pin · SL@EMA50 · 2.5R",
+        "Liquidity_Sweep_SMC — sweep+MSS+FVG/OB · SL beyond sweep · unlimited quality",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

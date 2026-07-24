@@ -37,30 +37,52 @@ def structure_levels(
     entry: float,
     candles: list[Candle],
     atr: float,
-    swing_lookback: int = 3,
+    swing_lookback: int = 8,
     atr_pad: float = 0.35,
     min_stop_atr: float = 1.2,
-    reward_r: float = 1.8,
+    max_stop_atr: float = 2.8,
+    reward_r: float = 2.2,
     min_tp_atr: float = 2.5,
+    anchor_sl: float | None = None,
 ) -> Levels:
-    """SL beyond recent swing + ATR pad; TP at least reward_r × risk."""
-    window = candles[-swing_lookback:] if len(candles) >= swing_lookback else candles
+    """SL beyond recent swing (+ optional liquidity/sweep anchor); TP at reward_r × risk.
+
+    Correct analysis first: structure invalidation, then capped risk, then R-multiple TP.
+    """
+    lookback = max(3, swing_lookback)
+    window = candles[-lookback:] if len(candles) >= lookback else candles
+    atr = max(float(atr), 1e-6)
+    min_risk = min_stop_atr * atr
+    max_risk = max(max_stop_atr * atr, min_risk)
+
     if side == Side.BUY:
         swing = min(c.low for c in window)
-        raw_sl = swing - atr_pad * atr
-        min_sl = entry - min_stop_atr * atr
-        sl = min(raw_sl, min_sl)
-        risk = max(entry - sl, min_stop_atr * atr * 0.5)
-        sl = entry - risk
+        candidates = [swing - atr_pad * atr, entry - min_risk]
+        if anchor_sl is not None:
+            candidates.append(float(anchor_sl))
+        sl = min(candidates)
+        risk = entry - sl
+        if risk < min_risk:
+            risk = min_risk
+            sl = entry - risk
+        elif risk > max_risk:
+            risk = max_risk
+            sl = entry - risk
         tp_dist = max(reward_r * risk, min_tp_atr * atr)
         tp = entry + tp_dist
     else:
         swing = max(c.high for c in window)
-        raw_sl = swing + atr_pad * atr
-        max_sl = entry + min_stop_atr * atr
-        sl = max(raw_sl, max_sl)
-        risk = max(sl - entry, min_stop_atr * atr * 0.5)
-        sl = entry + risk
+        candidates = [swing + atr_pad * atr, entry + min_risk]
+        if anchor_sl is not None:
+            candidates.append(float(anchor_sl))
+        sl = max(candidates)
+        risk = sl - entry
+        if risk < min_risk:
+            risk = min_risk
+            sl = entry + risk
+        elif risk > max_risk:
+            risk = max_risk
+            sl = entry + risk
         tp_dist = max(reward_r * risk, min_tp_atr * atr)
         tp = entry - tp_dist
 

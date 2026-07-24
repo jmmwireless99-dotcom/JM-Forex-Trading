@@ -16,8 +16,8 @@ SEED_STRATEGIES: list[dict] = [
         "name": "EMA_RSI_Scalp",
         "timeframe": "M5",
         "description": (
-            "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin only "
-            "(no soft body) · Asia/NY quality windows"
+            "Best EMA pullback: EMA200 trend + clear EMA20/50 stack + RSI + "
+            "engulf/pin · structure SL beyond EMA50 · R≈2.5 TP · Asia/NY"
         ),
         "parameters": {
             "ema_trend": 200,
@@ -27,10 +27,11 @@ SEED_STRATEGIES: list[dict] = [
             "rsi_buy_zone": [40, 50],
             "rsi_sell_zone": [50, 60],
             "patterns": ["engulfing", "pin_bar"],
-            "min_bars_between_signals": 12,
-            "reward_r": 2.2,
-            "min_stop_atr": 1.5,
-            "min_tp_atr": 2.8,
+            "min_bars_between_signals": 8,
+            "reward_r": 2.5,
+            "min_stop_atr": 1.4,
+            "min_tp_atr": 3.0,
+            "max_stop_atr": 2.6,
             "allow_soft_confirm": False,
             "chart_tf": "M1",
             "signal_tf": "M5",
@@ -40,8 +41,8 @@ SEED_STRATEGIES: list[dict] = [
         "name": "Liquidity_Sweep_SMC",
         "timeframe": "M5",
         "description": (
-            "Asia 00-06 / PDH-PDL / recent swing sweep + MSS + FVG/OB retest "
-            "(max 1/day) · London/NY overlap only"
+            "Best SMC: sweep + MSS + FVG/OB retest · SL beyond sweep extreme · "
+            "R≈2.5 · unlimited quality entries (BUY or SELL when correct)"
         ),
         "parameters": {
             "asia_session_utc": ["00:00", "06:00"],
@@ -58,10 +59,11 @@ SEED_STRATEGIES: list[dict] = [
             "require_sweep": True,
             "require_zone_retest": True,
             "require_mss_confirm": True,
-            "max_entries_per_day": 1,
-            "reward_r": 2.2,
+            "max_entries_per_day": 0,
+            "reward_r": 2.5,
             "min_stop_atr": 1.2,
-            "min_tp_atr": 2.5,
+            "min_tp_atr": 2.8,
+            "max_stop_atr": 2.8,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },

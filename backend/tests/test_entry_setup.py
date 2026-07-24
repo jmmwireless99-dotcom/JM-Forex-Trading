@@ -39,10 +39,23 @@ def test_true_atr_and_structure_sl_tp():
     bars = _bars()
     atr = true_atr(bars, 14)
     assert atr is not None and atr > 0
-    levels = structure_levels(Side.BUY, entry=bars[-1].close, candles=bars, atr=atr)
-    assert levels.stop_loss < bars[-1].close
-    assert levels.take_profit > bars[-1].close
-    assert levels.reward_r >= 1.5
+    entry = bars[-1].close
+    levels = structure_levels(
+        Side.BUY,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        reward_r=2.5,
+        min_stop_atr=1.4,
+        max_stop_atr=2.6,
+        min_tp_atr=3.0,
+        anchor_sl=entry - 1.6 * atr,
+    )
+    assert levels.stop_loss < entry
+    assert levels.take_profit > entry
+    assert levels.reward_r >= 2.4
+    # Cap risk — anchor cannot force absurd stop past max_stop_atr
+    assert entry - levels.stop_loss <= 2.6 * atr + 0.05
 
 
 def test_manual_only_never_signals():

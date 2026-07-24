@@ -38,11 +38,12 @@ class EmaRsiScalpStrategy(Strategy):
         rsi_sell: tuple[float, float] = (50.0, 60.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 12,  # ≥60m on M5 — quality spacing
+        min_bars_between_signals: int = 8,  # setup maturity spacing (not a daily cap)
         allow_soft_confirm: bool = False,
-        reward_r: float = 2.2,
-        min_stop_atr: float = 1.5,
-        min_tp_atr: float = 2.8,
+        reward_r: float = 2.5,
+        min_stop_atr: float = 1.4,
+        min_tp_atr: float = 3.0,
+        max_stop_atr: float = 2.6,
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend
@@ -56,6 +57,7 @@ class EmaRsiScalpStrategy(Strategy):
         self.reward_r = reward_r
         self.min_stop_atr = min_stop_atr
         self.min_tp_atr = min_tp_atr
+        self.max_stop_atr = max_stop_atr
         settings = get_settings()
         self.news_filter = settings.news_filter if news_filter is None else news_filter
         self.session_filter = (
@@ -135,12 +137,14 @@ class EmaRsiScalpStrategy(Strategy):
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
-        uptrend = price > e200 and e20 >= e50
-        downtrend = price < e200 and e20 <= e50
+        # Clear EMA stack — avoid flat chop where analysis is unreliable
+        ema_sep = abs(e20 - e50) >= 0.12 * atr
+        uptrend = price > e200 and e20 >= e50 and ema_sep
+        downtrend = price < e200 and e20 <= e50 and ema_sep
 
         self.last_checklist = [
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
-            f"RSI={rsi_v:.1f} ATR={atr:.2f}",
+            f"RSI={rsi_v:.1f} ATR={atr:.2f} ema_sep={ema_sep}",
             f"zone={zone_lo:.2f}-{zone_hi:.2f} in_zone={in_zone} near={near_fast}",
             f"pattern bull={bull_pat}/{bull_soft} bear={bear_pat}/{bear_soft}",
         ]
@@ -199,30 +203,21 @@ class EmaRsiScalpStrategy(Strategy):
             )
             return None
 
-        # Block immediate opposite flip (same bar spacing already helps)
-        if self._last_signal_side is not None and side != self._last_signal_side:
-            # Require at least one extra bar beyond minimum before flipping bias
-            if self._last_signal_bar_ts is not None:
-                try:
-                    idx = next(
-                        i
-                        for i, b in enumerate(bars)
-                        if (b.open_time or b.timestamp) == self._last_signal_bar_ts
-                    )
-                    if len(bars) - 1 - idx < self.min_bars_between_signals + 2:
-                        self.last_block_reason = "Flip blocked — wait for setup to mature"
-                        return None
-                except StopIteration:
-                    pass
+        # Allow BUY or SELL whenever full confluence prints; only space same-side spam.
+        # Opposite side may fire after normal cooldown (correct analysis wins).
 
         levels = structure_levels(
             side,
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
+            swing_lookback=8,
             reward_r=self.reward_r,
             min_stop_atr=self.min_stop_atr,
+            max_stop_atr=self.max_stop_atr,
             min_tp_atr=self.min_tp_atr,
+            # SL beyond EMA50 — trend invalidation for this pullback model
+            anchor_sl=(e50 - 0.35 * atr) if side == Side.BUY else (e50 + 0.35 * atr),
         )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side

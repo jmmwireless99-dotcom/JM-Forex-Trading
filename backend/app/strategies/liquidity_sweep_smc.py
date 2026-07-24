@@ -118,10 +118,11 @@ class LiquiditySweepSmcStrategy(Strategy):
         session_filter: bool | None = None,
         require_sweep: bool = True,
         require_zone_retest: bool = True,
-        reward_r: float = 2.2,
+        reward_r: float = 2.5,
         min_stop_atr: float = 1.2,
-        min_tp_atr: float = 2.5,
-        max_entries_per_day: int = 1,
+        min_tp_atr: float = 2.8,
+        max_stop_atr: float = 2.8,
+        max_entries_per_day: int = 0,
     ) -> None:
         super().__init__(lookback=lookback)
         settings = get_settings()
@@ -134,16 +135,16 @@ class LiquiditySweepSmcStrategy(Strategy):
         self.reward_r = reward_r
         self.min_stop_atr = min_stop_atr
         self.min_tp_atr = min_tp_atr
+        self.max_stop_atr = max_stop_atr
         self.last_checklist: list[str] = []
         self.last_block_reason: str | None = None
         self.last_zones: list[dict] = []
         self._structure_bars: list[Candle] = []
         self._sweep: SweepMemory | None = None
         self._fired_keys: set[str] = set()
-        # One bias commitment per UTC day — blocks SELL↔BUY whipsaws.
-        self._day_bias: dict[date, str] = {}
+        # 0 = unlimited — only quality gates (sweep+MSS+zone) limit entries.
+        self.max_entries_per_day = max(0, int(max_entries_per_day))
         self._entries_today: dict[date, int] = {}
-        self.max_entries_per_day = max(1, int(max_entries_per_day))
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -308,33 +309,33 @@ class LiquiditySweepSmcStrategy(Strategy):
             self.last_block_reason = "No sweep/MSS bias"
             return None
 
-        taken = self._day_bias.get(day)
-        if taken and taken != bias:
-            self.last_block_reason = (
-                f"Already committed {taken} today — skip opposite {bias}"
-            )
-            return None
-        if self._entries_today.get(day, 0) >= self.max_entries_per_day:
+        # Optional soft cap only when max_entries_per_day > 0 (0 = unlimited).
+        if (
+            self.max_entries_per_day > 0
+            and self._entries_today.get(day, 0) >= self.max_entries_per_day
+        ):
             self.last_block_reason = (
                 f"SMC daily cap reached ({self.max_entries_per_day})"
             )
             return None
 
-        # Require real FVG/OB retest — no synthetic current-candle OB
+        # Prefer FVG over OB when both touch — cleaner displacement entry.
         entry_zone = None
-        for z in zones:
-            if z.kind not in {"FVG", "ORDER_BLOCK"}:
-                continue
-            if z.side_bias and z.side_bias != bias:
-                continue
-            if z.low - pad <= cur.close <= z.high + pad:
-                entry_zone = z
-                break
-            if bias == "BUY" and cur.low <= z.high and cur.close >= z.low:
-                entry_zone = z
-                break
-            if bias == "SELL" and cur.high >= z.low and cur.close <= z.high:
-                entry_zone = z
+        for prefer in ("FVG", "ORDER_BLOCK"):
+            for z in zones:
+                if z.kind != prefer:
+                    continue
+                if z.side_bias and z.side_bias != bias:
+                    continue
+                touched = z.low - pad <= cur.close <= z.high + pad
+                if bias == "BUY" and cur.low <= z.high and cur.close >= z.low:
+                    touched = True
+                if bias == "SELL" and cur.high >= z.low and cur.close <= z.high:
+                    touched = True
+                if touched:
+                    entry_zone = z
+                    break
+            if entry_zone is not None:
                 break
 
         if entry_zone is None:
@@ -346,12 +347,12 @@ class LiquiditySweepSmcStrategy(Strategy):
             self.last_block_reason = "Waiting FVG/OB retest"
             return None
 
-        key = f"{bias}-{day}-{round(entry_zone.low, 1)}-{round(entry_zone.high, 1)}"
+        # Same zone once — new sweep/zone can still fire (BUY or SELL if correct).
+        key = f"{bias}-{day}-{entry_zone.kind}-{round(entry_zone.low, 1)}-{round(entry_zone.high, 1)}"
         if key in self._fired_keys:
             self.last_block_reason = "Already taken this SMC zone today"
             return None
         self._fired_keys.add(key)
-        self._day_bias[day] = bias
         self._entries_today[day] = self._entries_today.get(day, 0) + 1
 
         side = Side.BUY if bias == "BUY" else Side.SELL
@@ -362,14 +363,31 @@ class LiquiditySweepSmcStrategy(Strategy):
             f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"
         )
 
+        # SL beyond liquidity sweep extreme (invalidation of the grab).
+        sweep_pad = max(0.25 * atr, 0.3)
+        if side == Side.BUY:
+            anchor = (sweep.level - sweep_pad) if sweep else None
+            # Also protect under zone low
+            zone_anchor = entry_zone.low - sweep_pad
+            if anchor is None or zone_anchor < anchor:
+                anchor = zone_anchor
+        else:
+            anchor = (sweep.level + sweep_pad) if sweep else None
+            zone_anchor = entry_zone.high + sweep_pad
+            if anchor is None or zone_anchor > anchor:
+                anchor = zone_anchor
+
         levels = structure_levels(
             side,
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
+            swing_lookback=8,
             reward_r=self.reward_r,
             min_stop_atr=self.min_stop_atr,
+            max_stop_atr=self.max_stop_atr,
             min_tp_atr=self.min_tp_atr,
+            anchor_sl=anchor,
         )
         return Signal(
             strategy=self.name,
