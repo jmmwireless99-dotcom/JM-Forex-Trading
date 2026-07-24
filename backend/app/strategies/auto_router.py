@@ -51,6 +51,7 @@ class AutoStrategyRouter:
         self.session_map: dict[str, str | None] = {
             "asia": "EMA_RSI_Scalp",
             "london": "London_Judas_Sweep",
+            "london_wind_down": None,
             "london_close": None,
             "london_ny_overlap": "Liquidity_Sweep_SMC",
             "new_york": "EMA_RSI_Scalp",

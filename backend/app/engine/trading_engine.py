@@ -902,9 +902,12 @@ class TradingEngine:
     async def _london_kill_switch(self, tick: Tick) -> None:
         from app.strategies.london_session import is_past_pending_kill
 
-        if self.using_mt() or not is_past_pending_kill(tick.timestamp):
+        # Paper pending limits always kill at 12:00 UTC — even if MT bridges are online.
+        if not is_past_pending_kill(tick.timestamp):
             return
         for acct in self.accounts.all():
+            if not self.uses_paper_book(acct):
+                continue
             cancelled = acct.broker.cancel_pending(
                 reason="London kill switch 12:00 UTC — unfilled limit cancelled"
             )
@@ -1726,6 +1729,49 @@ class TradingEngine:
 
         if self.is_mt_bound(acct):
             bridge = self.bridge_for_account(acct) or self.mt
+            # MT bridges are market-only — convert near LIMIT to MARKET, else reject.
+            if request.order_type == OrderType.LIMIT:
+                near_pips = 150.0
+                strat = self._strategies.get(request.strategy or "")
+                if strat is not None and hasattr(strat, "mt_near_limit_pips"):
+                    try:
+                        near_pips = float(strat.mt_near_limit_pips)
+                    except (TypeError, ValueError):
+                        pass
+                pip = 0.01
+                limit_px = float(request.limit_price or 0)
+                mid = float(tick.mid) if tick is not None else 0.0
+                dist = abs(mid - limit_px) if limit_px and mid else 1e9
+                if dist <= near_pips * pip:
+                    request.order_type = OrderType.MARKET
+                    request.limit_price = None
+                    request.expire_at = None
+                    request.attach_stops = True
+                    request.comment = (request.comment or "JM")[:40] + "|MT_near_limit"
+                else:
+                    rejected = Order(
+                        symbol=request.symbol,
+                        side=request.side,
+                        lots=request.lots,
+                        strategy=request.strategy,
+                        comment=request.comment,
+                        status=OrderStatus.REJECTED,
+                        reject_reason=(
+                            f"MT bridge has no pending LIMIT — wait until price "
+                            f"within {near_pips:.0f} pips of {limit_px:.2f} "
+                            f"(now dist={dist / pip:.0f} pips)"
+                        ),
+                        stop_loss=request.stop_loss,
+                        take_profit=request.take_profit,
+                    )
+                    await self._journal_fill(
+                        rejected, signal_db_id=signal_db_id, account=acct
+                    )
+                    await self._emit(
+                        "order",
+                        {**rejected.model_dump(mode="json"), "account_id": acct.id},
+                    )
+                    return rejected
             order = bridge.place_order(request)
             pos = (
                 self._latest_open(request.symbol, request.side, acct)

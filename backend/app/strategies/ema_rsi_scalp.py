@@ -5,7 +5,12 @@ from __future__ import annotations
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
 from app.strategies.base import Strategy
-from app.strategies.entry_setup import structure_levels, true_atr
+from app.strategies.entry_setup import (
+    bearish_confirm,
+    bullish_confirm,
+    structure_levels,
+    true_atr,
+)
 from app.strategies.indicators import ema, rsi
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.patterns import (
@@ -34,6 +39,10 @@ class EmaRsiScalpStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         min_bars_between_signals: int = 6,  # ≥30m on M5 — stop flip-flop losses
+        allow_soft_confirm: bool = True,
+        reward_r: float = 1.8,
+        min_stop_atr: float = 1.4,
+        min_tp_atr: float = 2.2,
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend
@@ -43,6 +52,10 @@ class EmaRsiScalpStrategy(Strategy):
         self.rsi_buy = rsi_buy
         self.rsi_sell = rsi_sell
         self.min_bars_between_signals = min_bars_between_signals
+        self.allow_soft_confirm = allow_soft_confirm
+        self.reward_r = reward_r
+        self.min_stop_atr = min_stop_atr
+        self.min_tp_atr = min_tp_atr
         settings = get_settings()
         self.news_filter = settings.news_filter if news_filter is None else news_filter
         self.session_filter = (
@@ -108,9 +121,17 @@ class EmaRsiScalpStrategy(Strategy):
 
         bull_pat = bullish_engulfing(prev, cur) or bullish_pin_bar(cur)
         bear_pat = bearish_engulfing(prev, cur) or bearish_pin_bar(cur)
-        # Soft confirm only when RSI already in band (not a free pass)
-        bull_soft = cur.close > cur.open and cur.close >= prev.close
-        bear_soft = cur.close < cur.open and cur.close <= prev.close
+        # Soft = strong directional body (not any green/red close)
+        bull_soft = (
+            self.allow_soft_confirm
+            and bullish_confirm(cur)
+            and cur.close >= prev.close
+        )
+        bear_soft = (
+            self.allow_soft_confirm
+            and bearish_confirm(cur)
+            and cur.close <= prev.close
+        )
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
@@ -199,9 +220,9 @@ class EmaRsiScalpStrategy(Strategy):
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=1.8,
-            min_stop_atr=1.4,
-            min_tp_atr=2.2,
+            reward_r=self.reward_r,
+            min_stop_atr=self.min_stop_atr,
+            min_tp_atr=self.min_tp_atr,
         )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side

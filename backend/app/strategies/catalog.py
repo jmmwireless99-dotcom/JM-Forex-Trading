@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.db.seed import SEED_STRATEGIES
+from app.db.seed import seed_params
 
 _MANUAL_CARD = {
     "id": "manual_only",
@@ -36,13 +36,6 @@ _MANUAL_CARD = {
 }
 
 
-def _seed_params(name: str) -> dict:
-    for spec in SEED_STRATEGIES:
-        if spec["name"] == name:
-            return dict(spec.get("parameters") or {})
-    return {}
-
-
 def strategy_catalog() -> list[dict]:
     """Return rich per-strategy cards for the scalp desk panel."""
     return [
@@ -61,18 +54,20 @@ def strategy_catalog() -> list[dict]:
             "entry_rules": [
                 "Build Asian box 00:00–06:00 UTC (high / low / mid).",
                 "Active London strategy window 07:00–10:59 UTC (ends 11:00; wind-down then kill).",
+                "Prefer sweep 07:00–09:00 UTC; entry still allowed until 11:00.",
                 "Sweep: wick beyond Asia H/L by 50–350 pips ($0.50–$3.50), then reject inside.",
                 "Remember the sweep — ChoCH/displacement + FVG can form on later M5 bars.",
                 "Require ChoCH or displacement back through Asia mid after the sweep.",
                 "Place LIMIT at bearish/bullish FVG 50% equilibrium (mid).",
-                "Cancel pending limits at 12:00 UTC (kill switch).",
+                "Cancel pending paper limits at 12:00 UTC (kill switch).",
+                "MT4/MT5: fill as market only when price is near FVG mid (~150 pips).",
             ],
             "entry_flow": [
                 "Sweep Asia H/L (remembered) → later ChoCH/displacement → FVG 50% LIMIT.",
                 "SELL after Asia high sweep; BUY after Asia low sweep.",
                 "SL beyond sweep wick + 80 pip ($0.80) buffer; TP Asia opposite side or 3R.",
             ],
-            "parameters": _seed_params("London_Judas_Sweep"),
+            "parameters": seed_params("London_Judas_Sweep"),
             "safety": [
                 "Block if spread > 40 pips ($0.40 on XAUUSD).",
                 "UK/EUR high-impact news blackout −15 minutes.",
@@ -91,14 +86,14 @@ def strategy_catalog() -> list[dict]:
             "chart_tf": "M1",
             "summary": (
                 "EMA 200 trend filter + EMA 20/50 pullback zone + RSI 14 + "
-                "engulfing or pin bar confirmation."
+                "engulfing / pin / strong-body confirmation."
             ),
             "entry_rules": [
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 38–52 for BUY; RSI 48–62 for SELL.",
-                "Confirm with engulfing, pin bar, or soft directional M5 close.",
+                "Confirm with engulfing, pin bar, or strong directional M5 body.",
                 "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
@@ -106,7 +101,7 @@ def strategy_catalog() -> list[dict]:
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
                 "SL/TP from ATR structure (wider stops: ~1.4×ATR / ~2.2×ATR).",
             ],
-            "parameters": _seed_params("EMA_RSI_Scalp"),
+            "parameters": seed_params("EMA_RSI_Scalp"),
             "safety": [
                 "Auto router gates Asia/NY sessions; optional JM_SESSION_FILTER for avoid tiers.",
                 "News blackout when desk news filter is on.",
@@ -125,24 +120,25 @@ def strategy_catalog() -> list[dict]:
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
-                "Smart Money Concepts: sweep Asia H/L or PDH/PDL → "
-                "MSS/ChoCH → FVG or Order Block retest."
+                "Smart Money Concepts: sweep Asia H/L (00–06), PDH/PDL, or recent "
+                "swing → MSS → FVG or Order Block retest."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (00:00–07:00 UTC) + PDH/PDL.",
+                "Mark liquidity: Asian High/Low (00:00–06:00 UTC) + PDH/PDL + recent swings.",
                 "Sweep: wick beyond level then close back inside (liquidity grab).",
                 "Structure shift: MSS preferred after the sweep (recent swing break).",
-                "Entry on retest of FVG or Order Block aligned with bias.",
-                "Soft entry: directional candle after sweep if no zone touch yet.",
+                "Entry only on retest of real FVG or Order Block aligned with bias.",
+                "No synthetic momentum OB — wait for zone touch.",
             ],
             "entry_flow": [
-                "Detect sweep of ASIAN_HIGH/PDH (SELL) or ASIAN_LOW/PDL (BUY).",
+                "Detect sweep of ASIAN_HIGH/PDH/SWING_HIGH (SELL) or LOW side (BUY).",
                 "Prefer MSS confirmation on last 20 M5 bars.",
-                "Enter on FVG/OB retest or momentum candle → MARKET.",
+                "Enter on FVG/OB retest → MARKET.",
             ],
-            "parameters": _seed_params("Liquidity_Sweep_SMC"),
+            "parameters": seed_params("Liquidity_Sweep_SMC"),
             "safety": [
-                "Requires liquidity sweep before entry (require_sweep=True) — no MSS-only bypass.",
+                "Requires liquidity sweep before entry (require_sweep=True).",
+                "Requires FVG/OB retest (require_zone_retest=True).",
                 "Session filter + news blackout when enabled.",
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
@@ -156,8 +152,8 @@ def strategy_catalog() -> list[dict]:
 def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
-        "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
-        "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
+        "London_Judas_Sweep — Asia 00-06 · $0.50–$3.50 sweep · FVG50 LIMIT · kill 12:00",
+        "EMA_RSI_Scalp — EMA200 · EMA20/50 retest · RSI 38-52/48-62 · strong body/pin · hold SL/TP",
+        "Liquidity_Sweep_SMC — Asia/PDH/swing sweep · MSS · FVG/OB retest only",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

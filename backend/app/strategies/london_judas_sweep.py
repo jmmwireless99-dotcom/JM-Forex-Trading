@@ -111,6 +111,7 @@ class LondonJudasSweepStrategy(Strategy):
         max_spread_pips: float = 40.0,
         news_filter: bool | None = None,
         reward_r: float = 3.0,
+        mt_near_limit_pips: float = 150.0,
     ) -> None:
         from app.core.config import get_settings
 
@@ -118,6 +119,7 @@ class LondonJudasSweepStrategy(Strategy):
         self.min_sweep_pips = min_sweep_pips
         self.max_sweep_pips = max_sweep_pips
         self.sl_buffer_pips = sl_buffer_pips
+        self.mt_near_limit_pips = mt_near_limit_pips
         self.max_spread_pips = max_spread_pips
         self.news_filter = (
             get_settings().news_filter if news_filter is None else news_filter

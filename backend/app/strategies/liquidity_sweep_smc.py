@@ -50,13 +50,14 @@ def _swing_low(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> boo
 
 
 def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
-    """Candles in today's Asia box UTC 00:00–07:00."""
+    """Candles in today's Asia box UTC 00:00–06:00 (same as London Judas)."""
     utc = now.astimezone(timezone.utc)
     start = utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(hours=7)
-    if utc.hour < 7:
+    end = start + timedelta(hours=6)
+    # Before Asia box closes, use prior day's completed Asia range.
+    if utc.hour < 6:
         start = start - timedelta(days=1)
-        end = start + timedelta(hours=7)
+        end = start + timedelta(hours=6)
     return [c for c in bars if start <= c.timestamp.astimezone(timezone.utc) < end]
 
 
@@ -116,6 +117,10 @@ class LiquiditySweepSmcStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         require_sweep: bool = True,
+        require_zone_retest: bool = True,
+        reward_r: float = 1.8,
+        min_stop_atr: float = 1.1,
+        min_tp_atr: float = 2.0,
     ) -> None:
         super().__init__(lookback=lookback)
         settings = get_settings()
@@ -124,6 +129,10 @@ class LiquiditySweepSmcStrategy(Strategy):
             settings.session_filter if session_filter is None else session_filter
         )
         self.require_sweep = require_sweep
+        self.require_zone_retest = require_zone_retest
+        self.reward_r = reward_r
+        self.min_stop_atr = min_stop_atr
+        self.min_tp_atr = min_tp_atr
         self.last_checklist: list[str] = []
         self.last_block_reason: str | None = None
         self.last_zones: list[dict] = []
@@ -284,7 +293,7 @@ class LiquiditySweepSmcStrategy(Strategy):
             self.last_block_reason = "Sweep locked — waiting MSS"
             return None
 
-        # Prefer FVG/OB retest; else momentum candle after sweep+structure
+        # Require real FVG/OB retest — no synthetic current-candle OB
         entry_zone = None
         for z in zones:
             if z.kind not in {"FVG", "ORDER_BLOCK"}:
@@ -302,17 +311,13 @@ class LiquiditySweepSmcStrategy(Strategy):
                 break
 
         if entry_zone is None:
-            bullish = cur.close > cur.open
-            bearish = cur.close < cur.open
-            if bias == "BUY" and bullish and (mss_bias == "BUY" or sweep is not None):
-                entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="BUY")
-            elif bias == "SELL" and bearish and (mss_bias == "SELL" or sweep is not None):
-                entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="SELL")
-            else:
-                self.last_block_reason = (
-                    f"Sweep ok ({sweep.label if sweep else 'structure'}) — waiting FVG/OB/momentum"
-                )
-                return None
+            self.last_block_reason = (
+                f"Sweep ok ({sweep.label if sweep else 'structure'}) — waiting FVG/OB retest"
+            )
+            return None
+        if self.require_zone_retest and entry_zone.kind not in {"FVG", "ORDER_BLOCK"}:
+            self.last_block_reason = "Waiting FVG/OB retest"
+            return None
 
         key = f"{bias}-{day}-{round(entry_zone.low, 1)}-{round(entry_zone.high, 1)}"
         if key in self._fired_keys:
@@ -334,9 +339,9 @@ class LiquiditySweepSmcStrategy(Strategy):
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=1.8,
-            min_stop_atr=1.1,
-            min_tp_atr=2.0,
+            reward_r=self.reward_r,
+            min_stop_atr=self.min_stop_atr,
+            min_tp_atr=self.min_tp_atr,
         )
         return Signal(
             strategy=self.name,

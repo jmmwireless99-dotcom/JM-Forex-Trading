@@ -1,4 +1,4 @@
-"""Seed core XAUUSD scalping strategies (EMA+RSI + SMC)."""
+"""Seed core XAUUSD scalping strategies (EMA+RSI + SMC + London Judas)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,10 @@ SEED_STRATEGIES: list[dict] = [
     {
         "name": "EMA_RSI_Scalp",
         "timeframe": "M5",
-        "description": "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin bar",
+        "description": (
+            "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin "
+            "(strong body soft confirm) · Asia/NY"
+        ),
         "parameters": {
             "ema_trend": 200,
             "ema_fast": 20,
@@ -23,7 +26,12 @@ SEED_STRATEGIES: list[dict] = [
             "rsi_period": 14,
             "rsi_buy_zone": [38, 52],
             "rsi_sell_zone": [48, 62],
-            "patterns": ["engulfing", "pin_bar"],
+            "patterns": ["engulfing", "pin_bar", "strong_body"],
+            "min_bars_between_signals": 6,
+            "reward_r": 1.8,
+            "min_stop_atr": 1.4,
+            "min_tp_atr": 2.2,
+            "allow_soft_confirm": True,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -31,13 +39,27 @@ SEED_STRATEGIES: list[dict] = [
     {
         "name": "Liquidity_Sweep_SMC",
         "timeframe": "M5",
-        "description": "Asia/PDH-PDL sweep + MSS/ChoCH + FVG/OB retest entry",
+        "description": (
+            "Asia 00-06 / PDH-PDL / recent swing sweep + MSS + FVG/OB retest "
+            "(no fake momentum OB) · London/NY overlap"
+        ),
         "parameters": {
-            "asia_session_utc": ["00:00", "07:00"],
-            "liquidity": ["ASIAN_HIGH", "ASIAN_LOW", "PDH", "PDL"],
-            "structure": ["MSS", "ChoCH"],
+            "asia_session_utc": ["00:00", "06:00"],
+            "liquidity": [
+                "ASIAN_HIGH",
+                "ASIAN_LOW",
+                "PDH",
+                "PDL",
+                "SWING_HIGH",
+                "SWING_LOW",
+            ],
+            "structure": ["MSS"],
             "entry_zones": ["FVG", "ORDER_BLOCK"],
             "require_sweep": True,
+            "require_zone_retest": True,
+            "reward_r": 1.8,
+            "min_stop_atr": 1.1,
+            "min_tp_atr": 2.0,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -45,7 +67,10 @@ SEED_STRATEGIES: list[dict] = [
     {
         "name": "London_Judas_Sweep",
         "timeframe": "M5",
-        "description": "London Judas Swing: Asia 00-06 range · sweep 07-09 · FVG50 limit · kill 12:00 UTC",
+        "description": (
+            "London Judas: Asia 00-06 box · prefer sweep 07-09 (entry to 11) · "
+            "FVG50 LIMIT · kill 12:00 UTC · MT fills near mid as market"
+        ),
         "parameters": {
             "asia_utc": ["00:00", "06:00"],
             "london_entry_utc": ["07:00", "11:00"],
@@ -58,11 +83,20 @@ SEED_STRATEGIES: list[dict] = [
             "pip_size": 0.01,
             "entry": "FVG_50_LIMIT",
             "reward_r": 3.0,
+            "mt_near_limit_pips": 150,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
     },
 ]
+
+
+def seed_params(name: str) -> dict:
+    """Return a copy of seed parameters for a strategy name."""
+    for spec in SEED_STRATEGIES:
+        if spec["name"] == name:
+            return dict(spec.get("parameters") or {})
+    return {}
 
 
 def seed_strategies(*, force_update: bool = False) -> dict:
