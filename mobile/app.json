@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "JM Forex",
+    "slug": "jm-forex",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#071412"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "cloud.jmtechsolution.forex"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B3D3A"
+      },
+      "package": "cloud.jmtechsolution.forex",
+      "permissions": ["INTERNET"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "jmtechsolution.cloud",
+              "pathPrefix": "/fx"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "extra": {
+      "apiBase": "https://jmtechsolution.cloud/fx/api",
+      "deskUrl": "https://jmtechsolution.cloud/fx/"
+    }
+  }
+}
