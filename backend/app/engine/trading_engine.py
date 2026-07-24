@@ -1434,10 +1434,17 @@ class TradingEngine:
                     tick = bridge.read_tick()
                     if tick:
                         return [tick]
-            return []
+            # Dual remote configured but agents offline — keep paper/simulator
+            # tape moving so strategies still evaluate (esp. paper demos).
+            return self.market.next_ticks()
         if self.using_mt() and self.mt:
             tick = self.mt.read_tick()
-            return [tick] if tick else []
+            if tick:
+                return [tick]
+            # Single remote/file bridge offline — same fallback.
+            if self.settings.mt_remote_bridge:
+                return self.market.next_ticks()
+            return []
         return self.market.next_ticks()
 
     async def _tick_once(self) -> None:
