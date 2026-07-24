@@ -486,6 +486,13 @@ select {
   color: #e8eef5;
 }
 
+.tv-bar-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 0 2px;
+}
+
 .tv-open-link {
   margin-left: auto;
   color: rgba(94, 160, 255, 0.95);

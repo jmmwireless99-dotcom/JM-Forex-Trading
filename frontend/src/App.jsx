@@ -115,6 +115,18 @@ export default function App() {
       return 'tradingview'
     }
   }) // tradingview | desk
+  const [chartSymbol, setChartSymbol] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jm_chart_symbol')
+      return saved === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD'
+    } catch {
+      return 'XAUUSD'
+    }
+  })
+  const chartSymbolRef = useRef(chartSymbol)
+  useEffect(() => {
+    chartSymbolRef.current = chartSymbol
+  }, [chartSymbol])
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
@@ -122,6 +134,16 @@ export default function App() {
   const [sessionBoot, setSessionBoot] = useState(0)
   const [authTab, setAuthTab] = useState('login')
   const accountIdRef = useRef(null)
+
+  function pickChartSymbol(next) {
+    const sym = next === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD'
+    setChartSymbol(sym)
+    try {
+      localStorage.setItem('jm_chart_symbol', sym)
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -156,7 +178,7 @@ export default function App() {
             api.strategies(),
             api.desk(),
             api.mtStatus(),
-            api.candles('XAUUSD', 200),
+            api.candles(chartSymbol === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD', 200),
             api.trades(100),
             api.auto(),
           ])
@@ -258,9 +280,13 @@ export default function App() {
             if (msg.data?.mode) setMode(msg.data.mode)
           }
           if (msg.event === 'candles') {
-            setCandles(msg.data.candles || [])
+            const sym = msg.data?.symbol || msg.data?.candles?.[0]?.symbol
+            if (!sym || sym === chartSymbolRef.current) {
+              setCandles(msg.data.candles || [])
+            }
           }
           if (msg.event === 'candle') {
+            if (msg.data?.symbol && msg.data.symbol !== chartSymbolRef.current) return
             setLiveCandle(msg.data)
             setCandles((prev) => {
               const next = [...prev]
@@ -273,6 +299,7 @@ export default function App() {
             })
           }
           if (msg.event === 'candle_closed') {
+            if (msg.data?.symbol && msg.data.symbol !== chartSymbolRef.current) return
             setLiveCandle(null)
             setCandles((prev) => {
               const next = [...prev.filter((c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp))]
@@ -319,6 +346,25 @@ export default function App() {
       clearInterval(deskTimer)
     }
   }, [sessionBoot])
+
+  // Desk tape follows selected chart symbol (XAUUSD or BTCUSD).
+  useEffect(() => {
+    if (!authReady || !accountMeta) return undefined
+    let alive = true
+    ;(async () => {
+      try {
+        const candleInfo = await api.candles(chartSymbol, 200)
+        if (!alive) return
+        setCandles(candleInfo.candles || [])
+        setLiveCandle(null)
+      } catch {
+        /* keep previous candles */
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [chartSymbol, authReady, accountMeta])
 
   function handleAuthed(session) {
     setError('')
@@ -528,6 +574,8 @@ export default function App() {
     ? Boolean(mt?.platforms?.[accountPlatform]?.online)
     : mtOnline
   const gold = ticks.XAUUSD
+  const btc = ticks.BTCUSD
+  const quoteTick = chartSymbol === 'BTCUSD' ? btc : gold
   const maxOpen = Number(desk?.risk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
   const atMaxOpen = positions.length >= maxOpen
@@ -691,6 +739,7 @@ export default function App() {
             MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
           </span>
           {gold ? <span>XAUUSD {gold.mid}</span> : null}
+          {btc ? <span>BTCUSD {btc.mid}</span> : null}
         </div>
         {autoInfo?.decision ? (
           <div className="meta" style={{ marginTop: '0.55rem' }}>
@@ -959,6 +1008,21 @@ export default function App() {
         <div className="chart-mode-bar">
           <button
             type="button"
+            className={`chart-mode-btn ${chartSymbol === 'XAUUSD' ? 'on' : ''}`}
+            onClick={() => pickChartSymbol('XAUUSD')}
+          >
+            XAUUSD
+          </button>
+          <button
+            type="button"
+            className={`chart-mode-btn ${chartSymbol === 'BTCUSD' ? 'on' : ''}`}
+            onClick={() => pickChartSymbol('BTCUSD')}
+          >
+            BTCUSD
+          </button>
+          <span className="tv-bar-sep" aria-hidden="true" />
+          <button
+            type="button"
             className={`chart-mode-btn ${chartMode === 'tradingview' ? 'on' : ''}`}
             onClick={() => {
               setChartMode('tradingview')
@@ -969,7 +1033,7 @@ export default function App() {
               }
             }}
           >
-            Live gold
+            Live market
           </button>
           <button
             type="button"
@@ -987,14 +1051,25 @@ export default function App() {
           </button>
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
-              ? 'Live COMEX gold candles · strategies still use paper/MT feed'
-              : 'Engine candles — paper sim or MT bridge when online'}
+              ? chartSymbol === 'BTCUSD'
+                ? 'Live Binance BTCUSDT · BTC strategy uses paper BTC feed'
+                : 'Live COMEX gold · strategies still use paper/MT feed'
+              : `Engine ${chartSymbol} candles — paper sim or MT bridge`}
+            {quoteTick ? ` · mid ${quoteTick.mid}` : ''}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
-          <TradingViewGoldChart symbol="TVC:GOLD" interval="5" />
+          <TradingViewGoldChart
+            market={chartSymbol}
+            interval="5"
+            onMarketChange={pickChartSymbol}
+          />
         ) : (
-          <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
+          <CandleChart
+            candles={candles}
+            liveCandle={liveCandle}
+            symbol={chartSymbol}
+          />
         )}
       </section>
 

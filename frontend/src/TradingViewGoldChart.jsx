@@ -5,11 +5,36 @@ import { api } from './api'
 /** Private saved layout — opens only when YOU are logged into TradingView. */
 const USER_CHART_URL = 'https://www.tradingview.com/chart/Bhih3eRv/'
 
+const MARKETS = {
+  XAUUSD: {
+    title: 'XAUUSD · Live gold',
+    tvUrl: 'https://www.tradingview.com/symbols/TVC-GOLD/',
+    tvLabel: 'TVC:GOLD ↗',
+    footnote:
+      'Live gold via COMEX futures (GC=F). Strategies still use paper/MT feed — not this chart.',
+    loading: 'Loading live gold candles…',
+    err: 'Failed to load gold market data',
+  },
+  BTCUSD: {
+    title: 'BTCUSD · Live bitcoin',
+    tvUrl: 'https://www.tradingview.com/symbols/BINANCE-BTCUSDT/',
+    tvLabel: 'BINANCE:BTCUSDT ↗',
+    footnote:
+      'Live BTC via Binance BTCUSDT. BTC_EMA_RSI_Scalp uses paper BTC feed synced to this market.',
+    loading: 'Loading live BTC candles…',
+    err: 'Failed to load BTC market data',
+  },
+}
+
 /**
- * Live gold market chart (COMEX GC=F via backend Yahoo feed).
- * TradingView embeds are unreliable (spinner / null OHLC); this always shows candles.
+ * Live market chart — XAUUSD (Yahoo/COMEX) or BTCUSD (Binance).
+ * TradingView embeds are unreliable; this always shows candles.
  */
-export default function TradingViewGoldChart({ interval = '5' }) {
+export default function TradingViewGoldChart({
+  interval = '5',
+  market = 'XAUUSD',
+  onMarketChange,
+}) {
   const hostRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
@@ -18,6 +43,8 @@ export default function TradingViewGoldChart({ interval = '5' }) {
   const [error, setError] = useState('')
   const [tf, setTf] = useState(String(interval))
   const [reloadKey, setReloadKey] = useState(0)
+  const sym = market === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD'
+  const info = MARKETS[sym]
 
   useEffect(() => {
     if (!hostRef.current) return undefined
@@ -72,8 +99,12 @@ export default function TradingViewGoldChart({ interval = '5' }) {
   useEffect(() => {
     let alive = true
     async function load() {
+      setStatus('loading')
       try {
-        const data = await api.goldCandles({ interval: tf, limit: 400 })
+        const data =
+          sym === 'BTCUSD'
+            ? await api.btcCandles({ interval: tf, limit: 400 })
+            : await api.goldCandles({ interval: tf, limit: 400 })
         if (!alive) return
         const rows = (data.candles || []).map((c) => ({
           time: Number(c.time),
@@ -100,7 +131,7 @@ export default function TradingViewGoldChart({ interval = '5' }) {
       alive = false
       clearInterval(id)
     }
-  }, [tf, reloadKey])
+  }, [tf, reloadKey, sym])
 
   const price = meta?.price
   const priceLabel =
@@ -111,15 +142,36 @@ export default function TradingViewGoldChart({ interval = '5' }) {
         })
       : '—'
 
+  function pickMarket(next) {
+    if (typeof onMarketChange === 'function') onMarketChange(next)
+  }
+
   return (
     <div className="chart-wrap tv-chart-wrap">
       <div className="chart-head">
-        <h2>XAUUSD · Live gold</h2>
+        <h2>{info.title}</h2>
         <span className="meta">
-          {meta?.label || 'Market OHLC'} · {priceLabel}
+          {meta?.source || meta?.label || 'Market OHLC'} · {priceLabel}
         </span>
       </div>
       <div className="tv-symbol-bar">
+        <button
+          type="button"
+          className={sym === 'XAUUSD' ? 'on' : ''}
+          onClick={() => pickMarket('XAUUSD')}
+          title="Gold chart"
+        >
+          XAUUSD
+        </button>
+        <button
+          type="button"
+          className={sym === 'BTCUSD' ? 'on' : ''}
+          onClick={() => pickMarket('BTCUSD')}
+          title="Bitcoin chart"
+        >
+          BTCUSD
+        </button>
+        <span className="tv-bar-sep" aria-hidden="true" />
         {['1', '5', '15', '60'].map((v) => (
           <button
             key={v}
@@ -136,29 +188,29 @@ export default function TradingViewGoldChart({ interval = '5' }) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          My TradingView (Bhih3eRv) ↗
+          My TradingView ↗
         </a>
         <a
           className="tv-open-link"
-          href="https://www.tradingview.com/symbols/TVC-GOLD/"
+          href={info.tvUrl}
           target="_blank"
           rel="noopener noreferrer"
         >
-          TVC:GOLD ↗
+          {info.tvLabel}
         </a>
       </div>
       <div className="tv-chart-canvas">
         {status === 'loading' ? (
-          <div className="tv-chart-status">Loading live gold candles…</div>
+          <div className="tv-chart-status">{info.loading}</div>
         ) : null}
         {status === 'error' ? (
           <div className="tv-chart-status tv-chart-error">
-            <p>{error || 'Failed to load gold market data'}</p>
+            <p>{error || info.err}</p>
             <div className="tv-chart-actions">
               <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
                 Retry
               </button>
-              <a href={USER_CHART_URL} target="_blank" rel="noopener noreferrer">
+              <a href={info.tvUrl} target="_blank" rel="noopener noreferrer">
                 Open TradingView
               </a>
             </div>
@@ -166,10 +218,7 @@ export default function TradingViewGoldChart({ interval = '5' }) {
         ) : null}
         <div ref={hostRef} className="tv-chart-host" />
       </div>
-      <p className="tv-chart-footnote">
-        Live gold via COMEX futures (GC=F). Strategies still use paper/MT feed — not this chart.
-        TradingView widget removed (spinner / blank embed).
-      </p>
+      <p className="tv-chart-footnote">{info.footnote}</p>
     </div>
   )
 }
