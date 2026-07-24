@@ -45,6 +45,29 @@ def _humanize_mt_error(detail: str | None) -> str:
         "autotrading_off_enable_toolbar_and_ea_allow_live_trading": (
             "AutoTrading OFF — i-ON ang AutoTrading sa MT4 + EA Allow live trading"
         ),
+        "autotrading_toolbar_off_click_autotrading_green": (
+            "MT4 AutoTrading toolbar OFF — click AutoTrading until GREEN, then re-attach EA"
+        ),
+        "algotrading_toolbar_off_click_algo_trading_green": (
+            "MT5 Algo Trading toolbar OFF — click Algo Trading until GREEN"
+        ),
+        "ea_allow_algo_trading_unchecked_reattach_ea": (
+            "EA Allow Algo Trading OFF — F7 → check Allow Algo Trading → OK (re-attach if needed)"
+        ),
+        "autotrading_toolbar_off_or_ea_allow_live_trading": (
+            "MT4 still blocks EA trades — toggle AutoTrading OFF/ON, re-attach EA, Allow live trading"
+        ),
+        "algotrading_toolbar_off_or_ea_allow_algo_trading": (
+            "MT5 still blocks EA trades — toggle Algo Trading OFF/ON, re-attach EA, Allow Algo Trading"
+        ),
+        "trade_not_allowed_check_ea_allow_live_trading_and_account": (
+            "Trade not allowed — EA Allow live trading + Tools→Options→Expert Advisors→Allow automated trading"
+        ),
+        "account_trading_disabled_by_broker": "Broker disabled trading on this account",
+        "account_blocks_expert_advisors": "This account blocks Expert Advisors — ask broker to enable EA trading",
+        "symbol_trade_disabled_or_market_closed": "XAUUSD not tradeable right now (market closed / symbol disabled)",
+        "terminal_not_connected": "Terminal not connected to broker",
+        "trade_context_busy_retry": "Trade context busy — click Buy again",
         "invalid_stops": "Invalid SL/TP — stops too close to price (broker stop level)",
         "not_enough_money": "Not enough free margin for this lot size",
         "off_quotes": "No quotes / market closed — check symbol XAUUSD",

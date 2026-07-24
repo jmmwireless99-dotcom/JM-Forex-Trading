@@ -18,6 +18,8 @@ class RemoteMtState:
     symbol: str = "XAUUSD"
     mt_login: str = ""
     platform: str = "mt5"
+    trade_ok: bool | None = None
+    trade_block: str = ""
     pending_command_csv: str = ""
     pending_command_id: str = ""
     pending_set_at: float = 0.0
@@ -56,13 +58,19 @@ def remote_push(
     with st.lock:
         if status_csv:
             st.status_csv = status_csv
-            # ok,balance,equity,positions,time[,login]
+            # ok,balance,equity,positions,time[,login[,trade_ok[,block]]]
             line = status_csv.strip().splitlines()[-1] if status_csv.strip() else ""
             parts = line.split(",")
             if len(parts) >= 6 and str(parts[5]).strip().isdigit():
                 st.mt_login = str(parts[5]).strip()
             else:
                 st.mt_login = ""
+            if len(parts) >= 7 and str(parts[6]).strip() in {"0", "1"}:
+                st.trade_ok = str(parts[6]).strip() == "1"
+                st.trade_block = str(parts[7]).strip() if len(parts) >= 8 else ""
+            else:
+                st.trade_ok = None
+                st.trade_block = ""
         if ticks_csv:
             st.ticks_csv = ticks_csv
         if positions_csv:
@@ -162,6 +170,8 @@ def remote_snapshot_info(platform: str | None = None) -> dict:
                 "agent_host": st.agent_host or None,
                 "symbol": st.symbol,
                 "mt_login": st.mt_login or None,
+                "trade_ok": st.trade_ok,
+                "trade_block": st.trade_block or None,
                 "pending_command": bool(st.pending_command_csv),
                 "bridge_dir": f"remote://windows-agent/{plat}",
             }

@@ -3,7 +3,7 @@
 //| Minimal compile-safe bridge for JM Forex                         |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex"
-#property version   "1.03"
+#property version   "1.04"
 #property description "JM Forex MT5 bridge"
 #property strict
 
@@ -17,6 +17,23 @@ input bool   UseCommonFolder   = true;
 
 CTrade trade;
 string g_last_cmd_id = "";
+
+string TradeBlockReason()
+{
+   if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+      return "terminal_not_connected";
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+      return "AlgoTrading_toolbar_OFF_click_Algo_Trading_green";
+   if(!MQLInfoInteger(MQL_TRADE_ALLOWED))
+      return "EA_Allow_Algo_Trading_unchecked_reattach_EA";
+   if(!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
+      return "account_trading_disabled_by_broker";
+   if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
+      return "account_blocks_Expert_Advisors";
+   if(!SymbolInfoInteger(InpSymbol, SYMBOL_TRADE_MODE))
+      return "symbol_trade_disabled_or_market_closed";
+   return "";
+}
 
 int OpenBridge(string name, int mode)
 {
@@ -41,12 +58,16 @@ void WriteStatus()
    if(h == INVALID_HANDLE)
       return;
    long login = AccountInfoInteger(ACCOUNT_LOGIN);
+   string block = TradeBlockReason();
+   int trade_ok = (StringLen(block) == 0) ? 1 : 0;
    string line = "ok," +
       DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "," +
       DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + "," +
       IntegerToString(PositionsTotal()) + "," +
       TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "," +
-      IntegerToString(login) + "\n";
+      IntegerToString(login) + "," +
+      IntegerToString(trade_ok) + "," +
+      block + "\n";
    FileWriteString(h, line);
    FileClose(h);
 }
@@ -161,9 +182,18 @@ void ProcessCommandLine(string line)
       return;
    }
 
+   string block = TradeBlockReason();
+   if(StringLen(block) > 0)
+   {
+      WriteAck(cmd_id, "ERR", block);
+      return;
+   }
+
    CloseAllMagic();
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpSlippagePoints);
+   // Prefer filling; broker may reject custom SL/TP distances.
+   trade.SetTypeFillingBySymbol(symbol);
 
    bool sent = false;
    if(side == "BUY")
@@ -175,22 +205,32 @@ void ProcessCommandLine(string line)
       WriteAck(cmd_id, "ERR", "bad_side");
       return;
    }
+   if(!sent && (sl > 0 || tp > 0) && trade.ResultRetcode() == TRADE_RETCODE_INVALID_STOPS)
+   {
+      if(side == "BUY")
+         sent = trade.Buy(lots, symbol, 0, 0, 0, comment);
+      else
+         sent = trade.Sell(lots, symbol, 0, 0, 0, comment);
+   }
 
    if(!sent)
    {
       int err = GetLastError();
       uint rc = trade.ResultRetcode();
-      string why = "trade_fail";
-      if(err == 4752 || rc == 10027)
-         why = "AlgoTrading_OFF_enable_toolbar_and_EA_Allow_Algo_Trading";
-      else if(rc == 10016)
-         why = "invalid_stops";
-      else if(rc == 10019 || err == 134)
-         why = "not_enough_money";
-      else if(rc != 0)
-         why = "retcode_" + IntegerToString((int)rc);
-      else
-         why = "error_" + IntegerToString(err);
+      string why = TradeBlockReason();
+      if(StringLen(why) == 0)
+      {
+         if(err == 4752 || rc == 10027)
+            why = "AlgoTrading_toolbar_OFF_or_EA_Allow_Algo_Trading";
+         else if(rc == 10016)
+            why = "invalid_stops";
+         else if(rc == 10019 || err == 134)
+            why = "not_enough_money";
+         else if(rc != 0)
+            why = "retcode_" + IntegerToString((int)rc);
+         else
+            why = "error_" + IntegerToString(err);
+      }
       WriteAck(cmd_id, "ERR", why);
    }
    else
@@ -223,7 +263,13 @@ int OnInit()
    WriteStatus();
    WriteTicks();
    WritePositions();
-   Print("JM Forex MT5 Bridge ready on ", InpSymbol);
+   string block = TradeBlockReason();
+   Print("JM Forex MT5 Bridge ready on ", InpSymbol,
+         " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
+         " | block=", block,
+         " | term_trade=", TerminalInfoInteger(TERMINAL_TRADE_ALLOWED),
+         " | mql_trade=", MQLInfoInteger(MQL_TRADE_ALLOWED),
+         " | acct_expert=", AccountInfoInteger(ACCOUNT_TRADE_EXPERT));
    return(INIT_SUCCEEDED);
 }
 
