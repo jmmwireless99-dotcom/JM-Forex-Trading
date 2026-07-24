@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable
 from app.brokers.market_data import MarketDataSimulator
 from app.brokers.mt_bridge import resolve_dual_remote_bridges, resolve_mt_bridge
 from app.brokers.paper import PaperBroker
+from app.brokers.remote_mt_store import get_remote_mt_state
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
 from app.engine.trade_journal import TradeJournal
@@ -568,6 +569,39 @@ class TradingEngine:
         if dedicated:
             return str(dedicated).upper()
         return "XAUUSD"
+
+    @staticmethod
+    def _is_btc_symbol(symbol: str | None) -> bool:
+        u = (symbol or "").upper()
+        return "BTC" in u or "BITCOIN" in u
+
+    def _mt_bridge_live_symbol(self, platform: str | None) -> str:
+        """Last symbol reported by the Windows agent for a platform."""
+        plat = (platform or "").strip().lower()
+        if plat not in {"mt4", "mt5"}:
+            return ""
+        st = get_remote_mt_state(plat)
+        with st.lock:
+            raw = (st.ticks_csv or "").strip()
+            if raw:
+                tick_sym = raw.splitlines()[-1].split(",")[0].strip().upper()
+                if tick_sym:
+                    return tick_sym
+            return (st.symbol or "").upper()
+
+    def _mt_bridge_supports_symbol(
+        self, platform: str | None, symbol: str | None
+    ) -> bool:
+        """True when the live EA/agent symbol family matches the order symbol."""
+        live = self._mt_bridge_live_symbol(platform)
+        want = (symbol or "").upper()
+        if not live or not want:
+            return False
+        if self._is_btc_symbol(want):
+            return self._is_btc_symbol(live)
+        if want in {"XAUUSD", "GOLD"} or "XAU" in want:
+            return ("XAU" in live) or ("GOLD" in live)
+        return live == want
 
     def _seed_candle_history(self) -> None:
         """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
@@ -1736,6 +1770,7 @@ class TradingEngine:
         # Always advance paper tape (includes BTCUSD) so crypto strategy stays warm.
         paper_ticks = self.market.next_ticks()
         btc_ticks = [t for t in paper_ticks if t.symbol == "BTCUSD"]
+        gold_ticks = [t for t in paper_ticks if t.symbol == "XAUUSD"]
 
         if self.bridges:
             # Prefer MT5 ticks for the desk feed; fall back to MT4.
@@ -1744,11 +1779,16 @@ class TradingEngine:
                 if bridge and bridge.is_online():
                     tick = bridge.read_tick()
                     if tick:
+                        # If MT already feeds BTC, don't duplicate paper BTC.
+                        if self._is_btc_symbol(tick.symbol):
+                            return [tick] + gold_ticks
                         return [tick] + btc_ticks
             return paper_ticks
         if self.using_mt() and self.mt:
             tick = self.mt.read_tick()
             if tick:
+                if self._is_btc_symbol(tick.symbol):
+                    return [tick] + gold_ticks
                 return [tick] + btc_ticks
             if self.settings.mt_remote_bridge:
                 return paper_ticks
@@ -1907,9 +1947,19 @@ class TradingEngine:
                 for a in targets
                 if self.uses_paper_book(a) or self.is_mt_bound(a)
             ]
-        # BTCUSD is paper-desk only for now (MT bridges stay on XAUUSD).
-        if (signal.symbol or "").upper() in {"BTCUSD", "BTCUSDT"}:
-            targets = [a for a in targets if self.uses_paper_book(a)]
+        # BTCUSD: paper demos always; MT-bound only when that platform's EA is on BTC.
+        if self._is_btc_symbol(signal.symbol):
+            filtered: list[PaperAccount] = []
+            for acct in targets:
+                if self.uses_paper_book(acct):
+                    filtered.append(acct)
+                    continue
+                if not self.is_mt_bound(acct):
+                    continue
+                plat = self.account_mt_platform(acct)
+                if self._mt_bridge_supports_symbol(plat, signal.symbol):
+                    filtered.append(acct)
+            targets = filtered
         if not targets:
             return
         for acct in targets:
@@ -2061,6 +2111,33 @@ class TradingEngine:
 
         if self.is_mt_bound(acct):
             bridge = self.bridge_for_account(acct) or self.mt
+            plat = self.account_mt_platform(acct) or getattr(bridge, "platform", None)
+            if bridge and not self._mt_bridge_supports_symbol(plat, request.symbol):
+                live = self._mt_bridge_live_symbol(plat) or "unknown"
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=(
+                        f"{(plat or 'MT').upper()} EA is on {live} — "
+                        f"cannot fill {request.symbol}. "
+                        f"For BTC attach JM_Forex_Bridge on BTCUSD M5 + "
+                        f"RUN_AGENT_MT4_BTC.bat (or gold zip for XAUUSD)."
+                    ),
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
+                )
+                return rejected
             # MT bridges are market-only — convert near LIMIT to MARKET, else reject.
             if request.order_type == OrderType.LIMIT:
                 near_pips = 150.0

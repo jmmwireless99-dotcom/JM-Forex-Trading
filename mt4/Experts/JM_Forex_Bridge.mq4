@@ -1,15 +1,16 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq4                                              |
-//| JM Forex ↔ cloud desk (MT4) — v1.07                              |
+//| JM Forex ↔ cloud desk (MT4) — v1.08                              |
 //| Files: jm4_*.csv in Terminal Common\\Files                       |
+//| XAUUSD or BTCUSD — attach on M5 for BTC_EMA_RSI_Scalp             |
 //+------------------------------------------------------------------+
 #property strict
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
-#property version   "1.07"
-#property description "JM Forex MT4 bridge — Common Files CSV + AutoTrading"
+#property version   "1.08"
+#property description "JM Forex MT4 bridge — XAUUSD/BTCUSD + AutoTrading"
 
-input string InpSymbol           = "XAUUSD";   // Chart/symbol (auto-resolves broker suffix)
+input string InpSymbol           = "XAUUSD";   // XAUUSD or BTCUSD (auto-resolves broker suffix)
 input int    InpMagic            = 260719;
 input int    InpSlippagePoints   = 30;
 input int    InpPollMs           = 500;
@@ -25,30 +26,87 @@ string   g_symbol = "";
 datetime g_last_cmd_seen = 0;
 string   g_last_cmd_id   = "";
 
+bool IsGoldName(string s)
+{
+   string u = s;
+   StringToUpper(u);
+   return (StringFind(u, "XAU") >= 0 || StringFind(u, "GOLD") >= 0);
+}
+
+bool IsBtcName(string s)
+{
+   string u = s;
+   StringToUpper(u);
+   return (
+      StringFind(u, "BTC") >= 0 ||
+      StringFind(u, "BITCOIN") >= 0 ||
+      StringFind(u, "BTCUSD") >= 0
+   );
+}
+
 string ResolveSymbol(string wanted)
 {
    string w = wanted;
    StringTrimLeft(w);
    StringTrimRight(w);
    if(StringLen(w) == 0)
+      w = Symbol(); // prefer chart symbol when blank
+   if(StringLen(w) == 0)
       w = "XAUUSD";
    if(MarketInfo(w, MODE_BID) > 0 || SymbolSelect(w, true))
       return w;
 
-   string suffixes[8] = {".", "m", ".m", "pro", ".pro", "c", ".c", "s"};
-   for(int i = 0; i < 8; i++)
+   string suffixes[10] = {".", "m", ".m", "pro", ".pro", "c", ".c", "s", "#", ".a"};
+   string bases[6];
+   int nbase = 0;
+   if(IsBtcName(w))
    {
-      string cand = "XAUUSD" + suffixes[i];
-      if(MarketInfo(cand, MODE_BID) > 0 || SymbolSelect(cand, true))
-         return cand;
+      bases[0] = "BTCUSD";
+      bases[1] = "BTCUSDm";
+      bases[2] = "Bitcoin";
+      bases[3] = "BTCUSDT";
+      bases[4] = "BTCUSD.";
+      bases[5] = "BTCUSD#";
+      nbase = 6;
+   }
+   else
+   {
+      bases[0] = "XAUUSD";
+      bases[1] = "XAUUSDm";
+      bases[2] = "GOLD";
+      bases[3] = "XAUUSD.";
+      bases[4] = "XAUUSD#";
+      bases[5] = "XAUUSD.a";
+      nbase = 6;
+   }
+   for(int b = 0; b < nbase; b++)
+   {
+      if(MarketInfo(bases[b], MODE_BID) > 0 || SymbolSelect(bases[b], true))
+         return bases[b];
+      for(int i = 0; i < 10; i++)
+      {
+         string cand = bases[b] + suffixes[i];
+         if(MarketInfo(cand, MODE_BID) > 0 || SymbolSelect(cand, true))
+            return cand;
+      }
    }
 
    string chart_sym = Symbol();
-   string upper = chart_sym;
-   StringToUpper(upper);
-   if(StringFind(upper, "XAU") >= 0 || StringFind(upper, "GOLD") >= 0)
+   if(IsGoldName(chart_sym) || IsBtcName(chart_sym))
       return chart_sym;
    return w;
+}
+
+bool SymbolMatchesBridge(string cmd_symbol)
+{
+   if(cmd_symbol == g_symbol) return true;
+   string a = cmd_symbol;
+   string b = g_symbol;
+   StringToUpper(a);
+   StringToUpper(b);
+   if(IsGoldName(a) && IsGoldName(b)) return true;
+   if(IsBtcName(a) && IsBtcName(b)) return true;
+   return false;
 }
 
 string TradeBlockReason()
@@ -65,18 +123,30 @@ string TradeBlockReason()
    return "";
 }
 
+int EffectiveSlippage()
+{
+   // BTC CFDs move faster — 30 points is too tight on 2-digit quotes.
+   if(IsBtcName(g_symbol) && InpSlippagePoints < 300)
+      return 500;
+   return InpSlippagePoints;
+}
+
 void UpdateChartComment()
 {
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
+   string tip = IsBtcName(g_symbol)
+      ? "TF: M5 · strategy BTC_EMA_RSI_Scalp"
+      : "Gold scalp · BTC: InpSymbol=BTCUSD on M5 chart";
    Comment(
-      "JM Forex MT4 Bridge v1.07\n",
+      "JM Forex MT4 Bridge v1.08\n",
       "Symbol: ", g_symbol, "\n",
+      tip, "\n",
       "Login: ", IntegerToString(AccountNumber()), "\n",
       "trade_ok=", ok, "\n",
       (StringLen(block) > 0 ? ("block=" + block + "\n") : ""),
       "Common Files: ", (UseCommonFolder ? "YES" : "NO — set true!"), "\n",
-      "Keep RUN_AGENT_MT4.bat open"
+      "Keep RUN_AGENT_MT4*.bat open"
    );
 }
 
@@ -219,7 +289,7 @@ bool CloseAllMagic()
       if(type != OP_BUY && type != OP_SELL) continue;
       double price = (type == OP_BUY) ? MarketInfo(g_symbol, MODE_BID)
                                       : MarketInfo(g_symbol, MODE_ASK);
-      if(!OrderClose(OrderTicket(), OrderLots(), price, InpSlippagePoints, clrOrange))
+      if(!OrderClose(OrderTicket(), OrderLots(), price, EffectiveSlippage(), clrOrange))
          ok = false;
    }
    return ok;
@@ -237,7 +307,7 @@ bool CloseOppositeMagic(string side)
       if(OrderType() != want) continue;
       double price = (want == OP_BUY) ? MarketInfo(g_symbol, MODE_BID)
                                       : MarketInfo(g_symbol, MODE_ASK);
-      if(!OrderClose(OrderTicket(), OrderLots(), price, InpSlippagePoints, clrOrange))
+      if(!OrderClose(OrderTicket(), OrderLots(), price, EffectiveSlippage(), clrOrange))
          ok = false;
    }
    return ok;
@@ -300,16 +370,7 @@ void ProcessCommandLine(string line)
    double tp      = (n > 6 && StringLen(parts[6]) > 0) ? StringToDouble(parts[6]) : 0;
    string comment = (n > 7) ? parts[7] : "JM";
 
-   string sym_u = symbol;
-   StringToUpper(sym_u);
-   string g_u = g_symbol;
-   StringToUpper(g_u);
-   bool gold_match =
-      (symbol == g_symbol) ||
-      (StringFind(sym_u, "XAU") >= 0 && StringFind(g_u, "XAU") >= 0) ||
-      (StringFind(sym_u, "GOLD") >= 0 && StringFind(g_u, "GOLD") >= 0);
-
-   if(!gold_match)
+   if(!SymbolMatchesBridge(symbol))
    {
       WriteAck(cmd_id, "ERR", "symbol_mismatch");
       return;
@@ -340,8 +401,9 @@ void ProcessCommandLine(string line)
 
    double price = (cmd == OP_BUY) ? MarketInfo(g_symbol, MODE_ASK)
                                   : MarketInfo(g_symbol, MODE_BID);
+   int slip = EffectiveSlippage();
    int ticket = OrderSend(
-      g_symbol, cmd, lots, price, InpSlippagePoints,
+      g_symbol, cmd, lots, price, slip,
       sl, tp, comment, InpMagic, 0,
       (cmd == OP_BUY) ? clrDodgerBlue : clrTomato
    );
@@ -349,7 +411,7 @@ void ProcessCommandLine(string line)
    {
       ResetLastError();
       ticket = OrderSend(
-         g_symbol, cmd, lots, price, InpSlippagePoints,
+         g_symbol, cmd, lots, price, slip,
          0, 0, comment, InpMagic, 0,
          (cmd == OP_BUY) ? clrDodgerBlue : clrTomato
       );
@@ -409,7 +471,7 @@ int OnInit()
    WriteHistory();
    UpdateChartComment();
    string block = TradeBlockReason();
-   Print("JM Forex MT4 Bridge v1.07 ready on ", g_symbol,
+   Print("JM Forex MT4 Bridge v1.08 ready on ", g_symbol,
          " | folder=", UseCommonFolder ? "COMMON" : "TERMINAL",
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,

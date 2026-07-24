@@ -20,7 +20,7 @@ const MARKETS = {
     tvUrl: 'https://www.tradingview.com/symbols/BINANCE-BTCUSDT/',
     tvLabel: 'BINANCE:BTCUSDT ↗',
     footnote:
-      'Live BTC via Binance BTCUSDT. BTC_EMA_RSI_Scalp uses paper BTC feed synced to this market.',
+      'BTCUSD · strategy TF M5 (BTC_EMA_RSI_Scalp). Live mid from Binance or MT4 BTC bridge.',
     loading: 'Loading live BTC candles…',
     err: 'Failed to load BTC market data',
   },

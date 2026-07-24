@@ -531,7 +531,7 @@ export default function App() {
   async function manualTrade(side) {
     await run(async () => {
       const order = await api.placeOrder({
-        symbol: 'XAUUSD',
+        symbol: chartSymbol === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD',
         side,
         lots: Number(manualLots) || 0.01,
         comment: 'manual',
@@ -578,9 +578,12 @@ export default function App() {
   const quoteTick = chartSymbol === 'BTCUSD' ? btc : gold
   const maxOpen = Number(desk?.risk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
+  const chartPositions = positions.filter(
+    (p) => !p.symbol || p.symbol === chartSymbol,
+  )
   const atMaxOpen = positions.length >= maxOpen
-  const hasBuyOpen = positions.some((p) => p.side === 'BUY')
-  const hasSellOpen = positions.some((p) => p.side === 'SELL')
+  const hasBuyOpen = chartPositions.some((p) => p.side === 'BUY')
+  const hasSellOpen = chartPositions.some((p) => p.side === 'SELL')
 
   if (!authReady) {
     return (
@@ -923,21 +926,30 @@ export default function App() {
         <div className="manual-trade-head">
           <strong>Manual trade</strong>
           <span className="meta">
-            XAUUSD · lots {manualLots} · {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
+            {chartSymbol}
+            {chartSymbol === 'BTCUSD' ? ' · M5 signal' : ''}
+            {' · '}lots {manualLots} ·{' '}
+            {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
           </span>
         </div>
         <div className="manual-prices">
           <div className="price-pill sell">
             <label>SELL</label>
-            <strong>{gold?.bid != null ? Number(gold.bid).toFixed(2) : '—'}</strong>
+            <strong>
+              {quoteTick?.bid != null ? Number(quoteTick.bid).toFixed(2) : '—'}
+            </strong>
           </div>
           <div className="price-pill mid">
             <label>MID</label>
-            <strong>{gold?.mid != null ? Number(gold.mid).toFixed(2) : '—'}</strong>
+            <strong>
+              {quoteTick?.mid != null ? Number(quoteTick.mid).toFixed(2) : '—'}
+            </strong>
           </div>
           <div className="price-pill buy">
             <label>BUY</label>
-            <strong>{gold?.ask != null ? Number(gold.ask).toFixed(2) : '—'}</strong>
+            <strong>
+              {quoteTick?.ask != null ? Number(quoteTick.ask).toFixed(2) : '—'}
+            </strong>
           </div>
         </div>
         <div className="manual-controls">
@@ -965,32 +977,32 @@ export default function App() {
           <button
             type="button"
             className="btn-sell"
-            disabled={busy || !gold || atMaxOpen || hasBuyOpen}
+            disabled={busy || !quoteTick || atMaxOpen || hasBuyOpen}
             onClick={() => manualTrade('SELL')}
             title={
               hasBuyOpen
                 ? 'BUY still open — no opposite flip'
                 : atMaxOpen
                   ? `Max ${maxOpen} open positions`
-                  : 'Market SELL'
+                  : `Market SELL ${chartSymbol}`
             }
           >
-            SELL {gold?.bid != null ? Number(gold.bid).toFixed(2) : ''}
+            SELL {quoteTick?.bid != null ? Number(quoteTick.bid).toFixed(2) : ''}
           </button>
           <button
             type="button"
             className="btn-buy"
-            disabled={busy || !gold || atMaxOpen || hasSellOpen}
+            disabled={busy || !quoteTick || atMaxOpen || hasSellOpen}
             onClick={() => manualTrade('BUY')}
             title={
               hasSellOpen
                 ? 'SELL still open — no opposite flip'
                 : atMaxOpen
                   ? `Max ${maxOpen} open positions`
-                  : 'Market BUY'
+                  : `Market BUY ${chartSymbol}`
             }
           >
-            BUY {gold?.ask != null ? Number(gold.ask).toFixed(2) : ''}
+            BUY {quoteTick?.ask != null ? Number(quoteTick.ask).toFixed(2) : ''}
           </button>
         </div>
         {orderNote ? <div className="meta manual-note">{orderNote}</div> : null}
@@ -1052,7 +1064,7 @@ export default function App() {
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? chartSymbol === 'BTCUSD'
-                ? 'Live Binance BTCUSDT · BTC strategy uses paper BTC feed'
+                ? 'BTCUSD M5 · BTC_EMA_RSI_Scalp · Binance / MT4 BTC bridge'
                 : 'Live COMEX gold · strategies still use paper/MT feed'
               : `Engine ${chartSymbol} candles — paper sim or MT bridge`}
             {quoteTick ? ` · mid ${quoteTick.mid}` : ''}

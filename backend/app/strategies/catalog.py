@@ -161,10 +161,11 @@ def strategy_catalog() -> list[dict]:
             "chart_tf": "M1",
             "summary": (
                 "Best BTCUSD desk strategy: EMA200 trend + EMA20/50 pullback + RSI + "
-                "engulf/pin · structure SL · ≈2.2R. Paper fills (Binance mid)."
+                "engulf/pin · structure SL · ≈2.2R · signal TF M5."
             ),
             "entry_rules": [
                 "Symbol BTCUSD only — gold strategies stay on XAUUSD.",
+                "TIMEFRAME: M5 signals (attach MT4 EA on BTCUSD M5).",
                 "Uptrend: price > EMA200, EMA20 ≥ EMA50, clear separation.",
                 "Pullback into EMA20/50 + RSI 38–52 BUY / 48–62 SELL.",
                 "Confirm with engulfing or pin bar (no soft body).",
@@ -173,12 +174,12 @@ def strategy_catalog() -> list[dict]:
             "entry_flow": [
                 "Select BTC_EMA_RSI_Scalp → Apply strategy (manual) → Save.",
                 "Engine locks this strategy (auto gold transfer OFF).",
-                "Paper BTCUSD ticks sync from Binance BTCUSDT.",
+                "Paper: Binance BTCUSDT mid · Live MT4: jm-mt4-btc-bridge.zip.",
             ],
             "parameters": seed_params("BTC_EMA_RSI_Scalp"),
             "safety": [
                 "Not on gold session auto-router — must select manually.",
-                "Paper-only fills for now (MT bridges remain XAUUSD).",
+                "MT4 live: attach EA on BTCUSD M5 + RUN_AGENT_MT4_BTC.bat.",
                 "Needs 205+ M5 BTC bars (seeded from Binance on boot).",
             ],
             "order_type": "MARKET",

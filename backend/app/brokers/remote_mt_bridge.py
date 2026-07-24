@@ -65,14 +65,23 @@ def _humanize_mt_error(detail: str | None) -> str:
         ),
         "account_trading_disabled_by_broker": "Broker disabled trading on this account",
         "account_blocks_expert_advisors": "This account blocks Expert Advisors — ask broker to enable EA trading",
-        "symbol_trade_disabled_or_market_closed": "XAUUSD not tradeable right now (market closed / symbol disabled)",
+        "symbol_trade_disabled_or_market_closed": (
+            "Symbol not tradeable right now (market closed / symbol disabled) — "
+            "check XAUUSD or BTCUSD in Market Watch"
+        ),
         "terminal_not_connected": "Terminal not connected to broker",
         "trade_context_busy_retry": "Trade context busy — click Buy again",
         "invalid_stops": "Invalid SL/TP — stops too close to price (broker stop level)",
         "not_enough_money": "Not enough free margin for this lot size",
-        "off_quotes": "No quotes / market closed — check symbol XAUUSD",
-        "symbol_or_lots": "Symbol mismatch or invalid lots — EA InpSymbol must be XAUUSD",
-        "symbol_mismatch": "Symbol mismatch — EA chart symbol must match XAUUSD",
+        "off_quotes": "No quotes / market closed — check XAUUSD or BTCUSD quotes",
+        "symbol_or_lots": (
+            "Symbol mismatch or invalid lots — EA InpSymbol must match order "
+            "(XAUUSD or BTCUSD)"
+        ),
+        "symbol_mismatch": (
+            "Symbol mismatch — EA InpSymbol/chart must match order "
+            "(gold↔gold or BTC↔BTC). For BTC_EMA_RSI_Scalp attach BTCUSD M5."
+        ),
     }
     if key in mapping:
         return mapping[key]
