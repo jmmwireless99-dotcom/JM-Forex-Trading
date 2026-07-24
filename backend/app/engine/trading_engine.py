@@ -27,6 +27,7 @@ from app.models.domain import (
     Side,
     Signal,
     Tick,
+    TradeStatus,
     utcnow,
 )
 from app.paper_accounts import PaperAccount, PaperAccountRegistry
@@ -1165,6 +1166,68 @@ class TradingEngine:
             await self._emit("trade", payload)
             await self._emit("trades", self._trades_payload(account))
 
+    def _journal_mode(self, account: PaperAccount | None = None) -> str:
+        """Label fills by book: live mt4/mt5 when bound, else paper."""
+        if account is not None and self.is_mt_bound(account):
+            return self.account_mt_platform(account) or "mt5"
+        if account is not None and self.is_mt5_client(account):
+            return self.account_mt_platform(account) or "mt5"
+        return "paper"
+
+    async def _reconcile_mt_journal(self, tick: Tick) -> None:
+        """Close JM FX journal rows when the live MT position disappears.
+
+        EA one-position policy / SL-TP / CloseAll closes on the terminal without
+        calling the paper broker, so bound accounts need this sync each tick.
+        """
+        for acct in self.accounts.clients():
+            if not self.is_mt_bound(acct):
+                continue
+            bridge = self.bridge_for_account(acct)
+            if bridge is None or not bridge.is_online():
+                continue
+            live = {p.id: p for p in bridge.open_positions()}
+            changed = False
+            for row in acct.journal.list(500, include_rejected=False):
+                if row.status != TradeStatus.OPEN or not row.ticket:
+                    continue
+                live_pos = live.get(str(row.ticket))
+                if live_pos is not None:
+                    row.unrealized_pnl = live_pos.unrealized_pnl
+                    row.stop_loss = live_pos.stop_loss
+                    row.take_profit = live_pos.take_profit
+                    if not row.strategy and live_pos.strategy:
+                        row.strategy = live_pos.strategy
+                    continue
+                # Missing on terminal — mark closed (PnL unknown unless we estimate).
+                entry = float(row.entry or 0.0)
+                exit_px = float(tick.mid)
+                lots = float(row.lots or 0.01)
+                # XAUUSD: $1 per 0.01 lot per $1 move ≈ lots * 100 * delta
+                direction = 1.0 if row.side.value == "BUY" else -1.0
+                est = round(direction * (exit_px - entry) * lots * 100.0, 2) if entry else 0.0
+                closed = Position(
+                    id=str(row.ticket),
+                    symbol=row.symbol or tick.symbol,
+                    side=row.side,
+                    lots=lots,
+                    entry_price=entry or exit_px,
+                    stop_loss=row.stop_loss,
+                    take_profit=row.take_profit,
+                    strategy=row.strategy,
+                    status=PositionStatus.CLOSED,
+                    close_price=exit_px,
+                    realized_pnl=est,
+                    close_reason="mt_closed_synced",
+                    closed_at=tick.timestamp,
+                )
+                await self._journal_close(closed, acct)
+                changed = True
+            if changed:
+                self.accounts.save()
+                await self._emit("account", self.account_payload(acct))
+                await self._emit("trades", self._trades_payload(acct))
+
     async def _journal_fill(
         self,
         order: Order,
@@ -1174,22 +1237,25 @@ class TradingEngine:
         account: PaperAccount | None = None,
     ) -> None:
         acct = account or self._desk
+        mode = self._journal_mode(acct)
         order_payload = {**order.model_dump(mode="json"), "account_id": acct.id}
         if order.status == OrderStatus.PENDING:
             await self._emit("order", order_payload)
             return
         if order.status == OrderStatus.REJECTED:
-            row = acct.journal.record_order(order, mode=self.mode)
+            row = acct.journal.record_order(order, mode=mode)
             self.accounts.save()
             await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
             await self._emit("trades", self._trades_payload(acct))
             return
         if position is not None:
-            row = acct.journal.record_open_position(position, mode=self.mode)
+            if order.strategy and not position.strategy:
+                position.strategy = order.strategy
+            row = acct.journal.record_open_position(position, mode=mode)
             self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
         else:
-            row = acct.journal.record_order(order, mode=self.mode)
+            row = acct.journal.record_order(order, mode=mode)
         self.accounts.save()
         await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
         await self._emit("trades", self._trades_payload(acct))
@@ -1482,6 +1548,8 @@ class TradingEngine:
                         )
                     acct.journal.update_open_pnl(acct.broker.open_positions())
                     await self._sync_limit_fills(acct)
+                # Live MT books: sync journal when terminal positions vanish.
+                await self._reconcile_mt_journal(tick)
                 if any(self.uses_paper_book(a) for a in self.accounts.all()):
                     await self._london_kill_switch(tick)
 
@@ -1798,6 +1866,27 @@ class TradingEngine:
                 if order.status == OrderStatus.FILLED
                 else None
             )
+            if pos is not None and request.strategy and not pos.strategy:
+                pos.strategy = request.strategy
+            # If bridge ticket is on the order but position list lags one poll, still
+            # journal with strategy + live mode using the broker ticket id.
+            if (
+                order.status == OrderStatus.FILLED
+                and pos is None
+                and str(order.id).isdigit()
+            ):
+                mid = float(tick.mid) if tick is not None else 0.0
+                pos = Position(
+                    id=str(order.id),
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    entry_price=mid,
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                    strategy=request.strategy,
+                    status=PositionStatus.OPEN,
+                )
             await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
         elif self.is_mt5_client(acct):
             # Linked MT login that is not bound to its platform — never paper-fill.

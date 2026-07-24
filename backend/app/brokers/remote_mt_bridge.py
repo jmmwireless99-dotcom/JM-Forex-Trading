@@ -193,7 +193,13 @@ class RemoteMetaTraderBridge:
         if ack.ok:
             order.status = OrderStatus.FILLED
             order.filled_at = utcnow()
-            order.comment = f"{self.platform}:{ack.detail}"
+            # Prefer broker ticket from EA ack detail when present.
+            detail = (ack.detail or "").strip()
+            if detail.isdigit():
+                order.id = detail
+            order.comment = f"{self.platform}:{detail or 'filled'}"
+            # Keep strategy on the order for journal labeling.
+            order.fill_price = order.fill_price
         else:
             order.status = OrderStatus.REJECTED
             order.reject_reason = _humanize_mt_error(ack.detail) or "MT remote bridge error"
