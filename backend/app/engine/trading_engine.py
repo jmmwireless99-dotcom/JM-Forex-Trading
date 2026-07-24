@@ -1583,8 +1583,12 @@ class TradingEngine:
         london_signal_id: str | None = None,
     ) -> None:
         # Auto signals fan out per client: paper demos fill on paper; only the
-        # MT5-bound login (e.g. Joel) routes to the Windows terminal.
+        # MT-bound login (e.g. Joel MT5 / Nonoy MT4) routes to the Windows terminal.
+        # When desk mode is paper, skip MT-linked accounts so strategy tests stay
+        # on fake capital only (no bridge rejects / waiting_mt noise).
         targets = self.accounts.auto_followers()
+        if self.mode == "paper":
+            targets = [a for a in targets if self.uses_paper_book(a)]
         if not targets:
             return
         for acct in targets:
