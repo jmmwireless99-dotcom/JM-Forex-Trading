@@ -19,6 +19,9 @@ rm -rf "$ROOT/backend/static"
 mkdir -p "$ROOT/backend/static"
 cp -a "$ROOT/frontend/dist/." "$ROOT/backend/static/"
 
+# Pack MT4/MT5 bridge downloads (EA + agent zips)
+bash "$ROOT/scripts/pack-mt-downloads.sh"
+
 # Sanity: asset paths must be under /fx/
 if ! grep -q '/fx/assets/' "$ROOT/backend/static/index.html"; then
   echo "ERROR: index.html missing /fx/assets/ base — refusing deploy"

@@ -1,22 +1,55 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq5                                              |
-//| Minimal compile-safe bridge for JM Forex                         |
+//| JM Forex ↔ cloud desk (MT5) — v1.05                              |
 //+------------------------------------------------------------------+
-#property copyright "JM Forex"
-#property version   "1.04"
-#property description "JM Forex MT5 bridge"
+#property copyright "JM Forex / JM TECH SOLUTION"
+#property link      "https://jmtechsolution.cloud/fx/"
+#property version   "1.05"
+#property description "JM Forex MT5 bridge — Common Files CSV + Algo Trading"
 #property strict
 
 #include <Trade/Trade.mqh>
 
-input string InpSymbol         = "XAUUSD";
+input string InpSymbol         = "XAUUSD";   // Chart/symbol (auto-resolves broker suffix)
 input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
 input int    InpPollMs         = 500;
-input bool   UseCommonFolder   = true;
+input bool   UseCommonFolder   = true;       // MUST stay true for Windows agent
 
 CTrade trade;
+string g_symbol = "";
 string g_last_cmd_id = "";
+
+string ResolveSymbol(string wanted)
+{
+   string w = wanted;
+   StringTrimLeft(w);
+   StringTrimRight(w);
+   if(StringLen(w) == 0)
+      w = "XAUUSD";
+   if(SymbolSelect(w, true))
+      return w;
+
+   // Common broker suffixes for gold
+   string suffixes[8] = {".", "m", ".m", "pro", ".pro", "c", ".c", "s"};
+   for(int i = 0; i < 8; i++)
+   {
+      string cand = "XAUUSD" + suffixes[i];
+      if(SymbolSelect(cand, true))
+         return cand;
+   }
+
+   // Fall back to chart symbol if it looks like gold
+   string chart_sym = Symbol();
+   string upper = chart_sym;
+   StringToUpper(upper);
+   if(StringFind(upper, "XAU") >= 0 || StringFind(upper, "GOLD") >= 0)
+   {
+      if(SymbolSelect(chart_sym, true))
+         return chart_sym;
+   }
+   return w;
+}
 
 string TradeBlockReason()
 {
@@ -30,9 +63,24 @@ string TradeBlockReason()
       return "account_trading_disabled_by_broker";
    if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
       return "account_blocks_Expert_Advisors";
-   if(!SymbolInfoInteger(InpSymbol, SYMBOL_TRADE_MODE))
+   if(!SymbolInfoInteger(g_symbol, SYMBOL_TRADE_MODE))
       return "symbol_trade_disabled_or_market_closed";
    return "";
+}
+
+void UpdateChartComment()
+{
+   string block = TradeBlockReason();
+   string ok = (StringLen(block) == 0) ? "YES" : "NO";
+   Comment(
+      "JM Forex MT5 Bridge v1.05\n",
+      "Symbol: ", g_symbol, "\n",
+      "Login: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
+      "trade_ok=", ok, "\n",
+      (StringLen(block) > 0 ? ("block=" + block + "\n") : ""),
+      "Common Files: ", (UseCommonFolder ? "YES" : "NO — set true!"), "\n",
+      "Keep RUN_AGENT_MT5.bat open"
+   );
 }
 
 int OpenBridge(string name, int mode)
@@ -74,12 +122,12 @@ void WriteStatus()
 
 void WriteTicks()
 {
-   double bid = SymbolInfoDouble(InpSymbol, SYMBOL_BID);
-   double ask = SymbolInfoDouble(InpSymbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(g_symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(g_symbol, SYMBOL_ASK);
    int h = OpenBridge("jm_ticks.csv", FILE_WRITE | FILE_REWRITE);
    if(h == INVALID_HANDLE)
       return;
-   string line = InpSymbol + "," +
+   string line = g_symbol + "," +
       DoubleToString(bid, 5) + "," +
       DoubleToString(ask, 5) + "," +
       TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\n";
@@ -102,12 +150,13 @@ void WritePositions()
          continue;
       if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
          continue;
-      if(PositionGetString(POSITION_SYMBOL) != InpSymbol)
+      string pos_sym = PositionGetString(POSITION_SYMBOL);
+      if(pos_sym != g_symbol)
          continue;
       long type = PositionGetInteger(POSITION_TYPE);
       string side = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
       string line = IntegerToString((long)ticket) + "," +
-         PositionGetString(POSITION_SYMBOL) + "," +
+         pos_sym + "," +
          side + "," +
          DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + "," +
          DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN), 5) + "," +
@@ -131,7 +180,7 @@ bool CloseAllMagic()
          continue;
       if(PositionGetInteger(POSITION_MAGIC) != InpMagic)
          continue;
-      if(PositionGetString(POSITION_SYMBOL) != InpSymbol)
+      if(PositionGetString(POSITION_SYMBOL) != g_symbol)
          continue;
       if(!trade.PositionClose(ticket))
          ok = false;
@@ -176,7 +225,17 @@ void ProcessCommandLine(string line)
    double tp = (n > 6 && StringLen(parts[6]) > 0) ? StringToDouble(parts[6]) : 0;
    string comment = (n > 7) ? parts[7] : "JM";
 
-   if(symbol != InpSymbol || lots <= 0)
+   // Accept desk "XAUUSD" even when broker uses a suffix.
+   string sym_u = symbol;
+   StringToUpper(sym_u);
+   string g_u = g_symbol;
+   StringToUpper(g_u);
+   bool gold_match =
+      (symbol == g_symbol) ||
+      (StringFind(sym_u, "XAU") >= 0 && StringFind(g_u, "XAU") >= 0) ||
+      (StringFind(sym_u, "GOLD") >= 0 && StringFind(g_u, "GOLD") >= 0);
+
+   if(!gold_match || lots <= 0)
    {
       WriteAck(cmd_id, "ERR", "symbol_or_lots");
       return;
@@ -192,14 +251,13 @@ void ProcessCommandLine(string line)
    CloseAllMagic();
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpSlippagePoints);
-   // Prefer filling; broker may reject custom SL/TP distances.
-   trade.SetTypeFillingBySymbol(symbol);
+   trade.SetTypeFillingBySymbol(g_symbol);
 
    bool sent = false;
    if(side == "BUY")
-      sent = trade.Buy(lots, symbol, 0, sl, tp, comment);
+      sent = trade.Buy(lots, g_symbol, 0, sl, tp, comment);
    else if(side == "SELL")
-      sent = trade.Sell(lots, symbol, 0, sl, tp, comment);
+      sent = trade.Sell(lots, g_symbol, 0, sl, tp, comment);
    else
    {
       WriteAck(cmd_id, "ERR", "bad_side");
@@ -208,9 +266,9 @@ void ProcessCommandLine(string line)
    if(!sent && (sl > 0 || tp > 0) && trade.ResultRetcode() == TRADE_RETCODE_INVALID_STOPS)
    {
       if(side == "BUY")
-         sent = trade.Buy(lots, symbol, 0, 0, 0, comment);
+         sent = trade.Buy(lots, g_symbol, 0, 0, 0, comment);
       else
-         sent = trade.Sell(lots, symbol, 0, 0, 0, comment);
+         sent = trade.Sell(lots, g_symbol, 0, 0, 0, comment);
    }
 
    if(!sent)
@@ -258,15 +316,26 @@ void ReadCommands()
 
 int OnInit()
 {
+   g_symbol = ResolveSymbol(InpSymbol);
+   if(!SymbolSelect(g_symbol, true))
+   {
+      Print("JM Forex MT5 Bridge: cannot select symbol ", g_symbol);
+      return(INIT_FAILED);
+   }
+
    trade.SetExpertMagicNumber(InpMagic);
    EventSetMillisecondTimer(InpPollMs);
    WriteStatus();
    WriteTicks();
    WritePositions();
+   UpdateChartComment();
+
    string block = TradeBlockReason();
-   Print("JM Forex MT5 Bridge ready on ", InpSymbol,
+   Print("JM Forex MT5 Bridge v1.05 ready on ", g_symbol,
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,
+         " | login=", AccountInfoInteger(ACCOUNT_LOGIN),
+         " | common=", UseCommonFolder,
          " | term_trade=", TerminalInfoInteger(TERMINAL_TRADE_ALLOWED),
          " | mql_trade=", MQLInfoInteger(MQL_TRADE_ALLOWED),
          " | acct_expert=", AccountInfoInteger(ACCOUNT_TRADE_EXPERT));
@@ -276,6 +345,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   Comment("");
 }
 
 void OnTimer()
@@ -284,6 +354,7 @@ void OnTimer()
    WriteTicks();
    WriteStatus();
    WritePositions();
+   UpdateChartComment();
 }
 
 void OnTick()

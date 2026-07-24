@@ -11,7 +11,14 @@ Files do not collide:
 - MT5 EA → `jm_status.csv`, `jm_ticks.csv`, …
 - MT4 EA → `jm4_status.csv`, `jm4_ticks.csv`, …
 
-## Setup
+## Setup — MT5 only (Joel)
+1. Download **bagong MT5 bridge**: https://jmtechsolution.cloud/fx/downloads/jm-mt5-bridge.zip  
+2. Extract All → basahin `SETUP_MT5.txt`  
+3. Compile/attach `JM_Forex_Bridge.mq5` on XAUUSD (Algo Trading ON, UseCommonFolder=true)  
+4. Run `RUN_AGENT_MT5.bat` (keep open)  
+5. Chart comment: `trade_ok=YES` · status: https://jmtechsolution.cloud/fx/api/mt/status  
+
+## Setup — dual MT4 + MT5
 1. Download: https://jmtechsolution.cloud/fx/downloads/jm-mt-agent.zip  
 2. Extract All  
 3. **MT5:** compile/attach `JM_Forex_Bridge.mq5` on XAUUSD (Algo Trading ON)  
