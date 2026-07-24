@@ -177,6 +177,7 @@ export default function App() {
           mt_platform: acc.mt_platform || prev?.mt_platform || null,
           mt5_login: acc.mt5_login || prev?.mt5_login || null,
           binding: acc.binding || prev?.binding || null,
+          preferred_strategy: acc.preferred_strategy || prev?.preferred_strategy || null,
         }))
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
@@ -188,7 +189,21 @@ export default function App() {
         setCandles(candleInfo.candles || [])
         setTrades(tradeInfo.trades || [])
         setTradeSummary(tradeInfo.summary || null)
-        clearStrategyDirty(st.active_strategy)
+        // Restore saved strategy (manual select/save) on login/boot.
+        const pref = acc.preferred_strategy
+          ? normalizeStrategy(acc.preferred_strategy)
+          : null
+        if (pref && normalizeStrategy(st.active_strategy) !== pref) {
+          try {
+            await api.setStrategy(pref)
+            clearStrategyDirty(pref)
+            setOrderNote(`Restored saved strategy: ${pref}`)
+          } catch {
+            markStrategyChoice(pref)
+          }
+        } else {
+          clearStrategyDirty(pref || st.active_strategy)
+        }
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
         setTicks(map)
@@ -396,8 +411,20 @@ export default function App() {
   async function applyStrategy() {
     await run(async () => {
       const res = await api.setStrategy(strategy)
+      // Manual select + save preferred strategy on this account
+      try {
+        const saved = await api.setTradeSettings({ preferred_strategy: strategy })
+        if (saved?.account) setAccount((prev) => ({ ...prev, ...saved.account }))
+      } catch {
+        /* save is best-effort if guest/desk */
+      }
+      const btcNote =
+        strategy === 'BTC_EMA_RSI_Scalp'
+          ? ' · BTCUSD paper (Binance) — gold auto OFF'
+          : ''
       setOrderNote(
-        res?.message || `Strategy set to ${strategy} (session auto-follow OFF)`,
+        res?.message ||
+          `Strategy set to ${strategy} (saved · session auto-follow OFF)${btcNote}`,
       )
       return res
     })
@@ -558,8 +585,8 @@ export default function App() {
           />
         </div>
         <p>
-          XAUUSD scalp desk — EMA+RSI momentum or SMC liquidity sweep.
-          Manual Buy/Sell with auto SL/TP anytime.
+          XAUUSD scalp desk + optional BTCUSD (BTC_EMA_RSI_Scalp).
+          Manual select → Apply/Save. Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
           {accountPlatform === 'mt4' || accountPlatform === 'mt5' ? (
@@ -595,18 +622,21 @@ export default function App() {
                   'EMA_RSI_Scalp',
                   'London_Judas_Sweep',
                   'Liquidity_Sweep_SMC',
+                  'BTC_EMA_RSI_Scalp',
                 ]
             ).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
                   ? 'manual_only (no auto signals)'
                   : name === 'EMA_RSI_Scalp'
-                    ? 'EMA_RSI_Scalp (EMA200 + RSI · Asia/NY)'
+                    ? 'EMA_RSI_Scalp (XAU · EMA200 + RSI · Asia/NY)'
                     : name === 'London_Judas_Sweep'
-                      ? 'London_Judas_Sweep (Asia sweep → FVG · London slot)'
+                      ? 'London_Judas_Sweep (XAU · Asia sweep → FVG · London)'
                       : name === 'Liquidity_Sweep_SMC'
-                        ? 'Liquidity_Sweep_SMC (sweep + FVG/OB · overlap)'
-                        : name}
+                        ? 'Liquidity_Sweep_SMC (XAU · sweep + FVG/OB · overlap)'
+                        : name === 'BTC_EMA_RSI_Scalp'
+                          ? 'BTC_EMA_RSI_Scalp (BTCUSD · best EMA pullback · save)'
+                          : name}
               </option>
             ))}
           </select>
@@ -614,9 +644,9 @@ export default function App() {
             className="btn-ghost"
             disabled={busy}
             onClick={() => applyStrategy()}
-            title="Lock selected strategy and turn OFF session auto-follow"
+            title="Lock + save preferred strategy; turn OFF gold session auto-follow"
           >
-            Apply strategy (manual)
+            Apply & save strategy
           </button>
           <button
             className="btn-ghost"

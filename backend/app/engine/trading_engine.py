@@ -5,7 +5,7 @@ import math
 import random
 import time
 from collections import deque
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from app.brokers.market_data import MarketDataSimulator
@@ -64,8 +64,10 @@ class TradingEngine:
             settings.symbols,
             live_noise=settings.paper_live_noise,
         )
+        # Always keep BTCUSD paper tape ready for manual BTC strategy.
+        self.market.ensure_symbol("BTCUSD")
         if settings.paper_sync_live_gold:
-            self.market.set_live_mid_provider(self._live_gold_mid)
+            self.market.set_live_mid_provider(self._live_market_mid)
         self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
         requested = settings.default_strategy or "manual_only"
         if requested not in STRATEGY_REGISTRY:
@@ -238,20 +240,33 @@ class TradingEngine:
         account: PaperAccount,
         *,
         fixed_lots: float | None = ...,  # type: ignore[assignment]
+        preferred_strategy: str | None = ...,  # type: ignore[assignment]
     ) -> dict[str, Any]:
-        """Manual lot size for strategy fills (London Judas, etc.). Keeps history."""
+        """Manual lots + saved preferred strategy (manual select/save)."""
         if fixed_lots is not ...:
             self.accounts.set_fixed_lots(account, fixed_lots)
+        if preferred_strategy is not ...:
+            self.accounts.set_preferred_strategy(account, preferred_strategy)
+        saved = account.preferred_strategy
         return {
             "ok": True,
             "account": self.account_payload(account),
             "fixed_lots": account.fixed_lots,
+            "preferred_strategy": saved,
             "capital": self.capital_preview(account=account),
             "message": (
-                f"Manual lots set to {account.fixed_lots:.2f} — used by London Judas "
-                f"/ strategy fills (trade history unchanged)."
-                if account.fixed_lots is not None
-                else "Manual lots cleared — back to risk-based sizing."
+                (
+                    f"Saved strategy {saved} + lots "
+                    f"{account.fixed_lots:.2f}."
+                    if account.fixed_lots is not None and saved
+                    else f"Saved preferred strategy: {saved}."
+                    if saved
+                    else (
+                        f"Manual lots set to {account.fixed_lots:.2f}."
+                        if account.fixed_lots is not None
+                        else "Trade settings updated."
+                    )
+                )
             ),
         }
 
@@ -517,29 +532,53 @@ class TradingEngine:
         """Paper capital / fills — everyone except a live-bound MT account."""
         return not self.is_mt_bound(account) and not self.is_mt5_client(account)
 
-    def _live_gold_mid(self, symbol: str) -> float | None:
-        """Live gold mid for paper desk sync (display + paper fills near TV)."""
-        if (symbol or "").upper() != "XAUUSD":
-            return None
-        try:
-            from app.market_data.gold_feed import fetch_gold_candles
+    def _live_market_mid(self, symbol: str) -> float | None:
+        """Live mid for paper desk sync — XAUUSD (gold) or BTCUSD (Binance)."""
+        sym = (symbol or "").upper()
+        if sym == "XAUUSD":
+            try:
+                from app.market_data.gold_feed import fetch_gold_candles
 
-            data = fetch_gold_candles(interval="5m", limit=5)
-            price = data.get("price")
-            if price is None and data.get("candles"):
-                price = data["candles"][-1].get("close")
-            return float(price) if price is not None else None
-        except Exception:
+                data = fetch_gold_candles(interval="5m", limit=5)
+                price = data.get("price")
+                if price is None and data.get("candles"):
+                    price = data["candles"][-1].get("close")
+                return float(price) if price is not None else None
+            except Exception:
+                return None
+        if sym in {"BTCUSD", "BTCUSDT"}:
+            try:
+                from app.market_data.crypto_feed import fetch_btc_price
+
+                return fetch_btc_price()
+            except Exception:
+                return None
+        return None
+
+    # Back-compat alias
+    _live_gold_mid = _live_market_mid
+
+    def _strategy_trade_symbol(self) -> str | None:
+        """Symbol this active strategy is allowed to trade (None = any/manual)."""
+        if self.active_name == "manual_only":
             return None
+        if self.active_name.startswith("BTC_") or self.active_name == "BTC_EMA_RSI_Scalp":
+            return "BTCUSD"
+        dedicated = getattr(self.strategy, "symbol", None)
+        if dedicated:
+            return str(dedicated).upper()
+        return "XAUUSD"
 
     def _seed_candle_history(self) -> None:
         """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
-        if self.signal_candles.closed_history(self.settings.symbols[0], 10):
+        primary = self.settings.symbols[0]
+        if self.signal_candles.closed_history(primary, 10):
+            self._seed_btc_candle_history()
             return
-        # Pin paper mid to live gold BEFORE seeding so EMA history sits near TV price.
+        # Pin paper mid to live gold/BTC BEFORE seeding so EMA history sits near TV price.
         if self.settings.paper_sync_live_gold:
             self.market.pull_live_mids(force=True)
-        symbol = self.settings.symbols[0]
+        symbol = primary
         mid = self.market.last_mids().get(symbol, 2350.0)
         now = utcnow()
         # EMA200 needs 205+ M5 closes — seed past that so Asia/EMA can fire after restart.
@@ -588,6 +627,102 @@ class TradingEngine:
                         strat.feed_bar(bar)
         # Keep the live simulator glued to the seeded close (EMA proximity)
         self.market.sync_mid(symbol, last_close)
+        self._seed_btc_candle_history()
+
+    def _seed_btc_candle_history(self) -> None:
+        """Warm BTCUSD M5 history for BTC_EMA_RSI_Scalp (paper + Binance mid)."""
+        symbol = "BTCUSD"
+        self.market.ensure_symbol(symbol)
+        if self.signal_candles.closed_history(symbol, 10):
+            return
+        if self.settings.paper_sync_live_gold:
+            self.market.pull_live_mids(force=True)
+        mid = self.market.last_mids().get(symbol, 95000.0)
+        # Prefer real Binance M5 closes when available.
+        live_bars: list[Candle] = []
+        try:
+            from app.market_data.crypto_feed import fetch_btc_candles
+
+            data = fetch_btc_candles(interval="5m", limit=240)
+            if data.get("price"):
+                mid = float(data["price"])
+            for row in data.get("candles") or []:
+                t = datetime.fromtimestamp(int(row["time"]), tz=timezone.utc)
+                live_bars.append(
+                    Candle(
+                        symbol=symbol,
+                        open=float(row["open"]),
+                        high=float(row["high"]),
+                        low=float(row["low"]),
+                        close=float(row["close"]),
+                        volume=1.0,
+                        period_seconds=self.settings.signal_period_seconds,
+                        open_time=t,
+                        timestamp=t + timedelta(seconds=self.settings.signal_period_seconds - 1),
+                        is_closed=True,
+                    )
+                )
+        except Exception:
+            live_bars = []
+
+        signal_seed = max(220, int(self.settings.candle_history))
+        now = utcnow()
+        if len(live_bars) >= 40:
+            self.signal_candles.seed_history(symbol, live_bars[-signal_seed:])
+            # Lightweight M1 seed from last M5 closes
+            m1: list[Candle] = []
+            for b in live_bars[-min(220, len(live_bars)) :]:
+                m1.append(
+                    Candle(
+                        symbol=symbol,
+                        open=b.open,
+                        high=b.high,
+                        low=b.low,
+                        close=b.close,
+                        volume=b.volume,
+                        period_seconds=self.settings.candle_period_seconds,
+                        open_time=b.open_time,
+                        timestamp=b.timestamp,
+                        is_closed=True,
+                    )
+                )
+            self.candles.seed_history(symbol, m1)
+            self.market.sync_mid(symbol, float(live_bars[-1].close))
+            return
+
+        price = mid
+        bars: list[Candle] = []
+        for i in range(signal_seed):
+            target = mid + math.sin(i / 11.0) * 120.0
+            if i >= signal_seed - 30:
+                target = mid + math.sin(i / 7.0) * 20.0
+            delta = (target - price) * 0.35 + random.uniform(-8.0, 8.0)
+            o = price
+            c = price + delta
+            h = max(o, c) + abs(delta) * 0.35 + 2.0
+            l = min(o, c) - abs(delta) * 0.35 - 2.0
+            open_time = now - timedelta(
+                seconds=self.settings.signal_period_seconds * (signal_seed - i)
+            )
+            bars.append(
+                Candle(
+                    symbol=symbol,
+                    open=round(o, 2),
+                    high=round(h, 2),
+                    low=round(l, 2),
+                    close=round(c, 2),
+                    volume=float(20 + i % 7),
+                    period_seconds=self.settings.signal_period_seconds,
+                    open_time=open_time,
+                    timestamp=open_time
+                    + timedelta(seconds=self.settings.signal_period_seconds - 1),
+                    is_closed=True,
+                )
+            )
+            price = c
+        self.signal_candles.seed_history(symbol, bars)
+        self.candles.seed_history(symbol, bars)
+        self.market.sync_mid(symbol, price)
 
     async def start(self) -> None:
         if self.running:
@@ -1598,6 +1733,10 @@ class TradingEngine:
             raise
 
     async def _next_ticks(self) -> list[Tick]:
+        # Always advance paper tape (includes BTCUSD) so crypto strategy stays warm.
+        paper_ticks = self.market.next_ticks()
+        btc_ticks = [t for t in paper_ticks if t.symbol == "BTCUSD"]
+
         if self.bridges:
             # Prefer MT5 ticks for the desk feed; fall back to MT4.
             for plat in ("mt5", "mt4"):
@@ -1605,19 +1744,16 @@ class TradingEngine:
                 if bridge and bridge.is_online():
                     tick = bridge.read_tick()
                     if tick:
-                        return [tick]
-            # Dual remote configured but agents offline — keep paper/simulator
-            # tape moving so strategies still evaluate (esp. paper demos).
-            return self.market.next_ticks()
+                        return [tick] + btc_ticks
+            return paper_ticks
         if self.using_mt() and self.mt:
             tick = self.mt.read_tick()
             if tick:
-                return [tick]
-            # Single remote/file bridge offline — same fallback.
+                return [tick] + btc_ticks
             if self.settings.mt_remote_bridge:
-                return self.market.next_ticks()
-            return []
-        return self.market.next_ticks()
+                return paper_ticks
+            return btc_ticks
+        return paper_ticks
 
     async def _tick_once(self) -> None:
         async with self._lock:
@@ -1627,8 +1763,8 @@ class TradingEngine:
                 self.last_tick_at = tick.timestamp
                 self._recent_ticks[tick.symbol] = tick
 
-                # Hourly session auto-transfer — kusang lilipat every UTC hour.
-                if self.auto_enabled:
+                # Hourly gold session auto-transfer — only on XAUUSD ticks.
+                if self.auto_enabled and tick.symbol.upper() == "XAUUSD":
                     await self._run_hourly_auto_transfer(tick)
 
                 # Paper books keep marking even when the MT bridge feeds ticks.
@@ -1665,6 +1801,10 @@ class TradingEngine:
                 uses_m3_entry = (
                     getattr(self.strategy, "entry_period_seconds", None) == 180
                 )
+                trade_sym = self._strategy_trade_symbol()
+                # Gold strategy must not evaluate on BTC ticks (and vice versa).
+                if trade_sym and tick.symbol.upper() != trade_sym.upper():
+                    continue
 
                 if closed_signal is not None:
                     # Feed M5 closes into strategies — structure / standard entries.
@@ -1767,6 +1907,9 @@ class TradingEngine:
                 for a in targets
                 if self.uses_paper_book(a) or self.is_mt_bound(a)
             ]
+        # BTCUSD is paper-desk only for now (MT bridges stay on XAUUSD).
+        if (signal.symbol or "").upper() in {"BTCUSD", "BTCUSDT"}:
+            targets = [a for a in targets if self.uses_paper_book(a)]
         if not targets:
             return
         for acct in targets:

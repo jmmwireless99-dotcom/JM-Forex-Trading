@@ -22,6 +22,7 @@ class PaperBroker:
     # Contract size per 1.0 lot
     CONTRACT_SIZES = {
         "XAUUSD": 100,  # 100 oz — $1 move ≈ $100 / lot
+        "BTCUSD": 1,  # 1 BTC per lot — $1 move ≈ $1 / lot (use 0.01 lots)
     }
     DEFAULT_CONTRACT_SIZE = 100_000  # FX standard lot
 

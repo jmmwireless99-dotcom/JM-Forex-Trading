@@ -73,6 +73,8 @@ class PaperAccount:
     avatar: str | None = None  # data-URL logo
     # When set, strategy auto-fills (incl. London Judas) use this lot size exactly.
     fixed_lots: float | None = None
+    # Manual select/save — restored on login (e.g. BTC_EMA_RSI_Scalp).
+    preferred_strategy: str | None = None
     first_name: str = ""
     last_name: str = ""
     email: str = ""
@@ -89,6 +91,7 @@ class PaperAccount:
             "has_password": bool(self.password_hash),
             "follow_auto": self.follow_auto,
             "fixed_lots": self.fixed_lots,
+            "preferred_strategy": self.preferred_strategy,
             "first_name": self.first_name or "",
             "last_name": self.last_name or "",
             "email": self.email or "",
@@ -118,6 +121,7 @@ class PaperAccount:
             "open_positions": snap.open_positions,
             "trades_logged": self.journal.summary().get("total", 0),
             "fixed_lots": self.fixed_lots,
+            "preferred_strategy": self.preferred_strategy,
         }
 
     def snapshot_payload(self) -> dict:
@@ -388,6 +392,23 @@ class PaperAccountRegistry:
             self._save()
         return account
 
+    def set_preferred_strategy(
+        self, account: PaperAccount, strategy: str | None
+    ) -> PaperAccount:
+        """Persist manual strategy choice for this account (select + save)."""
+        with self._lock:
+            if strategy is None or not str(strategy).strip():
+                account.preferred_strategy = None
+            else:
+                name = str(strategy).strip()
+                from app.strategies import STRATEGY_REGISTRY
+
+                if name not in STRATEGY_REGISTRY:
+                    raise ValueError(f"Unknown strategy: {name}")
+                account.preferred_strategy = name
+            self._save()
+        return account
+
     def list_public(self) -> list[dict]:
         with self._lock:
             return [a.public_info() for a in self._accounts.values() if not a.is_desk]
@@ -429,6 +450,7 @@ class PaperAccountRegistry:
                         "password_hash": acc.password_hash,
                         "avatar": acc.avatar,
                         "fixed_lots": acc.fixed_lots,
+                        "preferred_strategy": acc.preferred_strategy,
                         "follow_auto": acc.follow_auto,
                         "is_desk": False,
                         "first_name": acc.first_name or "",
@@ -567,6 +589,11 @@ class PaperAccountRegistry:
                     fixed_lots=(
                         float(row["fixed_lots"])
                         if row.get("fixed_lots") is not None
+                        else None
+                    ),
+                    preferred_strategy=(
+                        str(row["preferred_strategy"]).strip()
+                        if row.get("preferred_strategy")
                         else None
                     ),
                     first_name=str(row.get("first_name") or ""),

@@ -92,6 +92,32 @@ SEED_STRATEGIES: list[dict] = [
             "signal_tf": "M5",
         },
     },
+    {
+        "name": "BTC_EMA_RSI_Scalp",
+        "timeframe": "M5",
+        "description": (
+            "Best BTCUSD: EMA200 trend + EMA20/50 pullback + RSI + engulf/pin · "
+            "24/7 crypto · manual select/save (not gold auto-router)"
+        ),
+        "parameters": {
+            "symbol": "BTCUSD",
+            "ema_trend": 200,
+            "ema_fast": 20,
+            "ema_slow": 50,
+            "rsi_period": 14,
+            "rsi_buy_zone": [38, 52],
+            "rsi_sell_zone": [48, 62],
+            "patterns": ["engulfing", "pin_bar"],
+            "min_bars_between_signals": 8,
+            "reward_r": 2.2,
+            "min_stop_atr": 1.6,
+            "min_tp_atr": 3.0,
+            "max_stop_atr": 3.2,
+            "allow_soft_confirm": False,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
 ]
 
 

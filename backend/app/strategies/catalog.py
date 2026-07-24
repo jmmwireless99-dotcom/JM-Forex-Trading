@@ -151,6 +151,39 @@ def strategy_catalog() -> list[dict]:
             "order_type": "MARKET",
             "reward_r": 2.5,
         },
+        {
+            "id": "BTC_EMA_RSI_Scalp",
+            "name": "BTC EMA + RSI Scalp",
+            "sessions": ["BTCUSD 24/7 (manual select — not gold auto-router)"],
+            "session_slots": [],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "Best BTCUSD desk strategy: EMA200 trend + EMA20/50 pullback + RSI + "
+                "engulf/pin · structure SL · ≈2.2R. Paper fills (Binance mid)."
+            ),
+            "entry_rules": [
+                "Symbol BTCUSD only — gold strategies stay on XAUUSD.",
+                "Uptrend: price > EMA200, EMA20 ≥ EMA50, clear separation.",
+                "Pullback into EMA20/50 + RSI 38–52 BUY / 48–62 SELL.",
+                "Confirm with engulfing or pin bar (no soft body).",
+                "Manual Apply + Save preferred strategy on your account.",
+            ],
+            "entry_flow": [
+                "Select BTC_EMA_RSI_Scalp → Apply strategy (manual) → Save.",
+                "Engine locks this strategy (auto gold transfer OFF).",
+                "Paper BTCUSD ticks sync from Binance BTCUSDT.",
+            ],
+            "parameters": seed_params("BTC_EMA_RSI_Scalp"),
+            "safety": [
+                "Not on gold session auto-router — must select manually.",
+                "Paper-only fills for now (MT bridges remain XAUUSD).",
+                "Needs 205+ M5 BTC bars (seeded from Binance on boot).",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 2.2,
+        },
         _MANUAL_CARD,
     ]
 
@@ -161,5 +194,6 @@ def entry_rules_short() -> list[str]:
         "London_Judas_Sweep — Asia 00-06 · $0.80–$3.00 sweep · FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 · clear EMA20/50 · RSI · engulf/pin · SL@EMA50 · 2.5R",
         "Liquidity_Sweep_SMC — sweep+MSS+FVG/OB · SL beyond sweep · unlimited quality",
+        "BTC_EMA_RSI_Scalp — BTCUSD EMA200 pullback · RSI · engulf/pin · manual save",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

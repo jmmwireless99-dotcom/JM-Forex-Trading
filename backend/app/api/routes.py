@@ -63,9 +63,10 @@ class PasswordChangeBody(BaseModel):
 
 
 class TradeSettingsBody(BaseModel):
-    """Manual trade settings — lot size for strategy fills (e.g. London Judas)."""
+    """Manual trade settings — lots + preferred strategy (select/save)."""
 
     fixed_lots: float | None = Field(default=None, ge=0.01, le=10)
+    preferred_strategy: str | None = Field(default=None, max_length=64)
 
 
 class StartRequest(BaseModel):
@@ -378,6 +379,17 @@ async def gold_candles(interval: str = "5m", limit: int = 300) -> dict:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
+@router.get("/market/btc-candles")
+async def btc_candles(interval: str = "5m", limit: int = 300) -> dict:
+    """Live BTCUSD OHLC (Binance BTCUSDT). Display + paper BTC strategy sync."""
+    from app.market_data.crypto_feed import fetch_btc_candles
+
+    try:
+        return fetch_btc_candles(interval=interval, limit=min(max(limit, 50), 1000))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @router.get("/desk")
 async def desk() -> dict:
     """Clean slate desk board — session/news/risk only; no auto strategies."""
@@ -618,12 +630,14 @@ async def account_trade_settings(
     body: TradeSettingsBody,
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
-    """Set manual lot size for auto strategy fills (London Judas included)."""
+    """Set manual lots and/or preferred strategy (manual select + save)."""
     engine = get_engine()
     try:
         kwargs: dict = {}
         if "fixed_lots" in body.model_fields_set:
             kwargs["fixed_lots"] = body.fixed_lots
+        if "preferred_strategy" in body.model_fields_set:
+            kwargs["preferred_strategy"] = body.preferred_strategy
         return engine.set_client_trade_settings(account, **kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

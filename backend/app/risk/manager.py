@@ -19,6 +19,7 @@ class RiskManager:
     PIP_SIZES = {
         "USDJPY": 0.01,
         "XAUUSD": 0.1,
+        "BTCUSD": 1.0,  # $1 price step as 1 pip on CFD desk
     }
 
     def __init__(self, settings: Settings) -> None:
