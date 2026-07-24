@@ -1,0 +1,9 @@
+{
+  "api_base": "https://jmtechsolution.cloud/fx/api",
+  "bridge_token": "gTXmD7O-194jS9gveB1I5c9qjmNdqdUv",
+  "platform": "mt4",
+  "file_prefix": "jm4_",
+  "files_dir": "",
+  "symbol": "BTCUSD",
+  "poll_ms": 500
+}
