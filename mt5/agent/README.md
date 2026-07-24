@@ -18,6 +18,13 @@ Files do not collide:
 4. Run `RUN_AGENT_MT5.bat` (keep open)  
 5. Chart comment: `trade_ok=YES` · status: https://jmtechsolution.cloud/fx/api/mt/status  
 
+## Setup — MT4 only (Nonoy)
+1. Download **bagong MT4 bridge**: https://jmtechsolution.cloud/fx/downloads/jm-mt4-bridge.zip  
+2. Extract All → basahin `SETUP_MT4.txt`  
+3. Compile/attach `JM_Forex_Bridge.mq4` on XAUUSD (AutoTrading ON / GREEN, UseCommonFolder=true)  
+4. Run `RUN_AGENT_MT4.bat` (keep open)  
+5. Chart comment: `trade_ok=YES` · `platforms.mt4.online=true`
+
 ## Setup — dual MT4 + MT5
 1. Download: https://jmtechsolution.cloud/fx/downloads/jm-mt-agent.zip  
 2. Extract All  

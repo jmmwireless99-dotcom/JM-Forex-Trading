@@ -202,12 +202,27 @@ async def status() -> dict:
 
 
 @router.get("/mt/status")
+async def mt5_status() -> dict:
+    return await _mt_status_payload(prefer="mt5")
+
+
 @router.get("/mt4/status")
-async def mt_status() -> dict:
+async def mt4_status() -> dict:
+    return await _mt_status_payload(prefer="mt4")
+
+
+async def _mt_status_payload(*, prefer: str = "mt5") -> dict:
     settings = get_settings()
     engine = get_engine()
-    bridge, platform = resolve_mt_bridge(settings)
+    prefer = "mt4" if prefer == "mt4" else "mt5"
     info = engine.connection_info()
+    bridge = None
+    platform = prefer
+    if engine.bridges and prefer in engine.bridges:
+        bridge = engine.bridges.get(prefer)
+        platform = prefer
+    if bridge is None:
+        bridge, platform = resolve_mt_bridge(settings)
     if bridge is None:
         hint = (
             "Enable JM_MT_REMOTE_BRIDGE=true + run Windows agent, "
@@ -217,7 +232,7 @@ async def mt_status() -> dict:
             "configured": False,
             "online": False,
             "execution_mode": settings.execution_mode,
-            "platform": platform,
+            "platform": prefer,
             "bridge_dir": "",
             "remote_bridge": bool(settings.mt_remote_bridge),
             "hint": hint,
@@ -226,12 +241,12 @@ async def mt_status() -> dict:
     online = bridge.is_online()
     tick = bridge.read_tick() if online else None
     snap = bridge.snapshot() if online else None
-    remote_info = remote_snapshot_info() if settings.mt_remote_bridge else {}
+    remote_info = remote_snapshot_info(prefer) if settings.mt_remote_bridge else {}
     return {
         "configured": True,
         "online": online,
         "execution_mode": settings.execution_mode,
-        "platform": info.get("mt_platform") or platform,
+        "platform": prefer,
         "bridge_dir": str(bridge.bridge_dir),
         "symbol": bridge.symbol,
         "tick": tick.model_dump(mode="json") if tick else None,
@@ -244,22 +259,39 @@ async def mt_status() -> dict:
 
 
 @router.post("/mt/ping")
+async def mt5_ping() -> dict:
+    """Ping Windows MT5 EA via remote agent. Must not block the event loop."""
+    return await _mt_ping_platform("mt5")
+
+
 @router.post("/mt4/ping")
-async def mt_ping(platform: str | None = None) -> dict:
-    """Ping Windows EA via remote agent. Must not block the event loop (ack push)."""
+async def mt4_ping() -> dict:
+    """Ping Windows MT4 EA via remote agent. Must not block the event loop."""
+    return await _mt_ping_platform("mt4")
+
+
+async def _mt_ping_platform(plat: str) -> dict:
     import asyncio
 
     settings = get_settings()
     engine = get_engine()
-    plat = (platform or "").strip().lower()
+    plat = "mt4" if plat == "mt4" else "mt5"
     bridge = None
-    if plat in {"mt4", "mt5"} and engine.bridges:
+    if engine.bridges:
         bridge = engine.bridges.get(plat)
     if bridge is None:
         bridge, detected = resolve_mt_bridge(settings)
-        plat = detected if detected in {"mt4", "mt5"} else "mt5"
+        if detected != plat:
+            bridge = None
+    if bridge is None and settings.mt_remote_bridge:
+        from app.brokers.remote_mt_bridge import RemoteMetaTraderBridge
+
+        bridge = RemoteMetaTraderBridge(
+            symbol=(settings.symbols[0] if settings.symbols else "XAUUSD"),
+            platform=plat,
+        )
     if bridge is None:
-        raise HTTPException(status_code=400, detail="MT bridge not configured")
+        raise HTTPException(status_code=400, detail=f"{plat.upper()} bridge not configured")
     ack = await asyncio.to_thread(bridge.ping, 25.0)
     return {
         "ok": ack.ok,

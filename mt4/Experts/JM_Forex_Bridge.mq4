@@ -1,29 +1,54 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq4                                              |
-//| File bridge between JM Forex Python AI and MetaTrader 4          |
-//|                                                                  |
-//| Install: copy to <MT4>/MQL4/Experts/ then Compile in MetaEditor  |
-//| Attach to XAUUSD chart, enable AutoTrading                       |
-//| Shared files live in: Terminal -> File -> Open Data Folder       |
-//|   -> MQL4/Files/  (or Common/Files when UseCommonFolder=true)    |
+//| JM Forex ↔ cloud desk (MT4) — v1.05                              |
+//| Files: jm4_*.csv in Terminal Common\\Files                       |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.03"
-#property description "JM Forex AI bridge — executes Python signals on MT4 (remote agent OK)"
+#property copyright "JM Forex / JM TECH SOLUTION"
+#property link      "https://jmtechsolution.cloud/fx/"
+#property version   "1.05"
+#property description "JM Forex MT4 bridge — Common Files CSV + AutoTrading"
 
-input string InpSymbol           = "XAUUSD";
+input string InpSymbol           = "XAUUSD";   // Chart/symbol (auto-resolves broker suffix)
 input int    InpMagic            = 260719;
 input int    InpSlippagePoints   = 30;
 input int    InpPollMs           = 500;
-input bool   UseCommonFolder     = true;   // true = Terminal Common\\Files
+input bool   UseCommonFolder     = true;       // MUST stay true for Windows agent
 input string CommandFile         = "jm4_command.csv";
 input string StatusFile          = "jm4_status.csv";
 input string PositionsFile       = "jm4_positions.csv";
 input string TickFile            = "jm4_ticks.csv";
 input string AckFile             = "jm4_ack.csv";
 
+string   g_symbol = "";
 datetime g_last_cmd_seen = 0;
 string   g_last_cmd_id   = "";
+
+string ResolveSymbol(string wanted)
+{
+   string w = wanted;
+   StringTrimLeft(w);
+   StringTrimRight(w);
+   if(StringLen(w) == 0)
+      w = "XAUUSD";
+   if(MarketInfo(w, MODE_BID) > 0 || SymbolSelect(w, true))
+      return w;
+
+   string suffixes[8] = {".", "m", ".m", "pro", ".pro", "c", ".c", "s"};
+   for(int i = 0; i < 8; i++)
+   {
+      string cand = "XAUUSD" + suffixes[i];
+      if(MarketInfo(cand, MODE_BID) > 0 || SymbolSelect(cand, true))
+         return cand;
+   }
+
+   string chart_sym = Symbol();
+   string upper = chart_sym;
+   StringToUpper(upper);
+   if(StringFind(upper, "XAU") >= 0 || StringFind(upper, "GOLD") >= 0)
+      return chart_sym;
+   return w;
+}
 
 string TradeBlockReason()
 {
@@ -34,9 +59,24 @@ string TradeBlockReason()
       return "AutoTrading_toolbar_OFF_click_AutoTrading_green";
    if(!IsTradeAllowed())
       return "trade_not_allowed_check_EA_Allow_live_trading_and_account";
-   if(!IsTradeAllowed(InpSymbol, TimeCurrent()))
+   if(!IsTradeAllowed(g_symbol, TimeCurrent()))
       return "symbol_trade_disabled_or_market_closed";
    return "";
+}
+
+void UpdateChartComment()
+{
+   string block = TradeBlockReason();
+   string ok = (StringLen(block) == 0) ? "YES" : "NO";
+   Comment(
+      "JM Forex MT4 Bridge v1.05\n",
+      "Symbol: ", g_symbol, "\n",
+      "Login: ", IntegerToString(AccountNumber()), "\n",
+      "trade_ok=", ok, "\n",
+      (StringLen(block) > 0 ? ("block=" + block + "\n") : ""),
+      "Common Files: ", (UseCommonFolder ? "YES" : "NO — set true!"), "\n",
+      "Keep RUN_AGENT_MT4.bat open"
+   );
 }
 
 int FileOpenBridge(string name, int mode)
@@ -92,13 +132,13 @@ void WriteStatus()
 
 void WriteTicks()
 {
-   double bid = MarketInfo(InpSymbol, MODE_BID);
-   double ask = MarketInfo(InpSymbol, MODE_ASK);
+   double bid = MarketInfo(g_symbol, MODE_BID);
+   double ask = MarketInfo(g_symbol, MODE_ASK);
    int h = FileOpenBridge(TickFile, FILE_WRITE);
    if(h == INVALID_HANDLE) return;
    string line = StringFormat(
       "%s,%.5f,%.5f,%s\n",
-      InpSymbol, bid, ask,
+      g_symbol, bid, ask,
       TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS)
    );
    FileWriteString(h, line);
@@ -114,7 +154,7 @@ void WritePositions()
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
       if(OrderMagicNumber() != InpMagic) continue;
-      if(OrderSymbol() != InpSymbol) continue;
+      if(OrderSymbol() != g_symbol) continue;
       if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
       string line = StringFormat(
          "%d,%s,%s,%.2f,%.5f,%.5f,%.5f,%.2f\n",
@@ -139,11 +179,11 @@ bool CloseAllMagic()
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
       if(OrderMagicNumber() != InpMagic) continue;
-      if(OrderSymbol() != InpSymbol) continue;
+      if(OrderSymbol() != g_symbol) continue;
       int type = OrderType();
       if(type != OP_BUY && type != OP_SELL) continue;
-      double price = (type == OP_BUY) ? MarketInfo(InpSymbol, MODE_BID)
-                                      : MarketInfo(InpSymbol, MODE_ASK);
+      double price = (type == OP_BUY) ? MarketInfo(g_symbol, MODE_BID)
+                                      : MarketInfo(g_symbol, MODE_ASK);
       if(!OrderClose(OrderTicket(), OrderLots(), price, InpSlippagePoints, clrOrange))
          ok = false;
    }
@@ -194,7 +234,16 @@ void ProcessCommandLine(string line)
    double tp      = (n > 6 && StringLen(parts[6]) > 0) ? StringToDouble(parts[6]) : 0;
    string comment = (n > 7) ? parts[7] : "JM";
 
-   if(symbol != InpSymbol)
+   string sym_u = symbol;
+   StringToUpper(sym_u);
+   string g_u = g_symbol;
+   StringToUpper(g_u);
+   bool gold_match =
+      (symbol == g_symbol) ||
+      (StringFind(sym_u, "XAU") >= 0 && StringFind(g_u, "XAU") >= 0) ||
+      (StringFind(sym_u, "GOLD") >= 0 && StringFind(g_u, "GOLD") >= 0);
+
+   if(!gold_match)
    {
       WriteAck(cmd_id, "ERR", "symbol_mismatch");
       return;
@@ -217,11 +266,10 @@ void ProcessCommandLine(string line)
    // One position policy — close opposite/same before new open
    CloseAllMagic();
 
-   double price = (cmd == OP_BUY) ? MarketInfo(symbol, MODE_ASK)
-                                  : MarketInfo(symbol, MODE_BID);
-   // First try with SL/TP; if invalid stops, retry market then leave stops unset.
+   double price = (cmd == OP_BUY) ? MarketInfo(g_symbol, MODE_ASK)
+                                  : MarketInfo(g_symbol, MODE_BID);
    int ticket = OrderSend(
-      symbol, cmd, lots, price, InpSlippagePoints,
+      g_symbol, cmd, lots, price, InpSlippagePoints,
       sl, tp, comment, InpMagic, 0,
       (cmd == OP_BUY) ? clrDodgerBlue : clrTomato
    );
@@ -229,7 +277,7 @@ void ProcessCommandLine(string line)
    {
       ResetLastError();
       ticket = OrderSend(
-         symbol, cmd, lots, price, InpSlippagePoints,
+         g_symbol, cmd, lots, price, InpSlippagePoints,
          0, 0, comment, InpMagic, 0,
          (cmd == OP_BUY) ? clrDodgerBlue : clrTomato
       );
@@ -278,15 +326,21 @@ void ReadCommands()
 
 int OnInit()
 {
+   g_symbol = ResolveSymbol(InpSymbol);
+   if(MarketInfo(g_symbol, MODE_BID) <= 0)
+      SymbolSelect(g_symbol, true);
+
    EventSetMillisecondTimer(InpPollMs);
    WriteStatus();
    WriteTicks();
    WritePositions();
+   UpdateChartComment();
    string block = TradeBlockReason();
-   Print("JM Forex Bridge ready on ", InpSymbol,
+   Print("JM Forex MT4 Bridge v1.05 ready on ", g_symbol,
          " | folder=", UseCommonFolder ? "COMMON" : "TERMINAL",
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,
+         " | login=", AccountNumber(),
          " | expert=", IsExpertEnabled(),
          " | tradeAllowed=", IsTradeAllowed());
    return INIT_SUCCEEDED;
@@ -295,6 +349,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   Comment("");
 }
 
 void OnTimer()
@@ -303,6 +358,7 @@ void OnTimer()
    WriteTicks();
    WriteStatus();
    WritePositions();
+   UpdateChartComment();
 }
 
 void OnTick()
