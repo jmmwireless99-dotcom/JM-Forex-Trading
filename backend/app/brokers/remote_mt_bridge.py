@@ -29,6 +29,39 @@ from app.models.domain import (
 )
 
 
+def _humanize_mt_error(detail: str | None) -> str:
+    """Map bare MT4/MT5 codes / EA tags to actionable reject text."""
+    raw = (detail or "").strip()
+    if not raw:
+        return "MT remote bridge error"
+    key = raw.lower()
+    mapping = {
+        "4752": "Algo Trading OFF — i-ON ang Algo Trading sa MT5 toolbar + EA Allow Algo Trading",
+        "4109": "AutoTrading OFF — i-ON ang AutoTrading sa MT4 toolbar + EA Allow live trading",
+        "10027": "Algo Trading OFF — enable MT5 Algo Trading (toolbar green)",
+        "algotrading_off_enable_toolbar_and_ea_allow_algo_trading": (
+            "Algo Trading OFF — i-ON ang Algo Trading sa MT5 + EA Allow Algo Trading"
+        ),
+        "autotrading_off_enable_toolbar_and_ea_allow_live_trading": (
+            "AutoTrading OFF — i-ON ang AutoTrading sa MT4 + EA Allow live trading"
+        ),
+        "invalid_stops": "Invalid SL/TP — stops too close to price (broker stop level)",
+        "not_enough_money": "Not enough free margin for this lot size",
+        "off_quotes": "No quotes / market closed — check symbol XAUUSD",
+        "symbol_or_lots": "Symbol mismatch or invalid lots — EA InpSymbol must be XAUUSD",
+        "symbol_mismatch": "Symbol mismatch — EA chart symbol must match XAUUSD",
+    }
+    if key in mapping:
+        return mapping[key]
+    if key.startswith("error_") and key[6:].isdigit():
+        return mapping.get(key[6:], raw) if key[6:] in mapping else raw
+    if key.startswith("retcode_") and key[8:] in mapping:
+        return mapping[key[8:]]
+    if raw.isdigit() and raw in mapping:
+        return mapping[raw]
+    return raw
+
+
 class RemoteMetaTraderBridge:
     """Same behavior as MT4FileBridge, but state comes from the Windows agent."""
 
@@ -140,7 +173,7 @@ class RemoteMetaTraderBridge:
             order.comment = f"{self.platform}:{ack.detail}"
         else:
             order.status = OrderStatus.REJECTED
-            order.reject_reason = ack.detail or "MT remote bridge error"
+            order.reject_reason = _humanize_mt_error(ack.detail) or "MT remote bridge error"
         return order
 
     def close_all(self, timeout: float = 25.0) -> BridgeAck:

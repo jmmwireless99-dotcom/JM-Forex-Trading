@@ -3,7 +3,7 @@
 //| Minimal compile-safe bridge for JM Forex                         |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex"
-#property version   "1.02"
+#property version   "1.03"
 #property description "JM Forex MT5 bridge"
 #property strict
 
@@ -177,7 +177,22 @@ void ProcessCommandLine(string line)
    }
 
    if(!sent)
-      WriteAck(cmd_id, "ERR", IntegerToString(GetLastError()));
+   {
+      int err = GetLastError();
+      uint rc = trade.ResultRetcode();
+      string why = "trade_fail";
+      if(err == 4752 || rc == 10027)
+         why = "AlgoTrading_OFF_enable_toolbar_and_EA_Allow_Algo_Trading";
+      else if(rc == 10016)
+         why = "invalid_stops";
+      else if(rc == 10019 || err == 134)
+         why = "not_enough_money";
+      else if(rc != 0)
+         why = "retcode_" + IntegerToString((int)rc);
+      else
+         why = "error_" + IntegerToString(err);
+      WriteAck(cmd_id, "ERR", why);
+   }
    else
       WriteAck(cmd_id, "OK", IntegerToString((int)trade.ResultOrder()));
 }

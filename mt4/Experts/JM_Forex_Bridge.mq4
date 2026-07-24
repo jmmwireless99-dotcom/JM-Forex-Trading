@@ -8,7 +8,7 @@
 //|   -> MQL4/Files/  (or Common/Files when UseCommonFolder=true)    |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.01"
+#property version   "1.02"
 #property description "JM Forex AI bridge — executes Python signals on MT4 (remote agent OK)"
 
 input string InpSymbol           = "XAUUSD";
@@ -201,7 +201,21 @@ void ProcessCommandLine(string line)
    );
 
    if(ticket < 0)
-      WriteAck(cmd_id, "ERR", IntegerToString(GetLastError()));
+   {
+      int err = GetLastError();
+      string why = "trade_fail";
+      if(err == 4109)
+         why = "AutoTrading_OFF_enable_toolbar_and_EA_Allow_live_trading";
+      else if(err == 130)
+         why = "invalid_stops";
+      else if(err == 134)
+         why = "not_enough_money";
+      else if(err == 136)
+         why = "off_quotes";
+      else
+         why = "error_" + IntegerToString(err);
+      WriteAck(cmd_id, "ERR", why);
+   }
    else
       WriteAck(cmd_id, "OK", IntegerToString(ticket));
 }
