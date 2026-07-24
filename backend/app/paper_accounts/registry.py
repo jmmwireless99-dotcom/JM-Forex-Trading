@@ -320,8 +320,9 @@ class PaperAccountRegistry:
         *,
         label: str | None = None,
         avatar: str | None = ...,  # type: ignore[assignment]
+        mt_platform: str | None = ...,  # type: ignore[assignment]
     ) -> PaperAccount:
-        """Update label/logo only — balances and trade journal are untouched."""
+        """Update label/logo/live platform — balances and trade journal are untouched."""
         with self._lock:
             if label is not None:
                 cleaned = label.strip()
@@ -332,6 +333,17 @@ class PaperAccountRegistry:
                     account.avatar = None
                 else:
                     account.avatar = normalize_avatar(str(avatar)) or None
+            if mt_platform is not ...:
+                # Only MT-linked accounts can set platform (Joel=mt5, Nonoy=mt4, etc.).
+                if not (account.mt5_login or "").strip():
+                    raise ValueError("Link an MT login before choosing MT4/MT5 platform")
+                raw = str(mt_platform or "").strip().lower()
+                if raw in {"mt4", "4", "mql4"}:
+                    account.mt_platform = "mt4"
+                elif raw in {"mt5", "5", "mql5"}:
+                    account.mt_platform = "mt5"
+                else:
+                    raise ValueError("mt_platform must be mt4 or mt5")
             self._save()
         return account
 

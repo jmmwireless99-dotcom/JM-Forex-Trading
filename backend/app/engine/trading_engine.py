@@ -195,12 +195,22 @@ class TradingEngine:
         *,
         label: str | None = None,
         avatar: str | None = ...,  # type: ignore[assignment]
+        mt_platform: str | None = ...,  # type: ignore[assignment]
     ) -> dict[str, Any]:
-        self.accounts.update_profile(account, label=label, avatar=avatar)
+        self.accounts.update_profile(
+            account, label=label, avatar=avatar, mt_platform=mt_platform
+        )
+        plat = account.mt_platform or None
+        msg = "Profile updated — trade history unchanged."
+        if plat in {"mt4", "mt5"}:
+            msg = (
+                f"Profile updated — this account is live {plat.upper()}. "
+                f"Use RUN_AGENT_{plat.upper()}.bat + matching EA."
+            )
         return {
             "ok": True,
             "account": self.account_payload(account),
-            "message": "Profile updated — trade history unchanged.",
+            "message": msg,
         }
 
     def change_client_password(

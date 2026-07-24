@@ -76,3 +76,29 @@ def test_joel_mt5_and_mt4_account_both_bound(tmp_path):
     assert engine.account_payload(mt4)["binding"] == "live_mt4"
     assert isinstance(engine.bridges["mt5"], RemoteMetaTraderBridge)
     assert engine.bridges["mt4"].is_online()
+
+
+def test_profile_can_switch_account_to_mt4(tmp_path):
+    _reset()
+    settings = Settings(
+        tick_interval_seconds=0.05,
+        auto_strategy=False,
+        execution_mode="mt5",
+        mt_remote_bridge=True,
+        mt_bridge_token="test-token",
+        paper_sync_live_gold=False,
+    )
+    engine = TradingEngine(settings)
+    engine.accounts = PaperAccountRegistry(settings, store_path=tmp_path / "acc.json")
+    nonoy = engine.accounts.create(
+        first_name="Nonoy",
+        last_name="Madera",
+        email="nonoy.dual@gmail.com",
+        mt5_login="893283499",
+        mt_platform="mt5",  # wrong at register — fix via profile
+        password="secret12",
+    )
+    assert nonoy.mt_platform == "mt5"
+    out = engine.update_client_profile(nonoy, mt_platform="mt4")
+    assert nonoy.mt_platform == "mt4"
+    assert out["account"]["mt_platform"] == "mt4"

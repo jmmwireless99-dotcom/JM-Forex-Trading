@@ -173,6 +173,9 @@ export default function App() {
           label: acc.account_label || prev?.label,
           avatar: acc.avatar || prev?.avatar || '',
           has_password: Boolean(acc.has_password),
+          mt_platform: acc.mt_platform || prev?.mt_platform || null,
+          mt5_login: acc.mt5_login || prev?.mt5_login || null,
+          binding: acc.binding || prev?.binding || null,
         }))
         setPositions(pos.open || [])
         setSignals(sig.signals || [])
@@ -299,6 +302,9 @@ export default function App() {
       label: session.label,
       avatar: session.avatar || '',
       has_password: Boolean(session.account?.has_password ?? true),
+      mt_platform: session.account?.mt_platform || null,
+      mt5_login: session.account?.mt5_login || null,
+      binding: session.account?.binding || null,
     })
     accountIdRef.current = session.id
     setAuthReady(true)
@@ -478,6 +484,11 @@ export default function App() {
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
+  const accountPlatform = String(account?.mt_platform || accountMeta?.mt_platform || '').toLowerCase()
+  const accountBinding = account?.binding || accountMeta?.binding || ''
+  const myPlatOnline = accountPlatform === 'mt4' || accountPlatform === 'mt5'
+    ? Boolean(mt?.platforms?.[accountPlatform]?.online)
+    : mtOnline
   const gold = ticks.XAUUSD
   const maxOpen = Number(desk?.risk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
@@ -513,8 +524,20 @@ export default function App() {
             JM <span>Forex</span>
           </h1>
           <div className="mode-chip">
-            {status?.running ? 'Desk live' : 'Paused'} · {mode.toUpperCase()}
-            {mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''}
+            {status?.running ? 'Desk live' : 'Paused'}
+            {accountPlatform === 'mt4' || accountPlatform === 'mt5'
+              ? ` · Your ${accountPlatform.toUpperCase()}${
+                  accountBinding === `live_${accountPlatform}`
+                    ? myPlatOnline
+                      ? ' · bound'
+                      : ' · waiting agent'
+                    : accountBinding === 'waiting_mt'
+                      ? ' · waiting agent'
+                      : ''
+                }`
+              : ` · ${mode.toUpperCase()}${
+                  mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''
+                }`}
           </div>
           <AccountProfile
             meta={accountMeta}
@@ -528,18 +551,27 @@ export default function App() {
           Manual Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
-          <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
-            <option value="paper">paper</option>
-            <option value="mt4">mt4</option>
-            <option value="mt5">mt5</option>
-          </select>
-          <button
-            className="btn-ghost"
-            disabled={busy}
-            onClick={() => run(() => api.setExecutionMode(mode))}
-          >
-            Apply mode
-          </button>
+          {accountPlatform === 'mt4' || accountPlatform === 'mt5' ? (
+            <span className="meta" title="Per-account live platform — change in Profile">
+              Account: <strong>{accountPlatform.toUpperCase()}</strong>
+              {accountBinding ? ` (${accountBinding})` : ''} — Profile → Live platform
+            </span>
+          ) : (
+            <>
+              <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
+                <option value="paper">paper</option>
+                <option value="mt4">mt4</option>
+                <option value="mt5">mt5</option>
+              </select>
+              <button
+                className="btn-ghost"
+                disabled={busy}
+                onClick={() => run(() => api.setExecutionMode(mode))}
+              >
+                Apply mode
+              </button>
+            </>
+          )}
           <select
             value={strategy}
             onChange={(e) => markStrategyChoice(e.target.value)}

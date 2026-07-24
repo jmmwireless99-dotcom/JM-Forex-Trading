@@ -48,10 +48,11 @@ class LoginAccountBody(BaseModel):
 
 
 class ProfileUpdateBody(BaseModel):
-    """Update display name / logo only — does not touch trades or capital."""
+    """Update display name / logo / live platform — does not touch trades or capital."""
 
     label: str | None = Field(default=None, max_length=64)
     avatar: str | None = None
+    mt_platform: str | None = Field(default=None, max_length=8)  # mt4 | mt5
 
 
 class PasswordChangeBody(BaseModel):
@@ -519,7 +520,7 @@ async def update_account_profile(
     body: ProfileUpdateBody,
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
-    """Update label / logo. Trade log and balances are never cleared."""
+    """Update label / logo / MT4|MT5 platform. Trade log and balances are never cleared."""
     engine = get_engine()
     try:
         # Distinguish "omit avatar" vs "clear avatar" via model fields_set.
@@ -528,6 +529,8 @@ async def update_account_profile(
             kwargs["label"] = body.label
         if "avatar" in body.model_fields_set:
             kwargs["avatar"] = body.avatar
+        if "mt_platform" in body.model_fields_set:
+            kwargs["mt_platform"] = body.mt_platform
         return engine.update_client_profile(account, **kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

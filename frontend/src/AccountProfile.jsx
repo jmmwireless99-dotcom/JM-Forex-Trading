@@ -10,17 +10,20 @@ export default function AccountProfile({ meta, onUpdated, onLogout, onSwitchAcco
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState(meta?.label || '')
   const [avatar, setAvatar] = useState(meta?.avatar || '')
+  const [mtPlatform, setMtPlatform] = useState(meta?.mt_platform === 'mt4' ? 'mt4' : 'mt5')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const panelRef = useRef(null)
+  const isMtLinked = Boolean(meta?.mt5_login || (meta?.code && /^\d{5,16}$/.test(String(meta.code))))
 
   useEffect(() => {
     setLabel(meta?.label || '')
     setAvatar(meta?.avatar || '')
-  }, [meta?.label, meta?.avatar, meta?.code])
+    setMtPlatform(meta?.mt_platform === 'mt4' ? 'mt4' : 'mt5')
+  }, [meta?.label, meta?.avatar, meta?.code, meta?.mt_platform])
 
   useEffect(() => {
     if (!open) return undefined
@@ -43,6 +46,7 @@ export default function AccountProfile({ meta, onUpdated, onLogout, onSwitchAcco
   function syncFromMeta() {
     setLabel(meta?.label || '')
     setAvatar(meta?.avatar || '')
+    setMtPlatform(meta?.mt_platform === 'mt4' ? 'mt4' : 'mt5')
     setCurrentPassword('')
     setNewPassword('')
     setNote('')
@@ -55,16 +59,21 @@ export default function AccountProfile({ meta, onUpdated, onLogout, onSwitchAcco
     setError('')
     setNote('')
     try {
-      const res = await api.updateProfile({
+      const body = {
         label: label.trim() || meta?.label,
         avatar: avatar || '',
-      })
+      }
+      if (isMtLinked) body.mt_platform = mtPlatform === 'mt4' ? 'mt4' : 'mt5'
+      const res = await api.updateProfile(body)
       onUpdated?.({
         id: res.account.account_id,
         code: res.account.account_code,
         label: res.account.account_label,
         avatar: res.account.avatar || '',
         has_password: res.account.has_password,
+        mt_platform: res.account.mt_platform || body.mt_platform || null,
+        mt5_login: res.account.mt5_login || meta?.mt5_login || null,
+        binding: res.account.binding,
       })
       setNote(res.message || 'Profile saved — history kept.')
     } catch (err) {
@@ -198,6 +207,25 @@ export default function AccountProfile({ meta, onUpdated, onLogout, onSwitchAcco
               Display name
               <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={64} />
             </label>
+            {isMtLinked ? (
+              <label>
+                Live platform (MT4 / MT5)
+                <select
+                  value={mtPlatform}
+                  onChange={(e) => setMtPlatform(e.target.value)}
+                  required
+                >
+                  <option value="mt4">MT4 — Nonoy / separate MT4 account</option>
+                  <option value="mt5">MT5 — Joel Madera only</option>
+                </select>
+              </label>
+            ) : null}
+            {isMtLinked ? (
+              <p className="meta">
+                Ito ang platform ng <strong>account mo</strong> — hindi ang desk dropdown sa
+                baba. NONOY = MT4 · JOEL = MT5.
+              </p>
+            ) : null}
             <button type="submit" className="btn-primary" disabled={busy}>
               Save profile
             </button>
