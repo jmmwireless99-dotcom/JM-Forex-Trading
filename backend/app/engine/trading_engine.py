@@ -1175,10 +1175,11 @@ class TradingEngine:
         return "paper"
 
     async def _reconcile_mt_journal(self, tick: Tick) -> None:
-        """Close JM FX journal rows when the live MT position disappears.
+        """Sync JM FX trade log to the live MT terminal (open + closed).
 
-        EA one-position policy / SL-TP / CloseAll closes on the terminal without
-        calling the paper broker, so bound accounts need this sync each tick.
+        Uses EA history CSV for broker PnL/exit when available. Falls back to
+        last live unrealized profit (not tick.mid guess). Also corrects older
+        estimated `mt_closed_synced` rows once history arrives.
         """
         for acct in self.accounts.clients():
             if not self.is_mt_bound(acct):
@@ -1186,43 +1187,143 @@ class TradingEngine:
             bridge = self.bridge_for_account(acct)
             if bridge is None or not bridge.is_online():
                 continue
+            platform = self.account_mt_platform(acct) or "mt5"
             live = {p.id: p for p in bridge.open_positions()}
+            history = {}
+            if hasattr(bridge, "closed_history"):
+                try:
+                    history = bridge.closed_history() or {}
+                except Exception:  # noqa: BLE001
+                    history = {}
             changed = False
-            for row in acct.journal.list(500, include_rejected=False):
-                if row.status != TradeStatus.OPEN or not row.ticket:
+
+            # Keep open rows aligned with broker lots / entry / floating PnL.
+            for live_pos in live.values():
+                row = acct.journal.get_by_ticket(live_pos.id)
+                if row is None or row.status != TradeStatus.OPEN:
                     continue
-                live_pos = live.get(str(row.ticket))
-                if live_pos is not None:
-                    row.unrealized_pnl = live_pos.unrealized_pnl
-                    row.stop_loss = live_pos.stop_loss
-                    row.take_profit = live_pos.take_profit
-                    if not row.strategy and live_pos.strategy:
-                        row.strategy = live_pos.strategy
+                before = (
+                    row.unrealized_pnl,
+                    row.lots,
+                    row.entry,
+                    row.stop_loss,
+                    row.take_profit,
+                    row.mode,
+                )
+                row.unrealized_pnl = live_pos.unrealized_pnl
+                row.lots = live_pos.lots
+                row.entry = live_pos.entry_price
+                row.stop_loss = live_pos.stop_loss
+                row.take_profit = live_pos.take_profit
+                row.mode = platform
+                if not row.strategy and live_pos.strategy:
+                    row.strategy = live_pos.strategy
+                after = (
+                    row.unrealized_pnl,
+                    row.lots,
+                    row.entry,
+                    row.stop_loss,
+                    row.take_profit,
+                    row.mode,
+                )
+                if before != after:
+                    changed = True
+
+            # Close opens that vanished on the terminal.
+            for row in list(acct.journal.open_rows()):
+                ticket = str(row.ticket)
+                if ticket in live:
                     continue
-                # Missing on terminal — mark closed (PnL unknown unless we estimate).
+                hist = history.get(ticket)
                 entry = float(row.entry or 0.0)
-                exit_px = float(tick.mid)
                 lots = float(row.lots or 0.01)
-                # XAUUSD: $1 per 0.01 lot per $1 move ≈ lots * 100 * delta
-                direction = 1.0 if row.side.value == "BUY" else -1.0
-                est = round(direction * (exit_px - entry) * lots * 100.0, 2) if entry else 0.0
+                if hist:
+                    exit_px = float(hist["close_price"])
+                    pnl = float(hist["profit"])
+                    lots = float(hist.get("lots") or lots)
+                    entry = float(hist.get("open_price") or entry)
+                    reason = "mt_broker_close"
+                elif row.unrealized_pnl is not None and abs(float(row.unrealized_pnl)) > 1e-9:
+                    # Last floating profit from EA — far better than tick.mid guess.
+                    exit_px = None
+                    if row.stop_loss and abs(float(tick.mid) - float(row.stop_loss)) <= 1.5:
+                        exit_px = float(row.stop_loss)
+                        reason = "mt_closed_sl"
+                    elif row.take_profit and abs(float(tick.mid) - float(row.take_profit)) <= 1.5:
+                        exit_px = float(row.take_profit)
+                        reason = "mt_closed_tp"
+                    else:
+                        exit_px = float(tick.mid)
+                        reason = "mt_closed_synced"
+                    pnl = round(float(row.unrealized_pnl), 2)
+                else:
+                    exit_px = float(tick.mid)
+                    direction = 1.0 if row.side.value == "BUY" else -1.0
+                    pnl = (
+                        round(direction * (exit_px - entry) * lots * 100.0, 2)
+                        if entry
+                        else 0.0
+                    )
+                    reason = "mt_closed_estimated"
+
                 closed = Position(
-                    id=str(row.ticket),
+                    id=ticket,
                     symbol=row.symbol or tick.symbol,
                     side=row.side,
                     lots=lots,
-                    entry_price=entry or exit_px,
+                    entry_price=entry or (exit_px or float(tick.mid)),
                     stop_loss=row.stop_loss,
                     take_profit=row.take_profit,
                     strategy=row.strategy,
                     status=PositionStatus.CLOSED,
                     close_price=exit_px,
-                    realized_pnl=est,
-                    close_reason="mt_closed_synced",
+                    realized_pnl=pnl,
+                    close_reason=reason,
                     closed_at=tick.timestamp,
                 )
                 await self._journal_close(closed, acct)
+                # Force correct book label (was often stuck as "paper").
+                patched = acct.journal.get_by_ticket(ticket)
+                if patched is not None:
+                    patched.mode = platform
                 changed = True
+
+            # Correct previously estimated closes when broker history arrives.
+            for ticket, hist in history.items():
+                row = acct.journal.get_by_ticket(ticket)
+                if row is None or row.status != TradeStatus.CLOSED:
+                    continue
+                broker_pnl = round(float(hist["profit"]), 2)
+                broker_exit = float(hist["close_price"])
+                broker_lots = float(hist.get("lots") or row.lots or 0.01)
+                broker_entry = float(hist.get("open_price") or row.entry or 0.0)
+                needs = (
+                    row.close_reason
+                    in {
+                        "mt_closed_synced",
+                        "mt_closed_estimated",
+                        "mt_closed_sl",
+                        "mt_closed_tp",
+                    }
+                    or abs(float(row.realized_pnl or 0.0) - broker_pnl) > 0.05
+                    or (row.exit is None)
+                    or abs(float(row.exit or 0.0) - broker_exit) > 0.05
+                    or row.mode != platform
+                )
+                if not needs:
+                    continue
+                acct.journal.apply_broker_close(
+                    ticket,
+                    exit_price=broker_exit,
+                    realized_pnl=broker_pnl,
+                    lots=broker_lots,
+                    entry=broker_entry or None,
+                    close_reason="mt_broker_close",
+                    mode=platform,
+                    closed_at=row.closed_at or tick.timestamp,
+                )
+                changed = True
+
             if changed:
                 self.accounts.save()
                 await self._emit("account", self.account_payload(acct))

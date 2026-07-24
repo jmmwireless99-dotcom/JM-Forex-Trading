@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq5                                              |
-//| JM Forex ↔ cloud desk (MT5) — v1.06                              |
+//| JM Forex ↔ cloud desk (MT5) — v1.07                              |
 //+------------------------------------------------------------------+
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
-        #property version   "1.06"
+#property version   "1.07"
 #property description "JM Forex MT5 bridge — Common Files CSV + Algo Trading"
 #property strict
 
@@ -73,7 +73,7 @@ void UpdateChartComment()
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
    Comment(
-      "JM Forex MT5 Bridge v1.06\n",
+      "JM Forex MT5 Bridge v1.07\n",
       "Symbol: ", g_symbol, "\n",
       "Login: ", IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)), "\n",
       "trade_ok=", ok, "\n",
@@ -164,6 +164,87 @@ void WritePositions()
          DoubleToString(PositionGetDouble(POSITION_TP), 5) + "," +
          DoubleToString(PositionGetDouble(POSITION_PROFIT), 2) + "\n";
       FileWriteString(h, line);
+   }
+   FileClose(h);
+}
+
+void WriteHistory()
+{
+   // Closed position exits for JM magic — broker PnL for JM FX trade log.
+   int h = OpenBridge("jm_history.csv", FILE_WRITE | FILE_REWRITE);
+   if(h == INVALID_HANDLE)
+      return;
+   FileWriteString(h, "ticket,symbol,side,lots,open_price,close_price,sl,tp,profit,close_time\n");
+
+   datetime to = TimeCurrent();
+   datetime from = to - 14 * 24 * 60 * 60;
+   if(!HistorySelect(from, to))
+   {
+      FileClose(h);
+      return;
+   }
+
+   int written = 0;
+   int total = HistoryDealsTotal();
+   for(int i = total - 1; i >= 0 && written < 50; i--)
+   {
+      ulong deal = HistoryDealGetTicket(i);
+      if(deal == 0)
+         continue;
+      if((long)HistoryDealGetInteger(deal, DEAL_MAGIC) != InpMagic)
+         continue;
+      if(HistoryDealGetString(deal, DEAL_SYMBOL) != g_symbol)
+         continue;
+      long entry = HistoryDealGetInteger(deal, DEAL_ENTRY);
+      if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
+         continue;
+      long dtype = HistoryDealGetInteger(deal, DEAL_TYPE);
+      if(dtype != DEAL_TYPE_BUY && dtype != DEAL_TYPE_SELL)
+         continue;
+
+      // Position ticket used by open journal / positions CSV.
+      ulong pos_id = (ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+      if(pos_id == 0)
+         pos_id = deal;
+
+      // Exit deal side is opposite of position side.
+      string side = (dtype == DEAL_TYPE_BUY) ? "SELL" : "BUY";
+      double lots = HistoryDealGetDouble(deal, DEAL_VOLUME);
+      double close_px = HistoryDealGetDouble(deal, DEAL_PRICE);
+      double pnl = HistoryDealGetDouble(deal, DEAL_PROFIT)
+         + HistoryDealGetDouble(deal, DEAL_SWAP)
+         + HistoryDealGetDouble(deal, DEAL_COMMISSION);
+      datetime ctm = (datetime)HistoryDealGetInteger(deal, DEAL_TIME);
+
+      double open_px = close_px;
+      double sl = 0.0;
+      double tp = 0.0;
+      // Find matching IN deal for open price.
+      for(int j = i; j >= 0; j--)
+      {
+         ulong d2 = HistoryDealGetTicket(j);
+         if(d2 == 0) continue;
+         if((ulong)HistoryDealGetInteger(d2, DEAL_POSITION_ID) != pos_id) continue;
+         long e2 = HistoryDealGetInteger(d2, DEAL_ENTRY);
+         if(e2 != DEAL_ENTRY_IN) continue;
+         open_px = HistoryDealGetDouble(d2, DEAL_PRICE);
+         long t2 = HistoryDealGetInteger(d2, DEAL_TYPE);
+         side = (t2 == DEAL_TYPE_BUY) ? "BUY" : "SELL";
+         break;
+      }
+
+      string line = IntegerToString((long)pos_id) + "," +
+         g_symbol + "," +
+         side + "," +
+         DoubleToString(lots, 2) + "," +
+         DoubleToString(open_px, 5) + "," +
+         DoubleToString(close_px, 5) + "," +
+         DoubleToString(sl, 5) + "," +
+         DoubleToString(tp, 5) + "," +
+         DoubleToString(pnl, 2) + "," +
+         TimeToString(ctm, TIME_DATE|TIME_SECONDS) + "\n";
+      FileWriteString(h, line);
+      written++;
    }
    FileClose(h);
 }
@@ -380,10 +461,11 @@ int OnInit()
    WriteStatus();
    WriteTicks();
    WritePositions();
+   WriteHistory();
    UpdateChartComment();
 
    string block = TradeBlockReason();
-   Print("JM Forex MT5 Bridge v1.06 ready on ", g_symbol,
+   Print("JM Forex MT5 Bridge v1.07 ready on ", g_symbol,
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,
          " | login=", AccountInfoInteger(ACCOUNT_LOGIN),
@@ -406,6 +488,7 @@ void OnTimer()
    WriteTicks();
    WriteStatus();
    WritePositions();
+   WriteHistory();
    UpdateChartComment();
 }
 

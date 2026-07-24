@@ -122,6 +122,7 @@ def main() -> int:
     status_f = files_dir / f"{prefix}status.csv"
     ticks_f = files_dir / f"{prefix}ticks.csv"
     positions_f = files_dir / f"{prefix}positions.csv"
+    history_f = files_dir / f"{prefix}history.csv"
     command_f = files_dir / f"{prefix}command.csv"
     ack_f = files_dir / f"{prefix}ack.csv"
 
@@ -148,6 +149,7 @@ def main() -> int:
             status_csv = read_text(status_f)
             ticks_csv = read_text(ticks_f)
             positions_csv = read_text(positions_f)
+            history_csv = read_text(history_f)
             ack_csv = read_text(ack_f)
 
             clear_id = None
@@ -164,6 +166,7 @@ def main() -> int:
                     "status_csv": status_csv,
                     "ticks_csv": ticks_csv,
                     "positions_csv": positions_csv,
+                    "history_csv": history_csv,
                     "ack_csv": ack_csv,
                     "symbol": symbol,
                     "agent_host": host,

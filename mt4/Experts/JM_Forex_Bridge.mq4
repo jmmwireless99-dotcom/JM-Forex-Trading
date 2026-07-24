@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq4                                              |
-//| JM Forex ↔ cloud desk (MT4) — v1.06                              |
+//| JM Forex ↔ cloud desk (MT4) — v1.07                              |
 //| Files: jm4_*.csv in Terminal Common\\Files                       |
 //+------------------------------------------------------------------+
 #property strict
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
-#property version   "1.06"
+#property version   "1.07"
 #property description "JM Forex MT4 bridge — Common Files CSV + AutoTrading"
 
 input string InpSymbol           = "XAUUSD";   // Chart/symbol (auto-resolves broker suffix)
@@ -17,6 +17,7 @@ input bool   UseCommonFolder     = true;       // MUST stay true for Windows age
 input string CommandFile         = "jm4_command.csv";
 input string StatusFile          = "jm4_status.csv";
 input string PositionsFile       = "jm4_positions.csv";
+input string HistoryFile         = "jm4_history.csv";
 input string TickFile            = "jm4_ticks.csv";
 input string AckFile             = "jm4_ack.csv";
 
@@ -69,7 +70,7 @@ void UpdateChartComment()
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
    Comment(
-      "JM Forex MT4 Bridge v1.06\n",
+      "JM Forex MT4 Bridge v1.07\n",
       "Symbol: ", g_symbol, "\n",
       "Login: ", IntegerToString(AccountNumber()), "\n",
       "trade_ok=", ok, "\n",
@@ -168,6 +169,40 @@ void WritePositions()
          OrderProfit() + OrderSwap() + OrderCommission()
       );
       FileWriteString(h, line);
+   }
+   FileClose(h);
+}
+
+void WriteHistory()
+{
+   // Recent closed JM magic deals — cloud uses broker PnL (not tick guess).
+   int h = FileOpenBridge(HistoryFile, FILE_WRITE);
+   if(h == INVALID_HANDLE) return;
+   FileWriteString(h, "ticket,symbol,side,lots,open_price,close_price,sl,tp,profit,close_time\n");
+   int written = 0;
+   for(int i = OrdersHistoryTotal() - 1; i >= 0 && written < 50; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
+      if(OrderMagicNumber() != InpMagic) continue;
+      if(OrderSymbol() != g_symbol) continue;
+      if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+      if(OrderCloseTime() <= 0) continue;
+      double pnl = OrderProfit() + OrderSwap() + OrderCommission();
+      string line = StringFormat(
+         "%d,%s,%s,%.2f,%.5f,%.5f,%.5f,%.5f,%.2f,%s\n",
+         OrderTicket(),
+         OrderSymbol(),
+         SideToCmd(OrderType()),
+         OrderLots(),
+         OrderOpenPrice(),
+         OrderClosePrice(),
+         OrderStopLoss(),
+         OrderTakeProfit(),
+         pnl,
+         TimeToString(OrderCloseTime(), TIME_DATE|TIME_SECONDS)
+      );
+      FileWriteString(h, line);
+      written++;
    }
    FileClose(h);
 }
@@ -371,9 +406,10 @@ int OnInit()
    WriteStatus();
    WriteTicks();
    WritePositions();
+   WriteHistory();
    UpdateChartComment();
    string block = TradeBlockReason();
-   Print("JM Forex MT4 Bridge v1.06 ready on ", g_symbol,
+   Print("JM Forex MT4 Bridge v1.07 ready on ", g_symbol,
          " | folder=", UseCommonFolder ? "COMMON" : "TERMINAL",
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,
@@ -395,6 +431,7 @@ void OnTimer()
    WriteTicks();
    WriteStatus();
    WritePositions();
+   WriteHistory();
    UpdateChartComment();
 }
 

@@ -1,4 +1,4 @@
-JM Forex — BAGONG MT4 BRIDGE (v1.05)
+JM Forex — BAGONG MT4 BRIDGE (v1.07)
 ====================================
 
 Para kay NONOY MADERA (MT4 login 893283499)
@@ -24,7 +24,9 @@ SETUP (Windows PC na may MT4)
    - Common tab: ✅ Allow live trading
    - Toolbar: AutoTrading = GREEN / ON  (pula = OFF — i-click hanggang berde)
    - Chart comment dapat: trade_ok=YES
-   - Properties title: JM_Forex_Bridge 1.05 (hindi luma)
+   - Properties title: JM_Forex_Bridge 1.07 (hindi luma)
+   - Chart comment: JM Forex MT4 Bridge v1.07
+   - Dapat may jm4_history.csv sa Common\\Files (broker close PnL → JM FX log)
 
 3) Agent
    - Double-click RUN_AGENT_MT4.bat

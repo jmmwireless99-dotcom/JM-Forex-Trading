@@ -106,6 +106,7 @@ class RemoteMtPushBody(BaseModel):
     status_csv: str = ""
     ticks_csv: str = ""
     positions_csv: str = ""
+    history_csv: str = ""
     ack_csv: str = ""
     symbol: str = "XAUUSD"
     agent_host: str = ""
@@ -322,6 +323,7 @@ async def mt_remote_push(
         status_csv=body.status_csv,
         ticks_csv=body.ticks_csv,
         positions_csv=body.positions_csv,
+        history_csv=body.history_csv,
         ack_csv=body.ack_csv,
         symbol=body.symbol,
         agent_host=body.agent_host,

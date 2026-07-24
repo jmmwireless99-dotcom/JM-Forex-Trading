@@ -12,6 +12,7 @@ class RemoteMtState:
     status_csv: str = ""
     ticks_csv: str = ""
     positions_csv: str = ""
+    history_csv: str = ""
     ack_csv: str = ""
     last_push_at: float = 0.0
     agent_host: str = ""
@@ -48,6 +49,7 @@ def remote_push(
     status_csv: str = "",
     ticks_csv: str = "",
     positions_csv: str = "",
+    history_csv: str = "",
     ack_csv: str = "",
     symbol: str = "",
     agent_host: str = "",
@@ -75,6 +77,8 @@ def remote_push(
             st.ticks_csv = ticks_csv
         if positions_csv:
             st.positions_csv = positions_csv
+        if history_csv:
+            st.history_csv = history_csv
         if ack_csv:
             st.ack_csv = ack_csv
         if symbol:
@@ -97,6 +101,7 @@ def remote_push(
             "command": pending,
             "mt_login": st.mt_login or None,
             "age_seconds": 0.0,
+            "has_history": bool(st.history_csv.strip()),
         }
 
 

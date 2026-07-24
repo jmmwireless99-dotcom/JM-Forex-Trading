@@ -16,6 +16,7 @@ def _reset_store():
             st.status_csv = ""
             st.ticks_csv = ""
             st.positions_csv = ""
+            st.history_csv = ""
             st.ack_csv = ""
             st.last_push_at = 0.0
             st.mt_login = ""

@@ -97,6 +97,47 @@ class TradeJournal:
                 row.unrealized_pnl = position.unrealized_pnl
                 row.stop_loss = position.stop_loss
                 row.take_profit = position.take_profit
+                row.lots = position.lots
+                row.entry = position.entry_price
+
+    def get_by_ticket(self, ticket: str) -> TradeLog | None:
+        """Mutable journal row (not a copy) for live MT sync."""
+        return self._by_ticket.get(str(ticket))
+
+    def open_rows(self) -> list[TradeLog]:
+        """Mutable open rows for MT reconcile (not deep copies)."""
+        return [r for r in self._trades if r.status == TradeStatus.OPEN and r.ticket]
+
+    def apply_broker_close(
+        self,
+        ticket: str,
+        *,
+        exit_price: float | None,
+        realized_pnl: float,
+        lots: float | None = None,
+        entry: float | None = None,
+        close_reason: str = "mt_broker_close",
+        mode: str | None = None,
+        closed_at=None,
+    ) -> TradeLog | None:
+        """Close or correct a row using broker history (actual PnL / exit)."""
+        row = self._by_ticket.get(str(ticket))
+        if row is None:
+            return None
+        if lots is not None and lots > 0:
+            row.lots = float(lots)
+        if entry is not None and entry > 0:
+            row.entry = float(entry)
+        if exit_price is not None and exit_price > 0:
+            row.exit = float(exit_price)
+        row.realized_pnl = float(realized_pnl)
+        row.unrealized_pnl = 0.0
+        row.close_reason = close_reason
+        row.status = TradeStatus.CLOSED
+        row.closed_at = closed_at or utcnow()
+        if mode:
+            row.mode = mode
+        return row
 
     def record_close(self, position: Position) -> TradeLog | None:
         row = self._by_ticket.get(position.id)
@@ -123,6 +164,10 @@ class TradeJournal:
         row.closed_at = position.closed_at or utcnow()
         row.stop_loss = position.stop_loss
         row.take_profit = position.take_profit
+        if position.lots:
+            row.lots = position.lots
+        if position.entry_price:
+            row.entry = position.entry_price
         return row
 
     def list(self, limit: int = 100, *, include_rejected: bool = True) -> list[TradeLog]:

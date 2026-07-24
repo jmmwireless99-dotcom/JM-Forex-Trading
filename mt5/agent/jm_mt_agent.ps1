@@ -107,6 +107,7 @@ if ([string]::IsNullOrWhiteSpace($prefix)) {
 $statusF = Join-Path $filesDir ($prefix + "status.csv")
 $ticksF = Join-Path $filesDir ($prefix + "ticks.csv")
 $positionsF = Join-Path $filesDir ($prefix + "positions.csv")
+$historyF = Join-Path $filesDir ($prefix + "history.csv")
 $commandF = Join-Path $filesDir ($prefix + "command.csv")
 $ackF = Join-Path $filesDir ($prefix + "ack.csv")
 $hostName = $env:COMPUTERNAME
@@ -135,6 +136,7 @@ while ($true) {
     $statusCsv = Read-JmFile $statusF
     $ticksCsv = Read-JmFile $ticksF
     $positionsCsv = Read-JmFile $positionsF
+    $historyCsv = Read-JmFile $historyF
     $ackCsv = Read-JmFile $ackF
 
     $clearId = $null
@@ -154,6 +156,7 @@ while ($true) {
       status_csv = $statusCsv
       ticks_csv = $ticksCsv
       positions_csv = $positionsCsv
+      history_csv = $historyCsv
       ack_csv = $ackCsv
       symbol = $symbol
       agent_host = $hostName
@@ -201,6 +204,7 @@ while ($true) {
             status_csv = (Read-JmFile $statusF)
             ticks_csv = (Read-JmFile $ticksF)
             positions_csv = (Read-JmFile $positionsF)
+            history_csv = (Read-JmFile $historyF)
             ack_csv = $ackCsv2
             symbol = $symbol
             agent_host = $hostName

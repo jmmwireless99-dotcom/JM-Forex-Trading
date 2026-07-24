@@ -166,6 +166,39 @@ class RemoteMetaTraderBridge:
                 continue
         return positions
 
+    def closed_history(self) -> dict[str, dict]:
+        """Parse EA history CSV → ticket → broker close facts.
+
+        CSV header:
+        ticket,symbol,side,lots,open_price,close_price,sl,tp,profit,close_time
+        """
+        st = get_remote_mt_state(self.platform)
+        with st.lock:
+            raw = st.history_csv.strip()
+        if not raw:
+            return {}
+        out: dict[str, dict] = {}
+        for row in csv.DictReader(io.StringIO(raw)):
+            try:
+                ticket = str(row.get("ticket") or "").strip()
+                if not ticket:
+                    continue
+                out[ticket] = {
+                    "ticket": ticket,
+                    "symbol": row.get("symbol") or self.symbol,
+                    "side": row.get("side"),
+                    "lots": float(row["lots"]),
+                    "open_price": float(row["open_price"]),
+                    "close_price": float(row["close_price"]),
+                    "sl": float(row["sl"]) if row.get("sl") else 0.0,
+                    "tp": float(row["tp"]) if row.get("tp") else 0.0,
+                    "profit": float(row["profit"]),
+                    "close_time": (row.get("close_time") or "").strip(),
+                }
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
     def place_order(self, request: OrderRequest, timeout: float = 25.0) -> Order:
         order = Order(
             symbol=request.symbol,
