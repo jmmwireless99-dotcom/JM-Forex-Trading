@@ -39,8 +39,6 @@ function pnlClass(n) {
 function normalizeStrategy(label) {
   if (!label) return 'manual_only'
   if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
-  // London Judas is session-auto only — hide from manual picker.
-  if (label === 'London_Judas_Sweep') return 'manual_only'
   return label
 }
 
@@ -589,18 +587,23 @@ export default function App() {
           >
             {(strategies.length
               ? strategies
-              : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC']
-            )
-              .filter((name) => name !== 'London_Judas_Sweep')
-              .map((name) => (
+              : [
+                  'manual_only',
+                  'EMA_RSI_Scalp',
+                  'London_Judas_Sweep',
+                  'Liquidity_Sweep_SMC',
+                ]
+            ).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
                   ? 'manual_only (no auto signals)'
                   : name === 'EMA_RSI_Scalp'
-                    ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
-                    : name === 'Liquidity_Sweep_SMC'
-                      ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                      : name}
+                    ? 'EMA_RSI_Scalp (EMA200 + RSI · Asia/NY)'
+                    : name === 'London_Judas_Sweep'
+                      ? 'London_Judas_Sweep (Asia sweep → FVG · London slot)'
+                      : name === 'Liquidity_Sweep_SMC'
+                        ? 'Liquidity_Sweep_SMC (sweep + FVG/OB · overlap)'
+                        : name}
               </option>
             ))}
           </select>
