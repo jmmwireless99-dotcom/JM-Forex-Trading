@@ -45,15 +45,18 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–5PM)',
-    london: 'London',
-    london_ny_overlap: 'London / NY overlap',
-    new_york: 'New York',
+    asia: 'Asia (UTC 00–07 / PH 8AM–3PM)',
+    london: 'London (UTC 07–11 / PH 3–7PM)',
+    london_wind_down: 'London wind-down (UTC 11–12 / PH 7–8PM)',
+    london_close: 'London kill (UTC 12–13 / PH 8–9PM)',
+    london_ny_overlap: 'London/NY overlap (UTC 13–16 / PH 9PM–12AM)',
+    new_york: 'New York (UTC 16–20 / PH 12–4AM)',
     friday_late: 'Friday late',
     weekend: 'Weekend',
-    off_hours: 'Off-hours',
+    off_hours: 'Off-hours (UTC 20–24 / PH 4–8AM)',
     outside_asia_desk: 'Outside Asia desk',
     asia_off: 'Asia / off',
+    hourly: 'Hourly auto-transfer',
   }
   return map[key] || (raw ? String(raw).replace(/_/g, ' ') : '—')
 }
@@ -688,7 +691,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Auto schedule: Asia/NY EMA · London Judas · Overlap SMC
+              Auto schedule (hourly): Asia/NY EMA · London Judas · Overlap SMC
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
@@ -1284,12 +1287,15 @@ export default function App() {
           </div>
 
           <div className="entry-rules entry-rules-compact">
-            <strong>Session schedule (Mon–Fri UTC) · auto-transfer every hour</strong>
+            <strong>
+              Session schedule (Mon–Fri) · strategy auto-transfer every UTC hour
+            </strong>
             <ul className="auto-schedule">
               {(autoInfo?.schedule || []).map((row) => (
                 <li key={`${row.slot}-${row.utc}`}>
                   <span>
-                    {row.days} {row.utc}
+                    {row.days} UTC {row.utc}
+                    {row.ph ? ` · PH ${row.ph}` : ''}
                   </span>
                   <span>
                     <strong>{row.slot}</strong> — {row.strategies}

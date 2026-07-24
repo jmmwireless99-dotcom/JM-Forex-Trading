@@ -67,6 +67,20 @@ def test_next_session_after_asia_is_london():
     assert nxt["strategy"] == "London_Judas_Sweep"
 
 
+def test_schedule_table_has_ph_and_hourly_row():
+    from app.strategies.session import schedule_table
+
+    rows = schedule_table()
+    assert any(r["session"] == "asia" and r["strategies"] == "EMA_RSI_Scalp" for r in rows)
+    assert any(r["session"] == "london" and "07:00" in r["utc"] for r in rows)
+    assert any(r["session"] == "london_ny_overlap" and r["strategies"] == "Liquidity_Sweep_SMC" for r in rows)
+    asia = next(r for r in rows if r["session"] == "asia")
+    assert asia["ph"] == "08:00-14:59"
+    hourly = rows[-1]
+    assert hourly["slot"] == "Auto transfer"
+    assert "hour" in hourly["utc"].lower()
+
+
 def test_weekend_avoided():
     ts = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)  # Sunday
     assert classify_session(ts).tier == SessionTier.AVOID

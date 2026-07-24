@@ -721,9 +721,8 @@ class TradingEngine:
         rec = self.recommended_now()
         interval = max(60, int(self.settings.auto_transfer_interval_seconds))
         last_at = self._last_hourly_transfer_at or None
-        next_in = None
-        if last_at:
-            next_in = max(0, round(interval - (time.time() - last_at)))
+        # Countdown to the next UTC hour boundary (true time-session beat).
+        next_in = self._seconds_to_next_utc_hour()
         return {
             "enabled": self.auto_enabled,
             "session_follow": self.auto_enabled,
@@ -745,20 +744,23 @@ class TradingEngine:
         utc = ts.astimezone(timezone.utc)
         return utc.strftime("%Y-%m-%dT%H")
 
+    def _seconds_to_next_utc_hour(self, ts=None) -> int:
+        """Seconds until the next UTC :00 — when time-session auto-transfer runs."""
+        when = ts or self.last_tick_at or utcnow()
+        utc = when.astimezone(timezone.utc)
+        return max(0, 3600 - (utc.minute * 60 + utc.second))
+
     def _hourly_transfer_due(self, ts) -> bool:
-        """True on UTC hour roll, or when the transfer interval has elapsed."""
+        """True on each new UTC hour — update time session + strategy map."""
         if not self.auto_enabled:
             return False
         hour_key = self._utc_hour_key(ts)
-        if hour_key != self._last_transfer_hour_key:
+        if self._last_transfer_hour_key is None:
             return True
-        interval = max(60, int(self.settings.auto_transfer_interval_seconds))
-        if self._last_hourly_transfer_at <= 0:
-            return True
-        return (time.time() - self._last_hourly_transfer_at) >= interval
+        return hour_key != self._last_transfer_hour_key
 
     async def _run_hourly_auto_transfer(self, tick: Tick) -> bool:
-        """Hourly session-follow: kusang lilipat to the strategy for this UTC hour."""
+        """Every UTC hour: re-read time session and switch strategy if needed."""
         if not self.auto_enabled:
             return False
         if not self._hourly_transfer_due(tick.timestamp):
@@ -776,7 +778,7 @@ class TradingEngine:
             target, note = self._stand_aside_park_target(tick.timestamp)
         else:
             note = (
-                f"Hourly auto-transfer @ {hour_label}:00 UTC → {target} "
+                f"Time-session update @ {hour_label}:00 UTC → {target} "
                 f"({rec.get('session')})"
             )
 

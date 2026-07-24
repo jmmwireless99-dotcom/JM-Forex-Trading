@@ -19,7 +19,105 @@ class SessionWindow:
     reason: str
 
 
-# Asia M3/M5 scalp desk — Philippines local hours
+@dataclass(frozen=True)
+class SessionSlot:
+    """One Mon–Fri desk slot: UTC hour window → strategy (or stand aside)."""
+
+    label: str  # machine id: asia, london, ...
+    slot: str  # UI name
+    utc_start: int  # inclusive hour 0–23
+    utc_end: int  # exclusive hour 1–24
+    strategy: str | None
+    tier: SessionTier
+    reason: str
+
+    @property
+    def utc_range(self) -> str:
+        end_h = self.utc_end - 1
+        return f"{self.utc_start:02d}:00-{end_h:02d}:59"
+
+    @property
+    def ph_range(self) -> str:
+        """Philippines = UTC+8 display of the same window."""
+        ph_start = (self.utc_start + 8) % 24
+        ph_end_h = (self.utc_end - 1 + 8) % 24
+        return f"{ph_start:02d}:00-{ph_end_h:02d}:59"
+
+
+# Canonical Mon–Fri map — auto-transfer re-reads this every UTC hour.
+FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
+    SessionSlot(
+        label="asia",
+        slot="Asia",
+        utc_start=0,
+        utc_end=7,
+        strategy="EMA_RSI_Scalp",
+        tier=SessionTier.ASIA,
+        reason="Asia session (UTC 00:00–06:59 / PH 08:00–14:59) — EMA_RSI + Asia range box",
+    ),
+    SessionSlot(
+        label="london",
+        slot="London",
+        utc_start=7,
+        utc_end=11,
+        strategy="London_Judas_Sweep",
+        tier=SessionTier.ALLOWED,
+        reason="London Judas window (UTC 07:00–10:59 / PH 15:00–18:59) — sweep + FVG limit",
+    ),
+    SessionSlot(
+        label="london_wind_down",
+        slot="London wind-down",
+        utc_start=11,
+        utc_end=12,
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="London wind-down (UTC 11:00–11:59 / PH 19:00–19:59) — no new Judas entries before kill",
+    ),
+    SessionSlot(
+        label="london_close",
+        slot="London close",
+        utc_start=12,
+        utc_end=13,
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="London kill hour (UTC 12:00–12:59 / PH 20:00–20:59) — cancel limits, no new entries",
+    ),
+    SessionSlot(
+        label="london_ny_overlap",
+        slot="London/NY overlap",
+        utc_start=13,
+        utc_end=16,
+        strategy="Liquidity_Sweep_SMC",
+        tier=SessionTier.PRIME,
+        reason="London/NY overlap (UTC 13:00–15:59 / PH 21:00–23:59) — best XAUUSD liquidity",
+    ),
+    SessionSlot(
+        label="new_york",
+        slot="New York",
+        utc_start=16,
+        utc_end=20,
+        strategy="EMA_RSI_Scalp",
+        tier=SessionTier.ALLOWED,
+        reason="New York session (UTC 16:00–19:59 / PH 00:00–03:59) — USD-driven gold continuation",
+    ),
+    SessionSlot(
+        label="off_hours",
+        slot="Off-hours",
+        utc_start=20,
+        utc_end=24,
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="Off-hours (UTC 20:00–23:59 / PH 04:00–07:59) — spreads widen, skip new entries",
+    ),
+)
+
+
+SESSION_STRATEGY = {
+    slot.label: slot.strategy for slot in FULL_SESSION_SLOTS if slot.strategy
+}
+
+
+# Asia M3/M5 scalp desk — Philippines local hours (JM_ASIA_DESK_ONLY)
 ASIA_PH_START = 7
 ASIA_PH_END = 17  # exclusive → until 5:00PM
 
@@ -31,6 +129,13 @@ def ph_hour(utc: datetime) -> int:
 
 # Back-compat alias used by older imports
 _ph_hour = ph_hour
+
+
+def _slot_for_hour(hour: int) -> SessionSlot:
+    for slot in FULL_SESSION_SLOTS:
+        if slot.utc_start <= hour < slot.utc_end:
+            return slot
+    return FULL_SESSION_SLOTS[-1]
 
 
 def classify_asia_desk(ts: datetime) -> SessionWindow:
@@ -54,63 +159,23 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map aligned with strategy clocks (UTC).
+    """Full desk map aligned with strategy clocks (UTC + PH).
 
-    Asia 00:00–06:59 — build Asia box + EMA_RSI
-    London 07:00–10:59 — Judas sweep/entry (strategy window ends 11:00)
-    London wind-down 11:00–11:59 — no new Judas entries (pre-kill)
-    London close 12:00–12:59 — kill pending, no new entries
+    Asia 00:00–06:59 — EMA_RSI
+    London 07:00–10:59 — Judas sweep/entry
+    London wind-down 11:00–11:59 — stand aside (pre-kill)
+    London close 12:00–12:59 — kill pending
     Overlap 13:00–15:59 — SMC
     New York 16:00–19:59 — EMA_RSI
     Off-hours / weekend — stand aside
+    Auto-transfer re-applies this map every UTC hour.
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
-    hour = utc.hour
-
-    if 0 <= hour < 7:
-        return SessionWindow(
-            SessionTier.ASIA,
-            "asia",
-            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
-        )
-    if 7 <= hour < 11:
-        return SessionWindow(
-            SessionTier.ALLOWED,
-            "london",
-            "London Judas window (UTC 07:00–10:59) — sweep + FVG limit",
-        )
-    if 11 <= hour < 12:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_wind_down",
-            "London wind-down (UTC 11:00–11:59) — no new Judas entries before kill",
-        )
-    if 12 <= hour < 13:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_close",
-            "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
-        )
-    if 13 <= hour < 16:
-        return SessionWindow(
-            SessionTier.PRIME,
-            "london_ny_overlap",
-            "London/NY overlap — best XAUUSD liquidity",
-        )
-    if 16 <= hour < 20:
-        return SessionWindow(
-            SessionTier.ALLOWED,
-            "new_york",
-            "New York session — USD-driven gold continuation",
-        )
-    return SessionWindow(
-        SessionTier.AVOID,
-        "off_hours",
-        "Off-hours — spreads widen, skip new entries",
-    )
+    slot = _slot_for_hour(utc.hour)
+    return SessionWindow(slot.tier, slot.label, slot.reason)
 
 
 def classify_session(ts: datetime) -> SessionWindow:
@@ -161,20 +226,48 @@ def next_session_hint(ts: datetime) -> dict:
     }
 
 
-_SESSION_STRATEGY = {
-    "asia": "EMA_RSI_Scalp",
-    "london": "London_Judas_Sweep",
-    "london_ny_overlap": "Liquidity_Sweep_SMC",
-    "new_york": "EMA_RSI_Scalp",
-}
+def schedule_table() -> list[dict]:
+    """UI / API schedule rows — strategy + UTC + PH + hourly auto-transfer note."""
+    rows = [
+        {
+            "days": "Mon-Fri",
+            "utc": slot.utc_range,
+            "ph": slot.ph_range,
+            "slot": slot.slot,
+            "session": slot.label,
+            "strategies": slot.strategy or (
+                "Stand aside (pre-kill)"
+                if slot.label == "london_wind_down"
+                else "Stand aside (kill limits)"
+                if slot.label == "london_close"
+                else "Stand aside"
+            ),
+        }
+        for slot in FULL_SESSION_SLOTS
+    ]
+    rows.append(
+        {
+            "days": "Mon-Fri",
+            "utc": "every hour (:00)",
+            "ph": "every hour (:00 PH+8)",
+            "slot": "Auto transfer",
+            "session": "hourly",
+            "strategies": "Re-check time session each UTC hour — kusang lilipat ang strategy",
+        }
+    )
+    return rows
 
 
 def _recommended_for_label(label: str, hour_utc: int) -> str | None:
-    return _SESSION_STRATEGY.get(label)
+    return SESSION_STRATEGY.get(label)
 
 
 def _recommend_reason(label: str) -> str:
-    pick = _SESSION_STRATEGY.get(label)
+    pick = SESSION_STRATEGY.get(label)
     if pick:
         return f"Next slot {label} → {pick}"
     return f"Next slot {label} — stand aside"
+
+
+# Back-compat alias
+_SESSION_STRATEGY = SESSION_STRATEGY

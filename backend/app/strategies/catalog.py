@@ -42,7 +42,7 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "London_Judas_Sweep",
             "name": "London Judas Sweep",
-            "sessions": ["London"],
+            "sessions": ["London (UTC 07–11 / PH 3–7PM)"],
             "session_slots": ["london"],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -79,7 +79,10 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
-            "sessions": ["Asia", "New York"],
+            "sessions": [
+                "Asia (UTC 00–07 / PH 8AM–3PM)",
+                "New York (UTC 16–20 / PH 12–4AM)",
+            ],
             "session_slots": ["asia", "new_york"],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -114,7 +117,7 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "Liquidity_Sweep_SMC",
             "name": "Liquidity Sweep SMC",
-            "sessions": ["London/NY overlap"],
+            "sessions": ["London/NY overlap (UTC 13–16 / PH 9PM–12AM)"],
             "session_slots": ["london_ny_overlap"],
             "timeframe": "M5",
             "signal_tf": "M5",

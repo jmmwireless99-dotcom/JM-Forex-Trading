@@ -446,7 +446,7 @@ async def recommended_strategy() -> dict:
 
 @router.post("/strategies/auto-transfer")
 async def auto_transfer_strategy() -> dict:
-    """Clean slate — no auto strategies to transfer to."""
+    """Enable session-follow: pick strategy for current UTC slot, then refresh every hour."""
     engine = get_engine()
     return await engine.auto_transfer(start_engine=True)
 

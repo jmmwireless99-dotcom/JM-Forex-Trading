@@ -6,7 +6,13 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 
-from app.strategies.session import SessionTier, classify_session, next_session_hint
+from app.strategies.session import (
+    SESSION_STRATEGY,
+    SessionTier,
+    classify_session,
+    next_session_hint,
+    schedule_table as session_schedule_table,
+)
 
 
 class Regime(str, Enum):
@@ -48,13 +54,11 @@ class AutoStrategyRouter:
     def __init__(self, *, news_filter: bool = True, **_: object) -> None:
         self.news_filter = news_filter
         self.last_decision: AutoDecision | None = None
+        # Single source of truth: FULL_SESSION_SLOTS in session.py
         self.session_map: dict[str, str | None] = {
-            "asia": "EMA_RSI_Scalp",
-            "london": "London_Judas_Sweep",
+            **{k: v for k, v in SESSION_STRATEGY.items()},
             "london_wind_down": None,
             "london_close": None,
-            "london_ny_overlap": "Liquidity_Sweep_SMC",
-            "new_york": "EMA_RSI_Scalp",
             "friday_late": None,
             "weekend": None,
             "off_hours": None,
@@ -122,53 +126,5 @@ class AutoStrategyRouter:
         }
 
     def schedule_table(self) -> list[dict]:
-        return [
-            {
-                "days": "Mon-Fri",
-                "utc": "00:00-06:59",
-                "slot": "Asia",
-                "strategies": "EMA_RSI_Scalp",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "07:00-10:59",
-                "slot": "London",
-                "strategies": "London_Judas_Sweep",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "11:00-11:59",
-                "slot": "London wind-down",
-                "strategies": "Stand aside (pre-kill)",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "12:00-12:59",
-                "slot": "London close",
-                "strategies": "Stand aside (kill limits)",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "13:00-15:59",
-                "slot": "London/NY overlap",
-                "strategies": "Liquidity_Sweep_SMC",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "16:00-19:59",
-                "slot": "New York",
-                "strategies": "EMA_RSI_Scalp",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "20:00-23:59",
-                "slot": "Off-hours",
-                "strategies": "Stand aside",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "every hour",
-                "slot": "Auto transfer",
-                "strategies": "Re-check session map each UTC hour — kusang lilipat",
-            },
-        ]
+        """Strategy + time-session table (UTC + PH) with hourly auto-transfer row."""
+        return session_schedule_table()
