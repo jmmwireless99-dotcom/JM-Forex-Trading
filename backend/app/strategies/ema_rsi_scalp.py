@@ -34,15 +34,15 @@ class EmaRsiScalpStrategy(Strategy):
         ema_fast: int = 20,
         ema_slow: int = 50,
         rsi_period: int = 14,
-        rsi_buy: tuple[float, float] = (38.0, 52.0),
-        rsi_sell: tuple[float, float] = (48.0, 62.0),
+        rsi_buy: tuple[float, float] = (40.0, 50.0),
+        rsi_sell: tuple[float, float] = (50.0, 60.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 6,  # ≥30m on M5 — stop flip-flop losses
-        allow_soft_confirm: bool = True,
-        reward_r: float = 1.8,
-        min_stop_atr: float = 1.4,
-        min_tp_atr: float = 2.2,
+        min_bars_between_signals: int = 12,  # ≥60m on M5 — quality spacing
+        allow_soft_confirm: bool = False,
+        reward_r: float = 2.2,
+        min_stop_atr: float = 1.5,
+        min_tp_atr: float = 2.8,
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend

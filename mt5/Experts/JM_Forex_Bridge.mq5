@@ -383,7 +383,7 @@ int OnInit()
    UpdateChartComment();
 
    string block = TradeBlockReason();
-   Print("JM Forex MT5 Bridge v1.05 ready on ", g_symbol,
+   Print("JM Forex MT5 Bridge v1.06 ready on ", g_symbol,
          " | trade_ok=", (StringLen(block) == 0 ? "YES" : "NO"),
          " | block=", block,
          " | login=", AccountInfoInteger(ACCOUNT_LOGIN),

@@ -35,7 +35,8 @@ async def test_hourly_transfer_switches_london_to_smc():
     assert switched is True
     assert engine.active_name == "Liquidity_Sweep_SMC"
     assert engine._last_transfer_hour_key == "2026-07-23T13"
-    assert "Hourly auto-transfer" in (engine._last_transfer_note or "")
+    assert "Liquidity_Sweep_SMC" in (engine._last_transfer_note or "")
+    assert "13:00" in (engine._last_transfer_note or "")
     auto = engine.auto_status()
     assert auto["hourly_transfer"] is True
     assert auto["transfer_interval_seconds"] == 3600

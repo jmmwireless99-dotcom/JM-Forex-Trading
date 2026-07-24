@@ -81,46 +81,41 @@ def strategy_catalog() -> list[dict]:
             "name": "EMA + RSI Scalp",
             "sessions": [
                 "Asia (UTC 00–07 / PH 8AM–3PM)",
-                "London wind-down / close (UTC 11–13)",
-                "New York (UTC 16–20 / PH 12–4AM)",
-                "Off-hours (UTC 20–24)",
+                "New York (UTC 16–20 / PH 12–4AM; Fri cuts at 18:00 UTC)",
             ],
             "session_slots": [
                 "asia",
-                "london_wind_down",
-                "london_close",
                 "new_york",
-                "off_hours",
             ],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
                 "EMA 200 trend filter + EMA 20/50 pullback zone + RSI 14 + "
-                "engulfing / pin / strong-body confirmation."
+                "engulfing / pin confirmation only (no soft body)."
             ),
             "entry_rules": [
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
-                "RSI 38–52 for BUY; RSI 48–62 for SELL.",
-                "Confirm with engulfing, pin bar, or strong directional M5 body.",
-                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
+                "RSI 40–50 for BUY; RSI 50–60 for SELL.",
+                "Confirm with engulfing or pin bar only.",
+                "Cooldown spacing ≥12 M5 bars; no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (wider stops: ~1.4×ATR / ~2.2×ATR).",
+                "SL/TP from ATR structure (~1.5×ATR / ~2.8×ATR, R≈2.2).",
             ],
             "parameters": seed_params("EMA_RSI_Scalp"),
             "safety": [
-                "Auto router gates Asia/NY sessions; optional JM_SESSION_FILTER for avoid tiers.",
+                "Auto router gates Asia/NY quality windows; stand aside off-hours + Fri late.",
                 "News blackout when desk news filter is on.",
                 "Needs 205+ M5 bars for EMA200 warmup.",
                 "Daily loss kill-switch disabled by default (JM_MAX_DAILY_LOSS_PCT=0).",
             ],
             "order_type": "MARKET",
-            "reward_r": 1.8,
+            "reward_r": 2.2,
         },
         {
             "id": "Liquidity_Sweep_SMC",
@@ -132,18 +127,18 @@ def strategy_catalog() -> list[dict]:
             "chart_tf": "M1",
             "summary": (
                 "Smart Money Concepts: sweep Asia H/L (00–06), PDH/PDL, or recent "
-                "swing → MSS → FVG or Order Block retest."
+                "swing → MSS → FVG or Order Block retest (max 1 entry/day)."
             ),
             "entry_rules": [
                 "Mark liquidity: Asian High/Low (00:00–06:00 UTC) + PDH/PDL + recent swings.",
                 "Sweep: wick beyond level then close back inside (liquidity grab).",
-                "Structure shift: MSS preferred after the sweep (recent swing break).",
+                "Structure shift: MSS must confirm the sweep bias.",
                 "Entry only on retest of real FVG or Order Block aligned with bias.",
-                "No synthetic momentum OB — wait for zone touch.",
+                "Max 1 SMC entry per UTC day — no opposite bias flip.",
             ],
             "entry_flow": [
                 "Detect sweep of ASIAN_HIGH/PDH/SWING_HIGH (SELL) or LOW side (BUY).",
-                "Prefer MSS confirmation on last 20 M5 bars.",
+                "Require MSS confirmation on last 20 M5 bars.",
                 "Enter on FVG/OB retest → MARKET.",
             ],
             "parameters": seed_params("Liquidity_Sweep_SMC"),
@@ -154,7 +149,7 @@ def strategy_catalog() -> list[dict]:
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
             "order_type": "MARKET",
-            "reward_r": 1.8,
+            "reward_r": 2.2,
         },
         _MANUAL_CARD,
     ]
@@ -163,8 +158,8 @@ def strategy_catalog() -> list[dict]:
 def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
-        "London_Judas_Sweep — Asia 00-06 · $0.50–$3.50 sweep · FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 · EMA20/50 retest · RSI 38-52/48-62 · strong body/pin · hold SL/TP",
-        "Liquidity_Sweep_SMC — Asia/PDH/swing sweep · MSS · FVG/OB retest only",
+        "London_Judas_Sweep — Asia 00-06 · $0.80–$3.00 sweep · FVG50 LIMIT · kill 12:00",
+        "EMA_RSI_Scalp — EMA200 · EMA20/50 retest · RSI 40-50/50-60 · engulf/pin · hold SL/TP",
+        "Liquidity_Sweep_SMC — Asia/PDH/swing sweep · MSS · FVG/OB · max 1/day",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

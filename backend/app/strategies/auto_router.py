@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from app.strategies.session import (
-    SESSION_STRATEGY,
+    FULL_SESSION_SLOTS,
     SessionTier,
     classify_session,
     next_session_hint,
@@ -54,9 +54,9 @@ class AutoStrategyRouter:
     def __init__(self, *, news_filter: bool = True, **_: object) -> None:
         self.news_filter = news_filter
         self.last_decision: AutoDecision | None = None
-        # Single source of truth: FULL_SESSION_SLOTS in session.py (Mon–Fri always-on).
+        # Single source of truth: FULL_SESSION_SLOTS in session.py (quality windows).
         self.session_map: dict[str, str | None] = {
-            **{k: v for k, v in SESSION_STRATEGY.items()},
+            **{slot.label: slot.strategy for slot in FULL_SESSION_SLOTS},
             "friday_late": None,
             "weekend": None,
             "outside_asia_desk": None,

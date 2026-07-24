@@ -16,22 +16,22 @@ SEED_STRATEGIES: list[dict] = [
         "name": "EMA_RSI_Scalp",
         "timeframe": "M5",
         "description": (
-            "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin "
-            "(strong body soft confirm) · Asia/NY"
+            "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin only "
+            "(no soft body) · Asia/NY quality windows"
         ),
         "parameters": {
             "ema_trend": 200,
             "ema_fast": 20,
             "ema_slow": 50,
             "rsi_period": 14,
-            "rsi_buy_zone": [38, 52],
-            "rsi_sell_zone": [48, 62],
-            "patterns": ["engulfing", "pin_bar", "strong_body"],
-            "min_bars_between_signals": 6,
-            "reward_r": 1.8,
-            "min_stop_atr": 1.4,
-            "min_tp_atr": 2.2,
-            "allow_soft_confirm": True,
+            "rsi_buy_zone": [40, 50],
+            "rsi_sell_zone": [50, 60],
+            "patterns": ["engulfing", "pin_bar"],
+            "min_bars_between_signals": 12,
+            "reward_r": 2.2,
+            "min_stop_atr": 1.5,
+            "min_tp_atr": 2.8,
+            "allow_soft_confirm": False,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -41,7 +41,7 @@ SEED_STRATEGIES: list[dict] = [
         "timeframe": "M5",
         "description": (
             "Asia 00-06 / PDH-PDL / recent swing sweep + MSS + FVG/OB retest "
-            "(no fake momentum OB) · London/NY overlap"
+            "(max 1/day) · London/NY overlap only"
         ),
         "parameters": {
             "asia_session_utc": ["00:00", "06:00"],
@@ -58,10 +58,10 @@ SEED_STRATEGIES: list[dict] = [
             "require_sweep": True,
             "require_zone_retest": True,
             "require_mss_confirm": True,
-            "max_entries_per_day": 2,
-            "reward_r": 1.8,
-            "min_stop_atr": 1.1,
-            "min_tp_atr": 2.0,
+            "max_entries_per_day": 1,
+            "reward_r": 2.2,
+            "min_stop_atr": 1.2,
+            "min_tp_atr": 2.5,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -78,14 +78,14 @@ SEED_STRATEGIES: list[dict] = [
             "london_entry_utc": ["07:00", "11:00"],
             "sweep_window_utc": ["07:00", "09:00"],
             "kill_pending_utc": "12:00",
-            "min_sweep_pips": 50,
-            "max_sweep_pips": 350,
+            "min_sweep_pips": 80,
+            "max_sweep_pips": 300,
             "sl_buffer_pips": 80,
-            "max_spread_pips": 40,
+            "max_spread_pips": 35,
             "pip_size": 0.01,
             "entry": "FVG_50_LIMIT",
             "reward_r": 3.0,
-            "mt_near_limit_pips": 150,
+            "mt_near_limit_pips": 120,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },

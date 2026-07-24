@@ -30,22 +30,22 @@ def test_london_judas_window():
     assert session_allows_entry(ts) is True
 
 
-def test_london_wind_down_keeps_ema_auto():
-    # 11:30 UTC — Judas cools; EMA stays armed for always-on auto
+def test_london_wind_down_stands_aside():
+    # 11:30 UTC — Judas cools; no forced EMA into thin wind-down
     ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
+    assert window.tier == SessionTier.AVOID
     assert window.label == "london_wind_down"
-    assert session_allows_entry(ts) is True
+    assert session_allows_entry(ts) is False
 
 
-def test_london_close_keeps_ema_auto():
-    # 12:00 UTC — Judas limits still killed; EMA auto remains allowed
+def test_london_close_stands_aside():
+    # 12:00 UTC — Judas limits killed; stand aside until overlap
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
+    assert window.tier == SessionTier.AVOID
     assert window.label == "london_close"
-    assert session_allows_entry(ts) is True
+    assert session_allows_entry(ts) is False
 
 
 def test_overlap_prime():
@@ -53,6 +53,29 @@ def test_overlap_prime():
     window = classify_session(ts)
     assert window.tier == SessionTier.PRIME
     assert session_allows_entry(ts, prime_only=True) is True
+
+
+def test_off_hours_stands_aside():
+    ts = datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "off_hours"
+
+
+def test_friday_late_stands_aside():
+    # Friday 2026-07-24 18:30 UTC — protect weekend gap
+    ts = datetime(2026, 7, 24, 18, 30, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "friday_late"
+    assert session_allows_entry(ts) is False
+
+
+def test_friday_ny_before_cutoff_still_trades():
+    ts = datetime(2026, 7, 24, 17, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.label == "new_york"
+    assert window.tier == SessionTier.ALLOWED
 
 
 def test_asia_desk_only_blocks_after_5pm():
@@ -68,6 +91,13 @@ def test_next_session_after_asia_is_london():
     assert nxt["strategy"] == "London_Judas_Sweep"
 
 
+def test_next_session_after_london_skips_kill_to_smc():
+    ts = datetime(2026, 7, 20, 10, 0, tzinfo=timezone.utc)
+    nxt = next_session_hint(ts)
+    assert nxt["session"] == "london_ny_overlap"
+    assert nxt["strategy"] == "Liquidity_Sweep_SMC"
+
+
 def test_schedule_table_has_ph_and_hourly_row():
     from app.strategies.session import schedule_table
 
@@ -80,8 +110,9 @@ def test_schedule_table_has_ph_and_hourly_row():
     hourly = next(r for r in rows if r["session"] == "hourly")
     assert hourly["slot"] == "Auto transfer"
     assert "hour" in hourly["utc"].lower()
-    assert any(r["session"] == "london_close" and r["strategies"] == "EMA_RSI_Scalp" for r in rows)
-    assert any(r["session"] == "off_hours" and r["strategies"] == "EMA_RSI_Scalp" for r in rows)
+    assert any(r["session"] == "london_close" and r["strategies"] == "Stand aside" for r in rows)
+    assert any(r["session"] == "off_hours" and r["strategies"] == "Stand aside" for r in rows)
+    assert any(r["session"] == "friday_late" and "Stand aside" in r["strategies"] for r in rows)
 
 
 def test_weekend_avoided():

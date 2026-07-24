@@ -9,7 +9,7 @@ class SessionTier(str, Enum):
     PRIME = "prime"  # London/NY overlap — best gold liquidity
     ALLOWED = "allowed"  # London afternoon or NY session
     ASIA = "asia"  # Asia scalp window (PH daytime)
-    AVOID = "avoid"  # weekend / thin off-hours
+    AVOID = "avoid"  # weekend / thin off-hours / kill windows
 
 
 @dataclass(frozen=True)
@@ -44,8 +44,8 @@ class SessionSlot:
         return f"{ph_start:02d}:00-{ph_end_h:02d}:59"
 
 
-# Canonical Mon–Fri map — always-on auto: every weekday slot has a strategy.
-# Weekend still stands aside. London kill switch still cancels Judas limits at 12:00 UTC.
+# Canonical Mon–Fri map — quality windows only (not every thin hour).
+# Weekend + Friday late still stand aside. London kill still cancels Judas at 12:00 UTC.
 FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
     SessionSlot(
         label="asia",
@@ -54,7 +54,7 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         utc_end=7,
         strategy="EMA_RSI_Scalp",
         tier=SessionTier.ASIA,
-        reason="Asia session (UTC 00:00–06:59 / PH 08:00–14:59) — EMA_RSI + Asia range box",
+        reason="Asia session (UTC 00:00–06:59 / PH 08:00–14:59) — EMA_RSI quality pullbacks",
     ),
     SessionSlot(
         label="london",
@@ -70,18 +70,18 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="London wind-down",
         utc_start=11,
         utc_end=12,
-        strategy="EMA_RSI_Scalp",
-        tier=SessionTier.ALLOWED,
-        reason="London wind-down (UTC 11:00–11:59 / PH 19:00–19:59) — EMA auto while Judas cools",
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="London wind-down (UTC 11:00–11:59 / PH 19:00–19:59) — stand aside, Judas cools",
     ),
     SessionSlot(
         label="london_close",
         slot="London close",
         utc_start=12,
         utc_end=13,
-        strategy="EMA_RSI_Scalp",
-        tier=SessionTier.ALLOWED,
-        reason="London close (UTC 12:00–12:59 / PH 20:00–20:59) — kill Judas limits + EMA auto",
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="London close (UTC 12:00–12:59 / PH 20:00–20:59) — kill Judas limits, no new entries",
     ),
     SessionSlot(
         label="london_ny_overlap",
@@ -106,11 +106,15 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="Off-hours",
         utc_start=20,
         utc_end=24,
-        strategy="EMA_RSI_Scalp",
-        tier=SessionTier.ALLOWED,
-        reason="Off-hours (UTC 20:00–23:59 / PH 04:00–07:59) — EMA auto when setup appears",
+        strategy=None,
+        tier=SessionTier.AVOID,
+        reason="Off-hours (UTC 20:00–23:59 / PH 04:00–07:59) — thin tape, stand aside",
     ),
 )
+
+
+# Friday late — no new entries into weekend gap (UTC ≥ 18:00 Fri)
+FRIDAY_LATE_UTC_HOUR = 18
 
 
 SESSION_STRATEGY = {
@@ -160,21 +164,29 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map — Mon–Fri always-on auto strategy by UTC hour.
+    """Full desk map — quality Mon–Fri windows only.
 
     Asia 00:00–06:59 — EMA_RSI
     London 07:00–10:59 — Judas sweep/entry
-    London wind-down 11:00–11:59 — EMA auto (Judas cools)
-    London close 12:00–12:59 — kill Judas limits + EMA auto
+    London wind-down 11:00–11:59 — stand aside
+    London close 12:00–12:59 — kill Judas limits + stand aside
     Overlap 13:00–15:59 — SMC
-    New York 16:00–19:59 — EMA_RSI
-    Off-hours 20:00–23:59 — EMA auto when setup appears
+    New York 16:00–17:59 Fri / 16:00–19:59 Mon–Thu — EMA_RSI
+    Off-hours 20:00–23:59 — stand aside (thin)
+    Friday ≥ 18:00 UTC — friday_late stand aside (weekend gap)
     Weekend — stand aside
     Auto-transfer re-applies this map every UTC hour.
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
+
+    if utc.weekday() == 4 and utc.hour >= FRIDAY_LATE_UTC_HOUR:
+        return SessionWindow(
+            SessionTier.AVOID,
+            "friday_late",
+            "Friday late (UTC ≥ 18:00) — stand aside before weekend gap",
+        )
 
     slot = _slot_for_hour(utc.hour)
     return SessionWindow(slot.tier, slot.label, slot.reason)
@@ -243,12 +255,22 @@ def schedule_table() -> list[dict]:
     ]
     rows.append(
         {
+            "days": "Fri",
+            "utc": f"{FRIDAY_LATE_UTC_HOUR:02d}:00-23:59",
+            "ph": f"{(FRIDAY_LATE_UTC_HOUR + 8) % 24:02d}:00-07:59",
+            "slot": "Friday late",
+            "session": "friday_late",
+            "strategies": "Stand aside (weekend gap protect)",
+        }
+    )
+    rows.append(
+        {
             "days": "Mon-Fri",
             "utc": "every hour (:00)",
             "ph": "every hour (:00 PH+8)",
             "slot": "Auto transfer",
             "session": "hourly",
-            "strategies": "Always-on auto — re-check time session each UTC hour",
+            "strategies": "Quality windows — re-check time session each UTC hour",
         }
     )
     rows.append(

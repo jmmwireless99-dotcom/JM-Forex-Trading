@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| JM_Forex_Bridge.mq4                                              |
-//| JM Forex ↔ cloud desk (MT4) — v1.05                              |
+//| JM Forex ↔ cloud desk (MT4) — v1.06                              |
 //| Files: jm4_*.csv in Terminal Common\\Files                       |
 //+------------------------------------------------------------------+
 #property strict

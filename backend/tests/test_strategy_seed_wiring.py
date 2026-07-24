@@ -9,19 +9,21 @@ from app.strategies.liquidity_sweep_smc import _asia_window_bars
 
 def test_create_strategy_applies_seed_defaults():
     ema = create_strategy("EMA_RSI_Scalp")
-    assert ema.rsi_buy == (38.0, 52.0)
-    assert ema.rsi_sell == (48.0, 62.0)
-    assert ema.min_bars_between_signals == 6
-    assert ema.allow_soft_confirm is True
-    assert ema.reward_r == 1.8
+    assert ema.rsi_buy == (40.0, 50.0)
+    assert ema.rsi_sell == (50.0, 60.0)
+    assert ema.min_bars_between_signals == 12
+    assert ema.allow_soft_confirm is False
+    assert ema.reward_r == 2.2
 
     smc = create_strategy("Liquidity_Sweep_SMC")
     assert smc.require_sweep is True
     assert smc.require_zone_retest is True
+    assert smc.max_entries_per_day == 1
+    assert smc.reward_r == 2.2
 
     judas = create_strategy("London_Judas_Sweep")
-    assert judas.min_sweep_pips == 50.0
-    assert judas.mt_near_limit_pips == 150.0
+    assert judas.min_sweep_pips == 80.0
+    assert judas.mt_near_limit_pips == 120.0
     assert judas.reward_r == 3.0
 
 

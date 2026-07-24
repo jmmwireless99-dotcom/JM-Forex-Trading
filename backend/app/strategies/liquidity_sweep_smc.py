@@ -118,9 +118,10 @@ class LiquiditySweepSmcStrategy(Strategy):
         session_filter: bool | None = None,
         require_sweep: bool = True,
         require_zone_retest: bool = True,
-        reward_r: float = 1.8,
-        min_stop_atr: float = 1.1,
-        min_tp_atr: float = 2.0,
+        reward_r: float = 2.2,
+        min_stop_atr: float = 1.2,
+        min_tp_atr: float = 2.5,
+        max_entries_per_day: int = 1,
     ) -> None:
         super().__init__(lookback=lookback)
         settings = get_settings()
@@ -142,7 +143,7 @@ class LiquiditySweepSmcStrategy(Strategy):
         # One bias commitment per UTC day — blocks SELL↔BUY whipsaws.
         self._day_bias: dict[date, str] = {}
         self._entries_today: dict[date, int] = {}
-        self.max_entries_per_day: int = 2
+        self.max_entries_per_day = max(1, int(max_entries_per_day))
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)

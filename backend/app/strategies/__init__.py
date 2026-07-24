@@ -75,6 +75,8 @@ def _ctor_kwargs(name: str, overrides: dict) -> dict:
             out["min_stop_atr"] = float(merged["min_stop_atr"])
         if "min_tp_atr" in merged:
             out["min_tp_atr"] = float(merged["min_tp_atr"])
+        if "max_entries_per_day" in merged:
+            out["max_entries_per_day"] = int(merged["max_entries_per_day"])
     elif name == LondonJudasSweepStrategy.name:
         for key in (
             "min_sweep_pips",
