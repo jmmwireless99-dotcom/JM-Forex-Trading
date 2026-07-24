@@ -245,13 +245,28 @@ async def mt_status() -> dict:
 
 @router.post("/mt/ping")
 @router.post("/mt4/ping")
-async def mt_ping() -> dict:
+async def mt_ping(platform: str | None = None) -> dict:
+    """Ping Windows EA via remote agent. Must not block the event loop (ack push)."""
+    import asyncio
+
     settings = get_settings()
-    bridge, _ = resolve_mt_bridge(settings)
+    engine = get_engine()
+    plat = (platform or "").strip().lower()
+    bridge = None
+    if plat in {"mt4", "mt5"} and engine.bridges:
+        bridge = engine.bridges.get(plat)
+    if bridge is None:
+        bridge, detected = resolve_mt_bridge(settings)
+        plat = detected if detected in {"mt4", "mt5"} else "mt5"
     if bridge is None:
         raise HTTPException(status_code=400, detail="MT bridge not configured")
-    ack = bridge.ping()
-    return {"ok": ack.ok, "command_id": ack.command_id, "detail": ack.detail}
+    ack = await asyncio.to_thread(bridge.ping, 25.0)
+    return {
+        "ok": ack.ok,
+        "command_id": ack.command_id,
+        "detail": ack.detail,
+        "platform": getattr(bridge, "platform", plat),
+    }
 
 
 def _require_bridge_token(x_jm_bridge_token: str | None = Header(default=None)) -> None:

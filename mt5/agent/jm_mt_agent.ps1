@@ -193,6 +193,29 @@ while ($true) {
         $lastCmdId = $cmdId
         $ts = Get-Date -Format "HH:mm:ss"
         Write-Host ("[" + $ts + "] " + $platform + " command -> EA id=" + $cmdId)
+        # Give EA a moment to ack, then push immediately so cloud does not wait a full poll.
+        Start-Sleep -Milliseconds 350
+        try {
+          $ackCsv2 = Read-JmFile $ackF
+          $pushBody2 = @{
+            status_csv = (Read-JmFile $statusF)
+            ticks_csv = (Read-JmFile $ticksF)
+            positions_csv = (Read-JmFile $positionsF)
+            ack_csv = $ackCsv2
+            symbol = $symbol
+            agent_host = $hostName
+            platform = $platform
+          }
+          if (-not [string]::IsNullOrWhiteSpace($ackCsv2)) {
+            $ackParts = $ackCsv2.Trim().Split(",")
+            if ($ackParts.Length -gt 0 -and -not [string]::IsNullOrWhiteSpace($ackParts[0])) {
+              $pushBody2["clear_command_id"] = $ackParts[0].Trim()
+            }
+          }
+          $null = Invoke-JmApi -Method "POST" -Url ($api + "/mt/remote/push") -Token $token -Body $pushBody2
+        } catch {
+          # next loop will retry
+        }
       }
     }
   } catch {

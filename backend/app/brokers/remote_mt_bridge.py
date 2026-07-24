@@ -42,7 +42,7 @@ class RemoteMetaTraderBridge:
             max_age_seconds=max_age_seconds, platform=self.platform
         )
 
-    def ping(self, timeout: float = 15.0) -> BridgeAck:
+    def ping(self, timeout: float = 25.0) -> BridgeAck:
         return self._send("PING", timeout=timeout)
 
     def read_tick(self) -> Tick | None:
@@ -110,7 +110,7 @@ class RemoteMetaTraderBridge:
                 continue
         return positions
 
-    def place_order(self, request: OrderRequest, timeout: float = 12.0) -> Order:
+    def place_order(self, request: OrderRequest, timeout: float = 25.0) -> Order:
         order = Order(
             symbol=request.symbol,
             side=request.side,
@@ -143,14 +143,14 @@ class RemoteMetaTraderBridge:
             order.reject_reason = ack.detail or "MT remote bridge error"
         return order
 
-    def close_all(self, timeout: float = 12.0) -> BridgeAck:
+    def close_all(self, timeout: float = 25.0) -> BridgeAck:
         return self._send("CLOSE_ALL", timeout=timeout)
 
     def _send(
         self,
         action: str,
         *fields: str,
-        timeout: float = 15.0,
+        timeout: float = 25.0,
         command_id: str | None = None,
     ) -> BridgeAck:
         if not self.is_online():
@@ -170,7 +170,9 @@ class RemoteMetaTraderBridge:
             if ack and ack.command_id == cmd_id:
                 remote_clear_command(cmd_id, platform=self.platform)
                 return ack
-            time.sleep(0.2)
+            # Caller must run this in a worker thread (asyncio.to_thread) so the
+            # Windows agent can still POST /mt/remote/push with the EA ack.
+            time.sleep(0.15)
         remote_clear_command(cmd_id, platform=self.platform)
         return BridgeAck(cmd_id, "ERR", f"timeout_waiting_{self.platform}_ack")
 

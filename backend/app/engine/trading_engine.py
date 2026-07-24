@@ -1381,7 +1381,7 @@ class TradingEngine:
         async with self._lock:
             if self.is_mt_bound(acct):
                 bridge = self.bridge_for_account(acct) or self.mt
-                ack = bridge.close_all()
+                ack = await asyncio.to_thread(bridge.close_all)
                 await self._emit("account", self.account_payload(acct))
                 await self._emit(
                     "positions",
@@ -1772,7 +1772,7 @@ class TradingEngine:
                         {**rejected.model_dump(mode="json"), "account_id": acct.id},
                     )
                     return rejected
-            order = bridge.place_order(request)
+            order = await asyncio.to_thread(bridge.place_order, request)
             pos = (
                 self._latest_open(request.symbol, request.side, acct)
                 if order.status == OrderStatus.FILLED
