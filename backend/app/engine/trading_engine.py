@@ -2026,7 +2026,7 @@ class TradingEngine:
         if any(p.side != signal.side for p in opens):
             return
         if opens:
-            min_strength = float(getattr(self.settings, "pyramid_min_strength", 0.85))
+            min_strength = float(getattr(self.settings, "pyramid_min_strength", 0.90))
             if float(signal.strength or 0) < min_strength:
                 return
 
