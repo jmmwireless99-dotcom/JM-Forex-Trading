@@ -1,0 +1,7 @@
+{
+  "api_base": "https://jmtechsolution.cloud/fx/api",
+  "bridge_token": "PASTE_TOKEN_HERE",
+  "files_dir": "",
+  "symbol": "XAUUSD",
+  "poll_ms": 500
+}

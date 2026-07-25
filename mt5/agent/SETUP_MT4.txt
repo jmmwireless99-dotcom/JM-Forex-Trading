@@ -1,0 +1,64 @@
+JM Forex — BAGONG MT4 BRIDGE (v1.08)
+====================================
+
+Para kay NONOY MADERA (MT4 login 893283499)
+Desk: https://jmtechsolution.cloud/fx/
+
+DOWNLOADS
+---------
+Agent + EA zip:
+  https://jmtechsolution.cloud/fx/downloads/jm-mt4-bridge.zip
+
+EA only (kung may agent ka na):
+  https://jmtechsolution.cloud/fx/downloads/JM_Forex_Bridge.mq4
+
+SETUP (Windows PC na may MT4)
+-----------------------------
+1) I-Extract All ang jm-mt4-bridge.zip (hal. Desktop\jm-mt4-bridge)
+
+2) MT4 → File → Open Data Folder → MQL4\Experts\
+   - Copy JM_Forex_Bridge.mq4 dito
+   - MetaEditor → Compile (F7) hanggang 0 errors
+   - I-drag ang JM_Forex_Bridge sa XAUUSD chart
+   - Inputs: UseCommonFolder = true
+   - Common tab: ✅ Allow live trading
+   - Toolbar: AutoTrading = GREEN / ON  (pula = OFF — i-click hanggang berde)
+   - Chart comment dapat: trade_ok=YES
+   - Properties title: JM_Forex_Bridge 1.08 (hindi luma)
+   - Chart comment: JM Forex MT4 Bridge v1.08
+   - Dapat may jm4_history.csv sa Common\\Files (broker close PnL → JM FX log)
+
+3) Agent
+   - Double-click RUN_AGENT_MT4.bat
+   - Huwag isara ang window
+   - Dapat may "push ok=True" at status=yes ticks=yes
+   - Platform: mt4 · Prefix: jm4_
+
+4) Check online
+   https://jmtechsolution.cloud/fx/api/mt/status
+   - platforms.mt4.online = true
+   - mt_login = 893283499 (o ang MT4 login mo)
+   - trade_ok = true
+
+5) JM FX login
+   - Login bilang NONOY / MT4 account (893283499)
+   - Manual Buy/Sell → papunta MT4 (hindi paper demo)
+
+KUNG trade_ok=NO
+----------------
+- I-click AutoTrading toolbar OFF → ON (GREEN)
+- Alisin EA sa chart → i-attach ulit
+- Tools → Options → Expert Advisors → Allow automated trading
+- Common: ✅ Allow live trading
+- Experts tab: basahin ang "block=..." reason
+
+FILES (huwag galawin)
+---------------------
+Common\Files\
+  jm4_status.csv  jm4_ticks.csv  jm4_positions.csv
+  jm4_command.csv jm4_ack.csv
+
+Token ay naka-preset na sa config.mt4.json / config.json.
+Kailangan: Python 3 (py -3) sa Windows.
+
+NOTE: Joel = MT5 only. Nonoy = MT4. Dalawang agent windows kung pareho online.
