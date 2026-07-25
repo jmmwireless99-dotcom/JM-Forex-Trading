@@ -73,7 +73,7 @@ class PaperAccount:
     avatar: str | None = None  # data-URL logo
     # When set, strategy auto-fills (incl. London Judas) use this lot size exactly.
     fixed_lots: float | None = None
-    # Manual select/save — restored on login (e.g. BTC_EMA_RSI_Scalp).
+    # Manual select/save — restored on login (preferred gold strategy).
     preferred_strategy: str | None = None
     first_name: str = ""
     last_name: str = ""

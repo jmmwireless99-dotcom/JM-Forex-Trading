@@ -65,8 +65,6 @@ class TradingEngine:
             settings.symbols,
             live_noise=settings.paper_live_noise,
         )
-        # Always keep BTCUSD paper tape ready for manual BTC strategy.
-        self.market.ensure_symbol("BTCUSD")
         if settings.paper_sync_live_gold:
             self.market.set_live_mid_provider(self._live_market_mid)
         self.auto_router = AutoStrategyRouter(news_filter=settings.news_filter)
@@ -534,27 +532,20 @@ class TradingEngine:
         return not self.is_mt_bound(account) and not self.is_mt5_client(account)
 
     def _live_market_mid(self, symbol: str) -> float | None:
-        """Live mid for paper desk sync — XAUUSD (gold) or BTCUSD (Binance)."""
+        """Live mid for paper desk sync — XAUUSD gold."""
         sym = (symbol or "").upper()
-        if sym == "XAUUSD":
-            try:
-                from app.market_data.gold_feed import fetch_gold_candles
+        if sym != "XAUUSD":
+            return None
+        try:
+            from app.market_data.gold_feed import fetch_gold_candles
 
-                data = fetch_gold_candles(interval="5m", limit=5)
-                price = data.get("price")
-                if price is None and data.get("candles"):
-                    price = data["candles"][-1].get("close")
-                return float(price) if price is not None else None
-            except Exception:
-                return None
-        if sym in {"BTCUSD", "BTCUSDT"}:
-            try:
-                from app.market_data.crypto_feed import fetch_btc_price
-
-                return fetch_btc_price()
-            except Exception:
-                return None
-        return None
+            data = fetch_gold_candles(interval="5m", limit=5)
+            price = data.get("price")
+            if price is None and data.get("candles"):
+                price = data["candles"][-1].get("close")
+            return float(price) if price is not None else None
+        except Exception:
+            return None
 
     # Back-compat alias
     _live_gold_mid = _live_market_mid
@@ -563,17 +554,10 @@ class TradingEngine:
         """Symbol this active strategy is allowed to trade (None = any/manual)."""
         if self.active_name == "manual_only":
             return None
-        if self.active_name.startswith("BTC_") or self.active_name == "BTC_EMA_RSI_Scalp":
-            return "BTCUSD"
         dedicated = getattr(self.strategy, "symbol", None)
         if dedicated:
             return str(dedicated).upper()
         return "XAUUSD"
-
-    @staticmethod
-    def _is_btc_symbol(symbol: str | None) -> bool:
-        u = (symbol or "").upper()
-        return "BTC" in u or "BITCOIN" in u
 
     @staticmethod
     def _is_gold_symbol(symbol: str | None) -> bool:
@@ -588,20 +572,13 @@ class TradingEngine:
             return True
         tick = (tick_symbol or "").upper()
         want = trade_symbol.upper()
-        if self._is_btc_symbol(want):
-            return self._is_btc_symbol(tick)
         if self._is_gold_symbol(want) or want == "XAUUSD":
             return self._is_gold_symbol(tick)
         return tick == want
 
     def _strategy_accepts_tick_symbol(self, strat: object, tick_symbol: str) -> bool:
-        """Avoid feeding XAU M5 bars into BTC strategy history (and vice versa)."""
-        name = str(getattr(strat, "name", "") or "")
-        dedicated = getattr(strat, "symbol", None)
-        if dedicated and self._is_btc_symbol(str(dedicated)):
-            return self._is_btc_symbol(tick_symbol)
-        if name.startswith("BTC_") or name == "BTC_EMA_RSI_Scalp":
-            return self._is_btc_symbol(tick_symbol)
+        """Desk strategies are XAUUSD/gold only."""
+        _ = strat
         return self._is_gold_symbol(tick_symbol)
 
     def _mt_bridge_live_symbol(self, platform: str | None) -> str:
@@ -626,8 +603,6 @@ class TradingEngine:
         want = (symbol or "").upper()
         if not live or not want:
             return False
-        if self._is_btc_symbol(want):
-            return self._is_btc_symbol(live)
         if want in {"XAUUSD", "GOLD"} or "XAU" in want:
             return ("XAU" in live) or ("GOLD" in live)
         return live == want
@@ -636,9 +611,8 @@ class TradingEngine:
         """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
         primary = self.settings.symbols[0]
         if self.signal_candles.closed_history(primary, 10):
-            self._seed_btc_candle_history()
             return
-        # Pin paper mid to live gold/BTC BEFORE seeding so EMA history sits near TV price.
+        # Pin paper mid to live gold BEFORE seeding so EMA history sits near TV price.
         if self.settings.paper_sync_live_gold:
             self.market.pull_live_mids(force=True)
         symbol = primary
@@ -690,102 +664,6 @@ class TradingEngine:
                         strat.feed_bar(bar)
         # Keep the live simulator glued to the seeded close (EMA proximity)
         self.market.sync_mid(symbol, last_close)
-        self._seed_btc_candle_history()
-
-    def _seed_btc_candle_history(self) -> None:
-        """Warm BTCUSD M5 history for BTC_EMA_RSI_Scalp (paper + Binance mid)."""
-        symbol = "BTCUSD"
-        self.market.ensure_symbol(symbol)
-        if self.signal_candles.closed_history(symbol, 10):
-            return
-        if self.settings.paper_sync_live_gold:
-            self.market.pull_live_mids(force=True)
-        mid = self.market.last_mids().get(symbol, 95000.0)
-        # Prefer real Binance M5 closes when available.
-        live_bars: list[Candle] = []
-        try:
-            from app.market_data.crypto_feed import fetch_btc_candles
-
-            data = fetch_btc_candles(interval="5m", limit=240)
-            if data.get("price"):
-                mid = float(data["price"])
-            for row in data.get("candles") or []:
-                t = datetime.fromtimestamp(int(row["time"]), tz=timezone.utc)
-                live_bars.append(
-                    Candle(
-                        symbol=symbol,
-                        open=float(row["open"]),
-                        high=float(row["high"]),
-                        low=float(row["low"]),
-                        close=float(row["close"]),
-                        volume=1.0,
-                        period_seconds=self.settings.signal_period_seconds,
-                        open_time=t,
-                        timestamp=t + timedelta(seconds=self.settings.signal_period_seconds - 1),
-                        is_closed=True,
-                    )
-                )
-        except Exception:
-            live_bars = []
-
-        signal_seed = max(220, int(self.settings.candle_history))
-        now = utcnow()
-        if len(live_bars) >= 40:
-            self.signal_candles.seed_history(symbol, live_bars[-signal_seed:])
-            # Lightweight M1 seed from last M5 closes
-            m1: list[Candle] = []
-            for b in live_bars[-min(220, len(live_bars)) :]:
-                m1.append(
-                    Candle(
-                        symbol=symbol,
-                        open=b.open,
-                        high=b.high,
-                        low=b.low,
-                        close=b.close,
-                        volume=b.volume,
-                        period_seconds=self.settings.candle_period_seconds,
-                        open_time=b.open_time,
-                        timestamp=b.timestamp,
-                        is_closed=True,
-                    )
-                )
-            self.candles.seed_history(symbol, m1)
-            self.market.sync_mid(symbol, float(live_bars[-1].close))
-            return
-
-        price = mid
-        bars: list[Candle] = []
-        for i in range(signal_seed):
-            target = mid + math.sin(i / 11.0) * 120.0
-            if i >= signal_seed - 30:
-                target = mid + math.sin(i / 7.0) * 20.0
-            delta = (target - price) * 0.35 + random.uniform(-8.0, 8.0)
-            o = price
-            c = price + delta
-            h = max(o, c) + abs(delta) * 0.35 + 2.0
-            l = min(o, c) - abs(delta) * 0.35 - 2.0
-            open_time = now - timedelta(
-                seconds=self.settings.signal_period_seconds * (signal_seed - i)
-            )
-            bars.append(
-                Candle(
-                    symbol=symbol,
-                    open=round(o, 2),
-                    high=round(h, 2),
-                    low=round(l, 2),
-                    close=round(c, 2),
-                    volume=float(20 + i % 7),
-                    period_seconds=self.settings.signal_period_seconds,
-                    open_time=open_time,
-                    timestamp=open_time
-                    + timedelta(seconds=self.settings.signal_period_seconds - 1),
-                    is_closed=True,
-                )
-            )
-            price = c
-        self.signal_candles.seed_history(symbol, bars)
-        self.candles.seed_history(symbol, bars)
-        self.market.sync_mid(symbol, price)
 
     async def start(self) -> None:
         if self.running:
@@ -1796,10 +1674,7 @@ class TradingEngine:
             raise
 
     async def _next_ticks(self) -> list[Tick]:
-        # Always advance paper tape (includes BTCUSD) so crypto strategy stays warm.
         paper_ticks = self.market.next_ticks()
-        btc_ticks = [t for t in paper_ticks if t.symbol == "BTCUSD"]
-        gold_ticks = [t for t in paper_ticks if t.symbol == "XAUUSD"]
 
         if self.bridges:
             # Prefer MT5 ticks for the desk feed; fall back to MT4.
@@ -1808,20 +1683,14 @@ class TradingEngine:
                 if bridge and bridge.is_online():
                     tick = bridge.read_tick()
                     if tick:
-                        # If MT already feeds BTC, don't duplicate paper BTC.
-                        if self._is_btc_symbol(tick.symbol):
-                            return [tick] + gold_ticks
-                        return [tick] + btc_ticks
+                        return [tick]
             return paper_ticks
         if self.using_mt() and self.mt:
             tick = self.mt.read_tick()
             if tick:
-                if self._is_btc_symbol(tick.symbol):
-                    return [tick] + gold_ticks
-                return [tick] + btc_ticks
+                return [tick]
             if self.settings.mt_remote_bridge:
                 return paper_ticks
-            # Local MT offline — keep full paper tape (gold + BTC), not BTC-only.
             return paper_ticks
         return paper_ticks
 
@@ -1872,8 +1741,7 @@ class TradingEngine:
                     getattr(self.strategy, "entry_period_seconds", None) == 180
                 )
                 trade_sym = self._strategy_trade_symbol()
-                # Gold strategy must not evaluate on BTC ticks (and vice versa).
-                # Use family match so broker aliases (XAUUSDm / GOLD) still trade.
+                # Gold strategies only — family match so XAUUSDm / GOLD still trade.
                 if trade_sym and not self._tick_matches_trade_symbol(
                     tick.symbol, trade_sym
                 ):
@@ -1982,19 +1850,6 @@ class TradingEngine:
                 for a in targets
                 if self.uses_paper_book(a) or self.is_mt_bound(a)
             ]
-        # BTCUSD: paper demos always; MT-bound only when that platform's EA is on BTC.
-        if self._is_btc_symbol(signal.symbol):
-            filtered: list[PaperAccount] = []
-            for acct in targets:
-                if self.uses_paper_book(acct):
-                    filtered.append(acct)
-                    continue
-                if not self.is_mt_bound(acct):
-                    continue
-                plat = self.account_mt_platform(acct)
-                if self._mt_bridge_supports_symbol(plat, signal.symbol):
-                    filtered.append(acct)
-            targets = filtered
         if not targets:
             return
         for acct in targets:
@@ -2159,8 +2014,7 @@ class TradingEngine:
                     reject_reason=(
                         f"{(plat or 'MT').upper()} EA is on {live} — "
                         f"cannot fill {request.symbol}. "
-                        f"For BTC attach JM_Forex_Bridge on BTCUSD M5 + "
-                        f"RUN_AGENT_MT4_BTC.bat (or gold zip for XAUUSD)."
+                        f"Attach JM_Forex_Bridge on XAUUSD + RUN_AGENT_MT4/MT5.bat."
                     ),
                     stop_loss=request.stop_loss,
                     take_profit=request.take_profit,

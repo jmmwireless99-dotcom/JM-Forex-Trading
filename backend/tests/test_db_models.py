@@ -16,7 +16,6 @@ def test_seed_specs_match_prompt():
         "EMA_RSI_Scalp",
         "Liquidity_Sweep_SMC",
         "London_Judas_Sweep",
-        "BTC_EMA_RSI_Scalp",
     }
     ema = next(s for s in SEED_STRATEGIES if s["name"] == "EMA_RSI_Scalp")
     assert ema["parameters"]["ema_trend"] == 200

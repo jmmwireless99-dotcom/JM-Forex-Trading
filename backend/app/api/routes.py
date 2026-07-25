@@ -361,10 +361,13 @@ async def set_execution_mode(body: ExecutionModeBody) -> dict:
 async def candles(symbol: str | None = None, limit: int = 200) -> dict:
     engine = get_engine()
     limit = max(10, min(limit, 500))
+    sym = (symbol or engine.settings.symbols[0]).upper()
+    if "BTC" in sym or "BITCOIN" in sym or ("XAU" not in sym and sym != "GOLD"):
+        sym = engine.settings.symbols[0]
     return {
-        "symbol": (symbol or engine.settings.symbols[0]).upper(),
+        "symbol": sym,
         "period_seconds": engine.candles.period_seconds,
-        "candles": engine.candle_history(symbol, limit),
+        "candles": engine.candle_history(sym, limit),
     }
 
 
@@ -375,17 +378,6 @@ async def gold_candles(interval: str = "5m", limit: int = 300) -> dict:
 
     try:
         return fetch_gold_candles(interval=interval, limit=min(max(limit, 50), 1000))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
-
-
-@router.get("/market/btc-candles")
-async def btc_candles(interval: str = "5m", limit: int = 300) -> dict:
-    """Live BTCUSD OHLC (Binance BTCUSDT). Display + paper BTC strategy sync."""
-    from app.market_data.crypto_feed import fetch_btc_candles
-
-    try:
-        return fetch_btc_candles(interval=interval, limit=min(max(limit, 50), 1000))
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -737,6 +729,14 @@ async def place_order(
     engine = get_engine()
     settings = get_settings()
     symbol = (body.symbol or "XAUUSD").upper()
+    # Desk is XAUUSD-only — reject retired crypto symbols.
+    if "BTC" in symbol or "BITCOIN" in symbol:
+        raise HTTPException(
+            status_code=400,
+            detail="BTC trading removed — desk is XAUUSD only",
+        )
+    if "XAU" not in symbol and symbol != "GOLD":
+        symbol = "XAUUSD"
     sl = body.stop_loss
     tp = body.take_profit
     tick = engine._recent_ticks.get(symbol)

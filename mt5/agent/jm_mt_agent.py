@@ -6,9 +6,9 @@ Reads/writes Common\\Files CSV from JM_Forex_Bridge EA,
 and syncs with the cloud desk at https://jmtechsolution.cloud/fx/
 
 Setup:
-  1. Attach JM_Forex_Bridge EA on XAUUSD or BTCUSD M5 (UseCommonFolder=true)
-  2. Edit config.json — set bridge_token + symbol (XAUUSD or BTCUSD)
-  3. Double-click RUN_AGENT_MT4.bat / RUN_AGENT_MT4_BTC.bat / RUN_AGENT_MT5.bat
+  1. Attach JM_Forex_Bridge EA on XAUUSD (UseCommonFolder=true)
+  2. Edit config.json — set bridge_token from Joel / server
+  3. Double-click RUN_AGENT_MT4.bat / RUN_AGENT_MT5.bat
 
 Requires: Python 3.10+ (stdlib only — no pip packages).
 """

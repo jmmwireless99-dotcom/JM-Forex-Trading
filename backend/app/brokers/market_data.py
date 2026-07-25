@@ -43,8 +43,6 @@ class MarketDataSimulator:
         "USDJPY": (156.20, 0.012, 0.015),
         # Fallback only — normally overwritten by live gold sync (~4100+)
         "XAUUSD": (2350.0, 0.30, 0.45),
-        # Fallback — overwritten by Binance BTCUSDT live sync
-        "BTCUSD": (95000.0, 8.0, 25.0),
     }
 
     def __init__(
@@ -82,7 +80,7 @@ class MarketDataSimulator:
         if self._live_mid_provider is None:
             return updated
         for symbol, state in self._states.items():
-            if symbol not in {"XAUUSD", "BTCUSD"} and not force:
+            if symbol != "XAUUSD" and not force:
                 continue
             try:
                 live = self._live_mid_provider(symbol)
@@ -93,15 +91,13 @@ class MarketDataSimulator:
             price = float(live)
             if symbol == "XAUUSD" and not (1000 < price < 20000):
                 continue
-            if symbol == "BTCUSD" and not (1000 < price < 1_000_000):
-                continue
             self.sync_mid(symbol, price)
             updated[symbol] = price
         return updated
 
     def next_ticks(self) -> list[Tick]:
         self._step += 1
-        # Refresh live gold/BTC anchors periodically (provider is cached ~15–20s).
+        # Refresh live gold anchors periodically (provider is cached ~15–20s).
         if self._live_mid_provider and self._step % 15 == 1:
             self.pull_live_mids(force=True)
 
@@ -120,16 +116,6 @@ class MarketDataSimulator:
                     live_tracked = True
                 elif state.session_anchor and state.session_anchor > 1000:
                     noise = random.gauss(0, self._live_noise) if self._live_noise else 0.0
-                    state.mid = float(state.session_anchor) + noise
-                    live_tracked = True
-            elif self._live_mid_provider and state.symbol == "BTCUSD":
-                if state.session_anchor and state.session_anchor > 1000:
-                    # Slightly larger noise — BTC ticks move more than gold.
-                    noise = (
-                        random.gauss(0, max(self._live_noise * 4.0, 2.0))
-                        if self._live_noise
-                        else 0.0
-                    )
                     state.mid = float(state.session_anchor) + noise
                     live_tracked = True
 
@@ -154,7 +140,7 @@ class MarketDataSimulator:
             half = state.spread / 2
             bid = state.mid - half
             ask = state.mid + half
-            decimals = 2 if state.symbol in {"XAUUSD", "BTCUSD"} else 5
+            decimals = 2 if state.symbol == "XAUUSD" else 5
             ticks.append(
                 Tick(
                     symbol=state.symbol,

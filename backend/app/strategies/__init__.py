@@ -1,6 +1,5 @@
 from app.db.seed import seed_params
 from app.strategies.base import Strategy
-from app.strategies.btc_ema_rsi import BtcEmaRsiScalpStrategy
 from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
 from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
@@ -11,7 +10,6 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
     LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy,
     LondonJudasSweepStrategy.name: LondonJudasSweepStrategy,
-    BtcEmaRsiScalpStrategy.name: BtcEmaRsiScalpStrategy,
 }
 
 # Aliases for UI / older labels
@@ -24,11 +22,6 @@ _ALIASES = {
     "london_judas": LondonJudasSweepStrategy.name,
     "london_judas_sweep": LondonJudasSweepStrategy.name,
     "judas": LondonJudasSweepStrategy.name,
-    "btc": BtcEmaRsiScalpStrategy.name,
-    "btcusd": BtcEmaRsiScalpStrategy.name,
-    "btc_ema": BtcEmaRsiScalpStrategy.name,
-    "btc_ema_rsi": BtcEmaRsiScalpStrategy.name,
-    "btc_ema_rsi_scalp": BtcEmaRsiScalpStrategy.name,
 }
 
 META_STRATEGIES: list[str] = []
@@ -100,33 +93,6 @@ def _ctor_kwargs(name: str, overrides: dict) -> dict:
                 out[key] = float(merged[key])
         if "mt_near_limit_pips" in merged:
             out["mt_near_limit_pips"] = float(merged["mt_near_limit_pips"])
-    elif name == BtcEmaRsiScalpStrategy.name:
-        if "ema_trend" in merged:
-            out["ema_trend"] = int(merged["ema_trend"])
-        if "ema_fast" in merged:
-            out["ema_fast"] = int(merged["ema_fast"])
-        if "ema_slow" in merged:
-            out["ema_slow"] = int(merged["ema_slow"])
-        if "rsi_period" in merged:
-            out["rsi_period"] = int(merged["rsi_period"])
-        buy = merged.get("rsi_buy_zone") or merged.get("rsi_buy")
-        sell = merged.get("rsi_sell_zone") or merged.get("rsi_sell")
-        if buy and len(buy) == 2:
-            out["rsi_buy"] = (float(buy[0]), float(buy[1]))
-        if sell and len(sell) == 2:
-            out["rsi_sell"] = (float(sell[0]), float(sell[1]))
-        if "min_bars_between_signals" in merged:
-            out["min_bars_between_signals"] = int(merged["min_bars_between_signals"])
-        if "allow_soft_confirm" in merged:
-            out["allow_soft_confirm"] = bool(merged["allow_soft_confirm"])
-        if "reward_r" in merged:
-            out["reward_r"] = float(merged["reward_r"])
-        if "min_stop_atr" in merged:
-            out["min_stop_atr"] = float(merged["min_stop_atr"])
-        if "min_tp_atr" in merged:
-            out["min_tp_atr"] = float(merged["min_tp_atr"])
-        if "max_stop_atr" in merged:
-            out["max_stop_atr"] = float(merged["max_stop_atr"])
     return out
 
 
@@ -134,6 +100,9 @@ def create_strategy(name: str, **kwargs) -> Strategy:
     kwargs.pop("managed_by_auto", None)
     key = (name or "").strip() or ManualOnlyStrategy.name
     if key.startswith("auto_gold"):
+        key = ManualOnlyStrategy.name
+    # Retired crypto strategy — fall back to manual.
+    if key.upper().startswith("BTC") or "BTC" in key.upper():
         key = ManualOnlyStrategy.name
     key = _ALIASES.get(key.lower(), key)
     cls = STRATEGY_REGISTRY.get(key)
@@ -153,7 +122,6 @@ __all__ = [
     "EmaRsiScalpStrategy",
     "LiquiditySweepSmcStrategy",
     "LondonJudasSweepStrategy",
-    "BtcEmaRsiScalpStrategy",
     "Strategy",
     "create_strategy",
     "list_strategy_names",

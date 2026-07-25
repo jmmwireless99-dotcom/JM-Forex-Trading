@@ -6,18 +6,14 @@ Desk: https://jmtechsolution.cloud/fx/
 
 DOWNLOADS
 ---------
-Agent + EA zip (XAUUSD gold):
+Agent + EA zip:
   https://jmtechsolution.cloud/fx/downloads/jm-mt4-bridge.zip
-
-BTCUSD bridge (M5 · BTC_EMA_RSI_Scalp):
-  https://jmtechsolution.cloud/fx/downloads/jm-mt4-btc-bridge.zip
-  → basahin SETUP_MT4_BTC.txt
 
 EA only (kung may agent ka na):
   https://jmtechsolution.cloud/fx/downloads/JM_Forex_Bridge.mq4
 
-SETUP (Windows PC na may MT4) — GOLD
-------------------------------------
+SETUP (Windows PC na may MT4)
+-----------------------------
 1) I-Extract All ang jm-mt4-bridge.zip (hal. Desktop\jm-mt4-bridge)
 
 2) MT4 → File → Open Data Folder → MQL4\Experts\

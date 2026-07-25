@@ -2,15 +2,15 @@
 //| JM_Forex_Bridge.mq4                                              |
 //| JM Forex ↔ cloud desk (MT4) — v1.08                              |
 //| Files: jm4_*.csv in Terminal Common\\Files                       |
-//| XAUUSD or BTCUSD — attach on M5 for BTC_EMA_RSI_Scalp             |
+//| XAUUSD gold scalp desk                                           |
 //+------------------------------------------------------------------+
 #property strict
 #property copyright "JM Forex / JM TECH SOLUTION"
 #property link      "https://jmtechsolution.cloud/fx/"
 #property version   "1.08"
-#property description "JM Forex MT4 bridge — XAUUSD/BTCUSD + AutoTrading"
+#property description "JM Forex MT4 bridge — XAUUSD + AutoTrading"
 
-input string InpSymbol           = "XAUUSD";   // XAUUSD or BTCUSD (auto-resolves broker suffix)
+input string InpSymbol           = "XAUUSD";   // XAUUSD / GOLD (auto-resolves broker suffix)
 input int    InpMagic            = 260719;
 input int    InpSlippagePoints   = 30;
 input int    InpPollMs           = 500;
@@ -33,17 +33,6 @@ bool IsGoldName(string s)
    return (StringFind(u, "XAU") >= 0 || StringFind(u, "GOLD") >= 0);
 }
 
-bool IsBtcName(string s)
-{
-   string u = s;
-   StringToUpper(u);
-   return (
-      StringFind(u, "BTC") >= 0 ||
-      StringFind(u, "BITCOIN") >= 0 ||
-      StringFind(u, "BTCUSD") >= 0
-   );
-}
-
 string ResolveSymbol(string wanted)
 {
    string w = wanted;
@@ -58,27 +47,13 @@ string ResolveSymbol(string wanted)
 
    string suffixes[10] = {".", "m", ".m", "pro", ".pro", "c", ".c", "s", "#", ".a"};
    string bases[6];
-   int nbase = 0;
-   if(IsBtcName(w))
-   {
-      bases[0] = "BTCUSD";
-      bases[1] = "BTCUSDm";
-      bases[2] = "Bitcoin";
-      bases[3] = "BTCUSDT";
-      bases[4] = "BTCUSD.";
-      bases[5] = "BTCUSD#";
-      nbase = 6;
-   }
-   else
-   {
-      bases[0] = "XAUUSD";
-      bases[1] = "XAUUSDm";
-      bases[2] = "GOLD";
-      bases[3] = "XAUUSD.";
-      bases[4] = "XAUUSD#";
-      bases[5] = "XAUUSD.a";
-      nbase = 6;
-   }
+   bases[0] = "XAUUSD";
+   bases[1] = "XAUUSDm";
+   bases[2] = "GOLD";
+   bases[3] = "XAUUSD.";
+   bases[4] = "XAUUSD#";
+   bases[5] = "XAUUSD.a";
+   int nbase = 6;
    for(int b = 0; b < nbase; b++)
    {
       if(MarketInfo(bases[b], MODE_BID) > 0 || SymbolSelect(bases[b], true))
@@ -92,7 +67,7 @@ string ResolveSymbol(string wanted)
    }
 
    string chart_sym = Symbol();
-   if(IsGoldName(chart_sym) || IsBtcName(chart_sym))
+   if(IsGoldName(chart_sym))
       return chart_sym;
    return w;
 }
@@ -105,7 +80,6 @@ bool SymbolMatchesBridge(string cmd_symbol)
    StringToUpper(a);
    StringToUpper(b);
    if(IsGoldName(a) && IsGoldName(b)) return true;
-   if(IsBtcName(a) && IsBtcName(b)) return true;
    return false;
 }
 
@@ -125,9 +99,6 @@ string TradeBlockReason()
 
 int EffectiveSlippage()
 {
-   // BTC CFDs move faster — 30 points is too tight on 2-digit quotes.
-   if(IsBtcName(g_symbol) && InpSlippagePoints < 300)
-      return 500;
    return InpSlippagePoints;
 }
 
@@ -135,18 +106,15 @@ void UpdateChartComment()
 {
    string block = TradeBlockReason();
    string ok = (StringLen(block) == 0) ? "YES" : "NO";
-   string tip = IsBtcName(g_symbol)
-      ? "TF: M5 · strategy BTC_EMA_RSI_Scalp"
-      : "Gold scalp · BTC: InpSymbol=BTCUSD on M5 chart";
    Comment(
       "JM Forex MT4 Bridge v1.08\n",
       "Symbol: ", g_symbol, "\n",
-      tip, "\n",
+      "XAUUSD gold scalp desk\n",
       "Login: ", IntegerToString(AccountNumber()), "\n",
       "trade_ok=", ok, "\n",
       (StringLen(block) > 0 ? ("block=" + block + "\n") : ""),
       "Common Files: ", (UseCommonFolder ? "YES" : "NO — set true!"), "\n",
-      "Keep RUN_AGENT_MT4*.bat open"
+      "Keep RUN_AGENT_MT4.bat open"
    );
 }
 

@@ -39,7 +39,6 @@ function pnlClass(n) {
 function normalizeStrategy(label) {
   if (!label) return 'manual_only'
   if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
-  if (String(label).toUpperCase().includes('BTC')) return 'manual_only'
   return label
 }
 
@@ -621,7 +620,7 @@ export default function App() {
             disabled={busy}
           >
             {(strategies.length
-              ? strategies.filter((name) => !String(name).toUpperCase().includes('BTC'))
+              ? strategies
               : [
                   'manual_only',
                   'EMA_RSI_Scalp',
@@ -1240,9 +1239,7 @@ export default function App() {
         <section className="panel schedule-bottom" style={{ gridColumn: '1 / -1' }}>
           <h2>Scalp desk · Entry rules</h2>
           <div className="strategy-card-grid">
-            {(desk?.strategy_details || [])
-              .filter((strat) => !String(strat.id || strat.name || '').toUpperCase().includes('BTC'))
-              .map((strat) => {
+            {(desk?.strategy_details || []).map((strat) => {
               const active =
                 status?.active_strategy === strat.id ||
                 autoInfo?.active_strategy === strat.id
