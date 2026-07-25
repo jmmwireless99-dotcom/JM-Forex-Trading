@@ -636,7 +636,7 @@ export default function App() {
                     : name === 'London_Judas_Sweep'
                       ? 'London_Judas_Sweep (XAU · Asia sweep → FVG · London)'
                       : name === 'Liquidity_Sweep_SMC'
-                        ? 'Liquidity_Sweep_SMC (XAU · sweep + FVG/OB · overlap)'
+                        ? 'Liquidity_Sweep_SMC (XAU · PDH/PDL sweep → FVG50 · overlap)'
                         : name}
               </option>
             ))}
