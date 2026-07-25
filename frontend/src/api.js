@@ -117,10 +117,6 @@ export const api = {
     request(
       `/market/gold-candles?interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`,
     ),
-  btcCandles: ({ interval = '5m', limit = 400 } = {}) =>
-    request(
-      `/market/btc-candles?interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`,
-    ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
   loginAccount: (body) =>

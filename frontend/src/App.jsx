@@ -115,18 +115,6 @@ export default function App() {
       return 'tradingview'
     }
   }) // tradingview | desk
-  const [chartSymbol, setChartSymbol] = useState(() => {
-    try {
-      const saved = localStorage.getItem('jm_chart_symbol')
-      return saved === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD'
-    } catch {
-      return 'XAUUSD'
-    }
-  })
-  const chartSymbolRef = useRef(chartSymbol)
-  useEffect(() => {
-    chartSymbolRef.current = chartSymbol
-  }, [chartSymbol])
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
@@ -134,16 +122,6 @@ export default function App() {
   const [sessionBoot, setSessionBoot] = useState(0)
   const [authTab, setAuthTab] = useState('login')
   const accountIdRef = useRef(null)
-
-  function pickChartSymbol(next) {
-    const sym = next === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD'
-    setChartSymbol(sym)
-    try {
-      localStorage.setItem('jm_chart_symbol', sym)
-    } catch {
-      /* ignore */
-    }
-  }
 
   useEffect(() => {
     let alive = true
@@ -178,7 +156,7 @@ export default function App() {
             api.strategies(),
             api.desk(),
             api.mtStatus(),
-            api.candles(chartSymbol === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD', 200),
+            api.candles('XAUUSD', 200),
             api.trades(100),
             api.auto(),
           ])
@@ -281,12 +259,12 @@ export default function App() {
           }
           if (msg.event === 'candles') {
             const sym = msg.data?.symbol || msg.data?.candles?.[0]?.symbol
-            if (!sym || sym === chartSymbolRef.current) {
+            if (!sym || sym === 'XAUUSD') {
               setCandles(msg.data.candles || [])
             }
           }
           if (msg.event === 'candle') {
-            if (msg.data?.symbol && msg.data.symbol !== chartSymbolRef.current) return
+            if (msg.data?.symbol && msg.data.symbol !== 'XAUUSD') return
             setLiveCandle(msg.data)
             setCandles((prev) => {
               const next = [...prev]
@@ -299,7 +277,7 @@ export default function App() {
             })
           }
           if (msg.event === 'candle_closed') {
-            if (msg.data?.symbol && msg.data.symbol !== chartSymbolRef.current) return
+            if (msg.data?.symbol && msg.data.symbol !== 'XAUUSD') return
             setLiveCandle(null)
             setCandles((prev) => {
               const next = [...prev.filter((c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp))]
@@ -346,25 +324,6 @@ export default function App() {
       clearInterval(deskTimer)
     }
   }, [sessionBoot])
-
-  // Desk tape follows selected chart symbol (XAUUSD or BTCUSD).
-  useEffect(() => {
-    if (!authReady || !accountMeta) return undefined
-    let alive = true
-    ;(async () => {
-      try {
-        const candleInfo = await api.candles(chartSymbol, 200)
-        if (!alive) return
-        setCandles(candleInfo.candles || [])
-        setLiveCandle(null)
-      } catch {
-        /* keep previous candles */
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [chartSymbol, authReady, accountMeta])
 
   function handleAuthed(session) {
     setError('')
@@ -464,13 +423,9 @@ export default function App() {
       } catch {
         /* save is best-effort if guest/desk */
       }
-      const btcNote =
-        strategy === 'BTC_EMA_RSI_Scalp'
-          ? ' · BTCUSD paper (Binance) — gold auto OFF'
-          : ''
       setOrderNote(
         res?.message ||
-          `Strategy set to ${strategy} (saved · session auto-follow OFF)${btcNote}`,
+          `Strategy set to ${strategy} (saved · session auto-follow OFF)`,
       )
       return res
     })
@@ -531,7 +486,7 @@ export default function App() {
   async function manualTrade(side) {
     await run(async () => {
       const order = await api.placeOrder({
-        symbol: chartSymbol === 'BTCUSD' ? 'BTCUSD' : 'XAUUSD',
+        symbol: 'XAUUSD',
         side,
         lots: Number(manualLots) || 0.01,
         comment: 'manual',
@@ -574,12 +529,11 @@ export default function App() {
     ? Boolean(mt?.platforms?.[accountPlatform]?.online)
     : mtOnline
   const gold = ticks.XAUUSD
-  const btc = ticks.BTCUSD
-  const quoteTick = chartSymbol === 'BTCUSD' ? btc : gold
+  const quoteTick = gold
   const maxOpen = Number(desk?.risk?.max_open_positions) || 3
   const hasOpen = positions.length > 0
   const chartPositions = positions.filter(
-    (p) => !p.symbol || p.symbol === chartSymbol,
+    (p) => !p.symbol || p.symbol === 'XAUUSD',
   )
   const atMaxOpen = positions.length >= maxOpen
   const hasBuyOpen = chartPositions.some((p) => p.side === 'BUY')
@@ -636,8 +590,7 @@ export default function App() {
           />
         </div>
         <p>
-          XAUUSD scalp desk + optional BTCUSD (BTC_EMA_RSI_Scalp).
-          Manual select → Apply/Save. Buy/Sell with auto SL/TP anytime.
+          XAUUSD scalp desk. Manual select → Apply/Save. Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
           {accountPlatform === 'mt4' || accountPlatform === 'mt5' ? (
@@ -667,13 +620,12 @@ export default function App() {
             disabled={busy}
           >
             {(strategies.length
-              ? strategies
+              ? strategies.filter((name) => !String(name).toUpperCase().includes('BTC'))
               : [
                   'manual_only',
                   'EMA_RSI_Scalp',
                   'London_Judas_Sweep',
                   'Liquidity_Sweep_SMC',
-                  'BTC_EMA_RSI_Scalp',
                 ]
             ).map((name) => (
               <option key={name} value={name}>
@@ -685,9 +637,7 @@ export default function App() {
                       ? 'London_Judas_Sweep (XAU · Asia sweep → FVG · London)'
                       : name === 'Liquidity_Sweep_SMC'
                         ? 'Liquidity_Sweep_SMC (XAU · sweep + FVG/OB · overlap)'
-                        : name === 'BTC_EMA_RSI_Scalp'
-                          ? 'BTC_EMA_RSI_Scalp (BTCUSD · best EMA pullback · save)'
-                          : name}
+                        : name}
               </option>
             ))}
           </select>
@@ -742,7 +692,6 @@ export default function App() {
             MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
           </span>
           {gold ? <span>XAUUSD {gold.mid}</span> : null}
-          {btc ? <span>BTCUSD {btc.mid}</span> : null}
         </div>
         {autoInfo?.decision ? (
           <div className="meta" style={{ marginTop: '0.55rem' }}>
@@ -926,9 +875,7 @@ export default function App() {
         <div className="manual-trade-head">
           <strong>Manual trade</strong>
           <span className="meta">
-            {chartSymbol}
-            {chartSymbol === 'BTCUSD' ? ' · M5 signal' : ''}
-            {' · '}lots {manualLots} ·{' '}
+            XAUUSD · lots {manualLots} ·{' '}
             {autoStops ? 'Auto SL/TP ON' : 'No SL/TP on fill'}
           </span>
         </div>
@@ -984,7 +931,7 @@ export default function App() {
                 ? 'BUY still open — no opposite flip'
                 : atMaxOpen
                   ? `Max ${maxOpen} open positions`
-                  : `Market SELL ${chartSymbol}`
+                  : 'Market SELL XAUUSD'
             }
           >
             SELL {quoteTick?.bid != null ? Number(quoteTick.bid).toFixed(2) : ''}
@@ -999,7 +946,7 @@ export default function App() {
                 ? 'SELL still open — no opposite flip'
                 : atMaxOpen
                   ? `Max ${maxOpen} open positions`
-                  : `Market BUY ${chartSymbol}`
+                  : 'Market BUY XAUUSD'
             }
           >
             BUY {quoteTick?.ask != null ? Number(quoteTick.ask).toFixed(2) : ''}
@@ -1018,21 +965,6 @@ export default function App() {
 
       <section className="chart-panel">
         <div className="chart-mode-bar">
-          <button
-            type="button"
-            className={`chart-mode-btn ${chartSymbol === 'XAUUSD' ? 'on' : ''}`}
-            onClick={() => pickChartSymbol('XAUUSD')}
-          >
-            XAUUSD
-          </button>
-          <button
-            type="button"
-            className={`chart-mode-btn ${chartSymbol === 'BTCUSD' ? 'on' : ''}`}
-            onClick={() => pickChartSymbol('BTCUSD')}
-          >
-            BTCUSD
-          </button>
-          <span className="tv-bar-sep" aria-hidden="true" />
           <button
             type="button"
             className={`chart-mode-btn ${chartMode === 'tradingview' ? 'on' : ''}`}
@@ -1063,24 +995,18 @@ export default function App() {
           </button>
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
-              ? chartSymbol === 'BTCUSD'
-                ? 'BTCUSD M5 · BTC_EMA_RSI_Scalp · Binance / MT4 BTC bridge'
-                : 'Live COMEX gold · strategies still use paper/MT feed'
-              : `Engine ${chartSymbol} candles — paper sim or MT bridge`}
+              ? 'Live COMEX gold · strategies still use paper/MT feed'
+              : 'Engine XAUUSD candles — paper sim or MT bridge'}
             {quoteTick ? ` · mid ${quoteTick.mid}` : ''}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
-          <TradingViewGoldChart
-            market={chartSymbol}
-            interval="5"
-            onMarketChange={pickChartSymbol}
-          />
+          <TradingViewGoldChart interval="5" />
         ) : (
           <CandleChart
             candles={candles}
             liveCandle={liveCandle}
-            symbol={chartSymbol}
+            symbol="XAUUSD"
           />
         )}
       </section>
