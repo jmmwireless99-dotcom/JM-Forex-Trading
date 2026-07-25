@@ -67,20 +67,38 @@ def _ctor_kwargs(name: str, overrides: dict) -> dict:
         if "max_stop_atr" in merged:
             out["max_stop_atr"] = float(merged["max_stop_atr"])
     elif name == LiquiditySweepSmcStrategy.name:
-        if "require_sweep" in merged:
-            out["require_sweep"] = bool(merged["require_sweep"])
-        if "require_zone_retest" in merged:
-            out["require_zone_retest"] = bool(merged["require_zone_retest"])
-        if "reward_r" in merged:
-            out["reward_r"] = float(merged["reward_r"])
-        if "min_stop_atr" in merged:
-            out["min_stop_atr"] = float(merged["min_stop_atr"])
-        if "min_tp_atr" in merged:
-            out["min_tp_atr"] = float(merged["min_tp_atr"])
-        if "max_stop_atr" in merged:
-            out["max_stop_atr"] = float(merged["max_stop_atr"])
+        for flag in (
+            "require_sweep",
+            "require_zone_retest",
+            "require_displacement",
+            "prefer_pdh_pdl",
+            "use_limit_entry",
+        ):
+            if flag in merged:
+                out[flag] = bool(merged[flag])
+        for key in (
+            "reward_r",
+            "min_stop_atr",
+            "min_tp_atr",
+            "max_stop_atr",
+            "min_sweep_atr",
+            "max_sweep_atr",
+            "min_displacement_atr",
+            "sl_buffer_atr",
+            "min_sl_dollars",
+            "fvg_entry_pct",
+            "mt_near_limit_pips",
+        ):
+            if key in merged:
+                out[key] = float(merged[key])
         if "max_entries_per_day" in merged:
             out["max_entries_per_day"] = int(merged["max_entries_per_day"])
+        if "sweep_max_age_bars" in merged:
+            out["sweep_max_age_bars"] = int(merged["sweep_max_age_bars"])
+        if "kill_zones_utc" in merged and merged["kill_zones_utc"]:
+            out["kill_zones_utc"] = tuple(
+                tuple(int(x) for x in pair) for pair in merged["kill_zones_utc"]
+            )
     elif name == LondonJudasSweepStrategy.name:
         for key in (
             "min_sweep_pips",

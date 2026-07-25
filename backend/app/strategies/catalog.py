@@ -120,36 +120,41 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "Liquidity_Sweep_SMC",
             "name": "Liquidity Sweep SMC",
-            "sessions": ["London/NY overlap (UTC 13–16 / PH 9PM–12AM)"],
+            "sessions": [
+                "London kill zone (UTC 07–11 / PH 3–7PM) when selected",
+                "London/NY overlap (UTC 13–16 / PH 9PM–12AM) — auto prime",
+            ],
             "session_slots": ["london_ny_overlap"],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
-                "Best SMC: sweep Asia H/L / PDH-PDL / swing → MSS → FVG/OB retest · "
-                "SL beyond sweep · unlimited quality BUY/SELL."
+                "SMC blueprint: PDH/PDL (priority) sweep → displacement + MSS/ChoCH → "
+                "FVG50 LIMIT · SL beyond sweep wick · TP opposite liquidity / ≥2.8R."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (00:00–06:00 UTC) + PDH/PDL + recent swings.",
-                "Sweep: wick beyond level then close back inside (liquidity grab).",
-                "Structure shift: MSS must confirm the sweep bias.",
-                "Entry on FVG (preferred) or Order Block retest aligned with bias.",
-                "No daily trade limit — every complete setup may fire (BUY or SELL).",
+                "Kill zones only: London UTC 07–11 + NY overlap UTC 13–16 (no dead hours).",
+                "Mark PDH/PDL first, then Asia H/L + swings.",
+                "Sweep: wick beyond level, close back inside (depth 0.35–2.8 ATR).",
+                "Confirm: displacement candle + MSS/ChoCH after the sweep.",
+                "LIMIT at FVG 50% equilibrium (MARKET if already through).",
+                "SL beyond sweep wick (≥$1.50 / ATR buffer) · TP opposite major H/L or ≥2.8R.",
+                "Skip if R:R < 2.0 · sweep expires after 18 M5 bars.",
             ],
             "entry_flow": [
-                "Detect sweep of ASIAN_HIGH/PDH/SWING_HIGH (SELL) or LOW side (BUY).",
-                "Require MSS confirmation on last 20 M5 bars.",
-                "Enter on FVG/OB retest → MARKET · SL beyond sweep extreme · TP ≈2.5R.",
+                "PDH/PDL (or Asia/swing) sweep → displacement → MSS → FVG50 LIMIT.",
+                "SELL after high sweep; BUY after low sweep.",
+                "MT: fill near FVG mid (~120 pips) as market when limit is close.",
             ],
             "parameters": seed_params("Liquidity_Sweep_SMC"),
             "safety": [
-                "Requires liquidity sweep before entry (require_sweep=True).",
-                "Requires FVG/OB retest (require_zone_retest=True).",
+                "Requires sweep + displacement + MSS (no bare structure entries).",
+                "FVG50 LIMIT expires in 2 hours if unfilled.",
                 "Session filter + news blackout when enabled.",
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
-            "order_type": "MARKET",
-            "reward_r": 2.5,
+            "order_type": "LIMIT",
+            "reward_r": 2.8,
         },
         _MANUAL_CARD,
     ]
@@ -160,6 +165,6 @@ def entry_rules_short() -> list[str]:
     return [
         "London_Judas_Sweep — Asia 00-06 · $0.80–$3.00 sweep · FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 · clear EMA20/50 · RSI · engulf/pin · SL@EMA50 · 2.5R",
-        "Liquidity_Sweep_SMC — sweep+MSS+FVG/OB · SL beyond sweep · unlimited quality",
+        "Liquidity_Sweep_SMC — PDH/PDL sweep → displacement+MSS → FVG50 LIMIT · ≥2.8R",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

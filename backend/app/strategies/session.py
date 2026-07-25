@@ -90,7 +90,10 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         utc_end=16,
         strategy="Liquidity_Sweep_SMC",
         tier=SessionTier.PRIME,
-        reason="London/NY overlap (UTC 13:00–15:59 / PH 21:00–23:59) — best XAUUSD liquidity",
+        reason=(
+            "London/NY overlap (UTC 13:00–15:59 / PH 21:00–23:59) — "
+            "SMC PDH/PDL sweep + FVG50 (prime gold volume)"
+        ),
     ),
     SessionSlot(
         label="new_york",
