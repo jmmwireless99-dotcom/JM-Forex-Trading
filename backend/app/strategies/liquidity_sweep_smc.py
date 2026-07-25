@@ -356,8 +356,9 @@ class LiquiditySweepSmcStrategy(Strategy):
         self._entries_today[day] = self._entries_today.get(day, 0) + 1
 
         side = Side.BUY if bias == "BUY" else Side.SELL
+        sweep_label = sweep.label if sweep is not None else "MSS"
         reason = (
-            f"SMC {side.value} · {sweep.label} · MSS confirm · {entry_zone.kind} entry"
+            f"SMC {side.value} · {sweep_label} · MSS confirm · {entry_zone.kind} entry"
         )
         self.last_checklist.append(
             f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"

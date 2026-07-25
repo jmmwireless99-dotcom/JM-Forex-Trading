@@ -369,10 +369,13 @@ class LondonJudasSweepStrategy(Strategy):
         entry = fvg.mid
         if sweep.bias == "SELL":
             sl = round(sweep.sweep_price + sl_buf, 2)
-            risk = abs(sl - entry)
-            if risk <= 0:
-                self.last_block_reason = "Invalid risk distance"
+            # SELL must have SL above entry — reject inverted FVG geometry.
+            if sl <= entry:
+                self.last_block_reason = (
+                    f"Invalid SELL SL geometry (SL {sl} <= entry {entry})"
+                )
                 return None
+            risk = sl - entry
             tp_asia = asian.low
             tp_rrr = round(entry - self.reward_r * risk, 2)
             tp = tp_asia if (entry - tp_asia) >= risk * 0.9 else tp_rrr
@@ -383,10 +386,13 @@ class LondonJudasSweepStrategy(Strategy):
             )
         else:
             sl = round(sweep.sweep_price - sl_buf, 2)
-            risk = abs(entry - sl)
-            if risk <= 0:
-                self.last_block_reason = "Invalid risk distance"
+            # BUY must have SL below entry — reject inverted FVG geometry.
+            if sl >= entry:
+                self.last_block_reason = (
+                    f"Invalid BUY SL geometry (SL {sl} >= entry {entry})"
+                )
                 return None
+            risk = entry - sl
             tp_asia = asian.high
             tp_rrr = round(entry + self.reward_r * risk, 2)
             tp = tp_asia if (tp_asia - entry) >= risk * 0.9 else tp_rrr

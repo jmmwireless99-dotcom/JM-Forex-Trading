@@ -83,11 +83,18 @@ class BtcEmaRsiScalpStrategy(Strategy):
             return None
 
         bars = self._structure_bars or candles
-        # Keep only BTC bars if mixed history ever appears
-        bars = [c for c in bars if (c.symbol or "").upper() in {"BTCUSD", "BTCUSDT", ""}] or bars
+        # Keep only BTC bars — never fall back to gold/mixed history.
+        bars = [
+            c
+            for c in bars
+            if (c.symbol or "").upper() in {"BTCUSD", "BTCUSDT", ""}
+        ]
         self.last_checklist = []
         self.last_block_reason = None
 
+        if not bars:
+            self.last_block_reason = "No BTCUSD bars in structure history"
+            return None
         if len(bars) < self.ema_trend + 5:
             self.last_block_reason = f"Need {self.ema_trend + 5}+ M5 BTC bars"
             return None

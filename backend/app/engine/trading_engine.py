@@ -575,6 +575,35 @@ class TradingEngine:
         u = (symbol or "").upper()
         return "BTC" in u or "BITCOIN" in u
 
+    @staticmethod
+    def _is_gold_symbol(symbol: str | None) -> bool:
+        u = (symbol or "").upper()
+        return "XAU" in u or "GOLD" in u
+
+    def _tick_matches_trade_symbol(
+        self, tick_symbol: str | None, trade_symbol: str | None
+    ) -> bool:
+        """Family match so XAUUSDm/GOLD still run gold strategies (not exact string)."""
+        if not trade_symbol:
+            return True
+        tick = (tick_symbol or "").upper()
+        want = trade_symbol.upper()
+        if self._is_btc_symbol(want):
+            return self._is_btc_symbol(tick)
+        if self._is_gold_symbol(want) or want == "XAUUSD":
+            return self._is_gold_symbol(tick)
+        return tick == want
+
+    def _strategy_accepts_tick_symbol(self, strat: object, tick_symbol: str) -> bool:
+        """Avoid feeding XAU M5 bars into BTC strategy history (and vice versa)."""
+        name = str(getattr(strat, "name", "") or "")
+        dedicated = getattr(strat, "symbol", None)
+        if dedicated and self._is_btc_symbol(str(dedicated)):
+            return self._is_btc_symbol(tick_symbol)
+        if name.startswith("BTC_") or name == "BTC_EMA_RSI_Scalp":
+            return self._is_btc_symbol(tick_symbol)
+        return self._is_gold_symbol(tick_symbol)
+
     def _mt_bridge_live_symbol(self, platform: str | None) -> str:
         """Last symbol reported by the Windows agent for a platform."""
         plat = (platform or "").strip().lower()
@@ -1792,7 +1821,8 @@ class TradingEngine:
                 return [tick] + btc_ticks
             if self.settings.mt_remote_bridge:
                 return paper_ticks
-            return btc_ticks
+            # Local MT offline — keep full paper tape (gold + BTC), not BTC-only.
+            return paper_ticks
         return paper_ticks
 
     async def _tick_once(self) -> None:
@@ -1803,8 +1833,8 @@ class TradingEngine:
                 self.last_tick_at = tick.timestamp
                 self._recent_ticks[tick.symbol] = tick
 
-                # Hourly gold session auto-transfer — only on XAUUSD ticks.
-                if self.auto_enabled and tick.symbol.upper() == "XAUUSD":
+                # Hourly gold session auto-transfer — gold family ticks (XAU*/GOLD).
+                if self.auto_enabled and self._is_gold_symbol(tick.symbol):
                     await self._run_hourly_auto_transfer(tick)
 
                 # Paper books keep marking even when the MT bridge feeds ticks.
@@ -1843,13 +1873,18 @@ class TradingEngine:
                 )
                 trade_sym = self._strategy_trade_symbol()
                 # Gold strategy must not evaluate on BTC ticks (and vice versa).
-                if trade_sym and tick.symbol.upper() != trade_sym.upper():
+                # Use family match so broker aliases (XAUUSDm / GOLD) still trade.
+                if trade_sym and not self._tick_matches_trade_symbol(
+                    tick.symbol, trade_sym
+                ):
                     continue
 
                 if closed_signal is not None:
                     # Feed M5 closes into strategies — structure / standard entries.
                     await self._persist_candle(closed_signal, timeframe="M5")
                     for strat in self._strategies.values():
+                        if not self._strategy_accepts_tick_symbol(strat, tick.symbol):
+                            continue
                         if getattr(strat, "candle_driven", False):
                             strat.feed_bar(closed_signal)
                             if hasattr(strat, "set_structure_bars"):

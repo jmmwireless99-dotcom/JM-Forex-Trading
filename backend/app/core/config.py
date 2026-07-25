@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # Allow stacking clear same-direction signals (not opposite flips).
     max_open_positions: int = 3
     # Min signal.strength to add another open trade on the same symbol/side.
-    pyramid_min_strength: float = 0.85
+    # EMA signals use strength 0.85 — require > that so EMA does not auto-stack.
+    pyramid_min_strength: float = 0.90
     max_daily_loss_pct: float = 0.0  # 0 = disabled (no daily loss kill-switch)
 
     # Fallback stops if a strategy does not supply ATR levels (gold points)
