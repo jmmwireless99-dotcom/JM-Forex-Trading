@@ -4,12 +4,14 @@ from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
 from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
 from app.strategies.manual_only import ManualOnlyStrategy
+from app.strategies.trend_breakout_atr import TrendBreakoutAtrStrategy
 
 STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     ManualOnlyStrategy.name: ManualOnlyStrategy,
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
     LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy,
     LondonJudasSweepStrategy.name: LondonJudasSweepStrategy,
+    TrendBreakoutAtrStrategy.name: TrendBreakoutAtrStrategy,
 }
 
 # Aliases for UI / older labels
@@ -22,6 +24,10 @@ _ALIASES = {
     "london_judas": LondonJudasSweepStrategy.name,
     "london_judas_sweep": LondonJudasSweepStrategy.name,
     "judas": LondonJudasSweepStrategy.name,
+    "trend_breakout": TrendBreakoutAtrStrategy.name,
+    "trend_breakout_atr": TrendBreakoutAtrStrategy.name,
+    "breakout": TrendBreakoutAtrStrategy.name,
+    "donchian": TrendBreakoutAtrStrategy.name,
 }
 
 META_STRATEGIES: list[str] = []
@@ -111,6 +117,29 @@ def _ctor_kwargs(name: str, overrides: dict) -> dict:
                 out[key] = float(merged[key])
         if "mt_near_limit_pips" in merged:
             out["mt_near_limit_pips"] = float(merged["mt_near_limit_pips"])
+    elif name == TrendBreakoutAtrStrategy.name:
+        for key in (
+            "channel_period",
+            "ema_trend",
+            "adx_period",
+            "min_bars_between_signals",
+        ):
+            if key in merged:
+                out[key] = int(merged[key])
+        for key in (
+            "min_adx",
+            "min_break_atr",
+            "reward_r",
+            "min_stop_atr",
+            "min_tp_atr",
+            "max_stop_atr",
+        ):
+            if key in merged:
+                out[key] = float(merged[key])
+        if "kill_zones_utc" in merged and merged["kill_zones_utc"]:
+            out["kill_zones_utc"] = tuple(
+                tuple(int(x) for x in pair) for pair in merged["kill_zones_utc"]
+            )
     return out
 
 
@@ -140,6 +169,7 @@ __all__ = [
     "EmaRsiScalpStrategy",
     "LiquiditySweepSmcStrategy",
     "LondonJudasSweepStrategy",
+    "TrendBreakoutAtrStrategy",
     "Strategy",
     "create_strategy",
     "list_strategy_names",

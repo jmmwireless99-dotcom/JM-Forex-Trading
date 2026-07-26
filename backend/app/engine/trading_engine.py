@@ -44,6 +44,7 @@ _AUTO_POOL = (
     "EMA_RSI_Scalp",
     "London_Judas_Sweep",
     "Liquidity_Sweep_SMC",
+    "Trend_Breakout_ATR",
 )
 
 

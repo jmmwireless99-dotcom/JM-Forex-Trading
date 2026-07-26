@@ -626,18 +626,21 @@ export default function App() {
                   'EMA_RSI_Scalp',
                   'London_Judas_Sweep',
                   'Liquidity_Sweep_SMC',
+                  'Trend_Breakout_ATR',
                 ]
             ).map((name) => (
               <option key={name} value={name}>
                 {name === 'manual_only'
                   ? 'manual_only (no auto signals)'
                   : name === 'EMA_RSI_Scalp'
-                    ? 'EMA_RSI_Scalp (XAU · EMA200 + RSI · Asia/NY)'
+                    ? 'EMA_RSI_Scalp (XAU · EMA200 + RSI · Asia)'
                     : name === 'London_Judas_Sweep'
                       ? 'London_Judas_Sweep (XAU · Asia sweep → FVG · London)'
                       : name === 'Liquidity_Sweep_SMC'
                         ? 'Liquidity_Sweep_SMC (XAU · PDH/PDL sweep → FVG50 · overlap)'
-                        : name}
+                        : name === 'Trend_Breakout_ATR'
+                          ? 'Trend_Breakout_ATR (XAU · Donchian break + SL · NY auto)'
+                          : name}
               </option>
             ))}
           </select>

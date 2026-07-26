@@ -80,12 +80,10 @@ def strategy_catalog() -> list[dict]:
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
             "sessions": [
-                "Asia (UTC 00–07 / PH 8AM–3PM)",
-                "New York (UTC 16–20 / PH 12–4AM; Fri cuts at 18:00 UTC)",
+                "Asia (UTC 00–07 / PH 8AM–3PM) — auto",
             ],
             "session_slots": [
                 "asia",
-                "new_york",
             ],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -156,6 +154,42 @@ def strategy_catalog() -> list[dict]:
             "order_type": "LIMIT",
             "reward_r": 2.8,
         },
+        {
+            "id": "Trend_Breakout_ATR",
+            "name": "Trend Breakout ATR",
+            "sessions": [
+                "New York (UTC 16–20 / PH 12–4AM) — auto",
+                "London (UTC 07–11) when selected manually",
+            ],
+            "session_slots": ["new_york"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "True trend/breakout + hard SL/TP: Donchian20 close-break · EMA200 "
+                "filter · ADX · ATR buffer · ≈2.5R. No grid / no martingale."
+            ),
+            "entry_rules": [
+                "Build Donchian 20-bar high/low (prior bars only).",
+                "BUY: M5 close breaks above channel + ATR buffer · price > EMA200.",
+                "SELL: M5 close breaks below channel + ATR buffer · price < EMA200.",
+                "ADX ≥ 18 (skip chop) · channel width ≥ 0.8 ATR.",
+                "MARKET entry · SL beyond opposite channel · TP ≥2.5R.",
+                "Expect win rate ~45–60% — edge from R:R, not high win%.",
+            ],
+            "entry_flow": [
+                "Range compress → directional close-break with trend filter.",
+                "Hard SL/TP every trade · space breakouts ≥10 M5 bars.",
+            ],
+            "parameters": seed_params("Trend_Breakout_ATR"),
+            "safety": [
+                "No averaging / grid / martingale.",
+                "Skip if R:R < 2.0 or ADX weak.",
+                "News blackout + session avoid when filters on.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 2.5,
+        },
         _MANUAL_CARD,
     ]
 
@@ -166,5 +200,6 @@ def entry_rules_short() -> list[str]:
         "London_Judas_Sweep — Asia 00-06 · $0.80–$3.00 sweep · FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 · clear EMA20/50 · RSI · engulf/pin · SL@EMA50 · 2.5R",
         "Liquidity_Sweep_SMC — PDH/PDL sweep → displacement+MSS → FVG50 LIMIT · ≥2.8R",
+        "Trend_Breakout_ATR — Donchian20 break · EMA200+ADX · hard SL · ≈2.5R · NY auto",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

@@ -100,9 +100,12 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="New York",
         utc_start=16,
         utc_end=20,
-        strategy="EMA_RSI_Scalp",
+        strategy="Trend_Breakout_ATR",
         tier=SessionTier.ALLOWED,
-        reason="New York session (UTC 16:00–19:59 / PH 00:00–03:59) — USD-driven gold continuation",
+        reason=(
+            "New York session (UTC 16:00–19:59 / PH 00:00–03:59) — "
+            "Trend_Breakout_ATR Donchian + hard SL (USD drive)"
+        ),
     ),
     SessionSlot(
         label="off_hours",
@@ -174,7 +177,7 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
     London wind-down 11:00–11:59 — stand aside
     London close 12:00–12:59 — kill Judas limits + stand aside
     Overlap 13:00–15:59 — SMC
-    New York 16:00–17:59 Fri / 16:00–19:59 Mon–Thu — EMA_RSI
+    New York 16:00–17:59 Fri / 16:00–19:59 Mon–Thu — Trend_Breakout_ATR
     Off-hours 20:00–23:59 — stand aside (thin)
     Friday ≥ 18:00 UTC — friday_late stand aside (weekend gap)
     Weekend — stand aside

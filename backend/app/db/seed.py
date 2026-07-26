@@ -1,4 +1,4 @@
-"""Seed core XAUUSD scalping strategies (EMA+RSI + SMC + London Judas)."""
+"""Seed core XAUUSD strategies (EMA · SMC · Judas · Trend Breakout)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ SEED_STRATEGIES: list[dict] = [
         "timeframe": "M5",
         "description": (
             "Best EMA pullback: EMA200 trend + clear EMA20/50 stack + RSI + "
-            "engulf/pin · structure SL beyond EMA50 · R≈2.5 TP · Asia/NY"
+            "engulf/pin · structure SL beyond EMA50 · R≈2.5 TP · Asia session"
         ),
         "parameters": {
             "ema_trend": 200,
@@ -101,6 +101,29 @@ SEED_STRATEGIES: list[dict] = [
             "entry": "FVG_50_LIMIT",
             "reward_r": 3.0,
             "mt_near_limit_pips": 120,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
+    {
+        "name": "Trend_Breakout_ATR",
+        "timeframe": "M5",
+        "description": (
+            "True trend/breakout + hard SL: Donchian20 close-break · EMA200 filter · "
+            "ADX · ATR buffer · R≈2.5 · auto New York (no grid/martingale)"
+        ),
+        "parameters": {
+            "channel_period": 20,
+            "ema_trend": 200,
+            "adx_period": 14,
+            "min_adx": 18,
+            "min_break_atr": 0.15,
+            "reward_r": 2.5,
+            "min_stop_atr": 1.2,
+            "min_tp_atr": 2.8,
+            "max_stop_atr": 2.8,
+            "min_bars_between_signals": 10,
+            "kill_zones_utc": [[7, 11], [16, 20]],
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
