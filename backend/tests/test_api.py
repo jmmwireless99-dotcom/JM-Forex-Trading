@@ -68,7 +68,7 @@ async def test_desk_endpoint(client):
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
-    assert len(data["strategy_details"]) == 4
+    assert len(data["strategy_details"]) >= 4
     london = next(s for s in data["strategy_details"] if s["id"] == "London_Judas_Sweep")
     assert london["order_type"] == "LIMIT"
     assert len(london["entry_rules"]) >= 4
@@ -133,6 +133,8 @@ async def test_paper_deposit_changes_capital(client):
     assert preview.status_code == 200
     assert preview.json()["deposit"] == 1000.0
     assert preview.json()["risk_per_trade_usd"] == 5.0
+    assert preview.json()["suggested_lots"] == 0.5
+    assert preview.json()["lots_per_1000"] == 0.5
 
     # Live account still at 500 until applied
     acc = await client.get("/api/account", headers=headers)

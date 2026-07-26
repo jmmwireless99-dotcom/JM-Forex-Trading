@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     # Gold desk risk defaults — tighter than multi-pair FX
     max_risk_per_trade_pct: float = 0.5
+    # Balance-scaled lot size: $1000 → 0.5 lot, $2000 → 1.0, etc.
+    # JM_LOTS_PER_1000=0.5
+    lots_per_1000: float = 0.5
     # Allow stacking clear same-direction signals (not opposite flips).
     max_open_positions: int = 3
     # Min signal.strength to add another open trade on the same symbol/side.

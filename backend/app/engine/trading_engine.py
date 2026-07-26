@@ -1457,9 +1457,8 @@ class TradingEngine:
         tp_pips = float(self.settings.default_take_profit_pips)
         risk_usd = amount * (risk_pct / 100.0)
         daily_usd = amount * (daily_pct / 100.0) if daily_pct > 0 else None
-        pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
-        suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
-        suggested_lots = max(0.01, round(suggested, 2))
+        lots_per_1000 = float(getattr(self.settings, "lots_per_1000", 0.5) or 0.5)
+        suggested_lots = acct.risk.lots_for_balance(amount)
         bound = self.is_mt_bound(acct)
         mt5_client = self.is_mt5_client(acct)
         return {
@@ -1475,6 +1474,7 @@ class TradingEngine:
             "daily_loss_limit_enabled": daily_pct > 0,
             "default_stop_loss_pips": stop_pips,
             "default_take_profit_pips": tp_pips,
+            "lots_per_1000": lots_per_1000,
             "suggested_lots": suggested_lots if (bound or not mt5_client) else 0.01,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
@@ -1484,7 +1484,10 @@ class TradingEngine:
                 else (
                     "MT account — waiting for bridge (RUN_AGENT + EA). No paper deposit."
                     if mt5_client
-                    else "Paper demo capital for this account only — other clients cannot see it"
+                    else (
+                        f"Lot size: {lots_per_1000:g} lot per $1000 "
+                        f"(${amount:,.0f} → {suggested_lots:.2f} lots)"
+                    )
                 )
             ),
         }
@@ -1894,12 +1897,11 @@ class TradingEngine:
             # One pending limit at a time; filled opens may already exist.
             return
 
-        # Prefer per-account manual lot size (desk "Manual settings"); else micro 0.01.
-        signal_lots = (
-            float(account.fixed_lots)
-            if account.fixed_lots is not None
-            else 0.01
-        )
+        # Prefer per-account manual lot size; else scale from balance (0.5 / $1000).
+        if account.fixed_lots is not None:
+            signal_lots = float(account.fixed_lots)
+        else:
+            signal_lots = account.risk.lots_for_balance(self._balance(account))
         signal_lots = max(0.01, min(round(signal_lots, 2), 10.0))
         request = OrderRequest(
             symbol=signal.symbol,

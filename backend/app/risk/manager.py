@@ -36,6 +36,16 @@ class RiskManager:
     def pip_size(self, symbol: str) -> float:
         return self.PIP_SIZES.get(symbol.upper(), 0.0001)
 
+    def lots_for_balance(self, balance: float) -> float:
+        """Scale lots from equity: default 0.5 lot per $1000."""
+        per = float(getattr(self.settings, "lots_per_1000", 0.5) or 0.5)
+        if per <= 0:
+            per = 0.5
+        if balance <= 0:
+            return 0.01
+        raw = (float(balance) / 1000.0) * per
+        return max(0.01, min(round(raw, 2), 10.0))
+
     def evaluate(
         self,
         request: OrderRequest,
@@ -82,27 +92,11 @@ class RiskManager:
             lots = max(0.01, min(round(float(request.lots), 2), 10.0))
             return RiskDecision(True, "Approved (manual lots)", adjusted_lots=lots)
 
-        # Position sizing from risk % and stop distance
-        stop_pips = self.settings.default_stop_loss_pips
-        if request.stop_loss and tick:
-            entry = tick.ask if request.side == Side.BUY else tick.bid
-            stop_pips = abs(entry - request.stop_loss) / self.pip_size(request.symbol)
-
-        if stop_pips <= 0:
-            return RiskDecision(False, "Invalid stop loss distance")
-
-        risk_amount = balance * (self.settings.max_risk_per_trade_pct / 100.0)
-        # $ value of 1 pip on 1.0 lot
-        # FX majors ≈ $10/pip; XAUUSD pip=0.1 → $10/pip on 100oz lot
-        pip_value_per_lot = 10.0
-        max_lots = risk_amount / (stop_pips * pip_value_per_lot)
-        # Gold: allow micro sizing down to 0.01
-        max_lots = max(0.01, round(min(max_lots, request.lots), 2))
-
-        if max_lots < 0.01:
-            return RiskDecision(False, "Calculated lot size below minimum 0.01")
-
-        return RiskDecision(True, "Approved", adjusted_lots=max_lots)
+        # Balance-scaled sizing: 0.5 lot per $1000 (cap by requested lots).
+        sized = self.lots_for_balance(balance)
+        requested = max(0.01, min(round(float(request.lots), 2), 10.0))
+        lots = min(requested, sized)
+        return RiskDecision(True, "Approved (balance lots)", adjusted_lots=lots)
 
     def apply_default_stops(
         self, request: OrderRequest, tick: Tick

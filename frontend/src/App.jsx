@@ -104,7 +104,7 @@ export default function App() {
   const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [manualLots, setManualLots] = useState(0.01)
+  const [manualLots, setManualLots] = useState(0.5)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
   const [chartMode, setChartMode] = useState(() => {
@@ -167,6 +167,8 @@ export default function App() {
         if (acc.deposit != null) setDepositInput(String(acc.deposit))
         else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
         if (acc.fixed_lots != null) setManualLots(String(acc.fixed_lots))
+        else if (acc.capital?.suggested_lots != null)
+          setManualLots(String(acc.capital.suggested_lots))
         setAccountMeta((prev) => ({
           ...(prev || {}),
           id: acc.account_id || prev?.id,
@@ -449,6 +451,12 @@ export default function App() {
       const res = await api.setDeposit(value, true)
       if (res?.account) setAccount(res.account)
       if (res?.capital) setCapital(res.capital)
+      if (
+        res?.account?.fixed_lots == null &&
+        res?.capital?.suggested_lots != null
+      ) {
+        setManualLots(String(res.capital.suggested_lots))
+      }
       setDepositInput(String(res?.capital?.deposit ?? value))
       if (res?.trades?.trades) setTrades(res.trades.trades)
       if (res?.trades?.summary) setTradeSummary(res.trades.summary)
@@ -468,6 +476,9 @@ export default function App() {
     try {
       const preview = await api.capitalPreview(amount)
       setCapital(preview)
+      if (account?.fixed_lots == null && preview?.suggested_lots != null) {
+        setManualLots(String(preview.suggested_lots))
+      }
     } catch (err) {
       setError(err.message || 'Preview failed')
     }
@@ -488,7 +499,7 @@ export default function App() {
       const order = await api.placeOrder({
         symbol: 'XAUUSD',
         side,
-        lots: Number(manualLots) || 0.01,
+        lots: Number(manualLots) || Number(capital?.suggested_lots) || 0.5,
         comment: 'manual',
         auto_stops: autoStops,
       })
@@ -866,7 +877,8 @@ export default function App() {
               <strong>
                 {Number(capital.suggested_lots).toFixed(2)}{' '}
                 <span className="meta">
-                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                  {Number(capital.lots_per_1000 || 0.5)} / $1000 · SL{' '}
+                  {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
                 </span>
               </strong>
             </div>
