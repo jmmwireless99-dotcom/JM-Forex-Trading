@@ -43,6 +43,27 @@ async def test_hourly_transfer_switches_london_to_smc():
 
 
 @pytest.mark.asyncio
+async def test_hourly_transfer_switches_smc_to_trend_breakout():
+    engine = TradingEngine(
+        Settings(
+            tick_interval_seconds=0.05,
+            auto_strategy=True,
+            auto_transfer_interval_seconds=3600,
+            paper_sync_live_gold=False,
+            execution_mode="paper",
+        )
+    )
+    engine.auto_enabled = True
+    engine._last_transfer_hour_key = "2026-07-23T15"
+    engine._last_hourly_transfer_at = 1.0
+    engine._park_strategy("Liquidity_Sweep_SMC", note="seed smc")
+
+    switched = await engine._run_hourly_auto_transfer(_tick(16, 0))
+    assert switched is True
+    assert engine.active_name == "Trend_Breakout_ATR"
+
+
+@pytest.mark.asyncio
 async def test_same_hour_does_not_retransfer():
     engine = TradingEngine(
         Settings(
