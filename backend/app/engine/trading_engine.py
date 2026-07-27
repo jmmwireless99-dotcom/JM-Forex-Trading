@@ -705,6 +705,10 @@ class TradingEngine:
 
     def set_strategy(self, name: str) -> None:
         name = (name or "").strip()
+        # Desk policy: JM_AUTO_STRATEGY=true keeps session auto-follow always on.
+        # Manual picks only park the active strategy; hourly transfer still owns the slot.
+        keep_auto = bool(self.settings.auto_strategy)
+
         if name.startswith("auto_gold") or name in {"auto", AutoStrategyRouter.name}:
             self.auto_enabled = True
             rec = self.recommended_now()
@@ -726,12 +730,16 @@ class TradingEngine:
             raise ValueError(
                 f"Unknown strategy: {name}. Available: {list_strategy_names()}"
             )
-        self.auto_enabled = False
+        self.auto_enabled = True if keep_auto else False
         self._strategies[name] = create_strategy(name)
         self.active_name = name
         self.strategy = self._strategies[name]
         self._last_strategy_switch_at = time.time()
         self._last_auto_key = None
+        if keep_auto:
+            self._last_transfer_note = (
+                f"Manual park → {name} (session auto-follow stays ON)"
+            )
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
@@ -1700,6 +1708,9 @@ class TradingEngine:
 
     async def _tick_once(self) -> None:
         async with self._lock:
+            # Always-on policy: never leave session auto-follow off when configured.
+            if self.settings.auto_strategy and not self.auto_enabled:
+                self.auto_enabled = True
             ticks = await self._next_ticks()
             for tick in ticks:
                 self.ticks_processed += 1

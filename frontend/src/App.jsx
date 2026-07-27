@@ -191,20 +191,23 @@ export default function App() {
         setCandles(candleInfo.candles || [])
         setTrades(tradeInfo.trades || [])
         setTradeSummary(tradeInfo.summary || null)
-        // Restore saved strategy (manual select/save) on login/boot.
-        const pref = acc.preferred_strategy
-          ? normalizeStrategy(acc.preferred_strategy)
-          : null
-        if (pref && normalizeStrategy(st.active_strategy) !== pref) {
+        // Prefer session auto-follow — do not apply saved preferred strategy
+        // (that used to kill auto). Sync UI label from live engine only.
+        clearStrategyDirty(st.active_strategy)
+        if (!auto?.enabled) {
           try {
-            await api.setStrategy(pref)
-            clearStrategyDirty(pref)
-            setOrderNote(`Restored saved strategy: ${pref}`)
+            const resumed = await api.autoTransfer()
+            setAutoInfo(resumed?.auto || (await api.auto()))
+            if (resumed?.active_strategy) clearStrategyDirty(resumed.active_strategy)
+            setOrderNote(
+              resumed?.message ||
+                'Session auto-follow ON — will trade when a valid entry prints',
+            )
           } catch {
-            markStrategyChoice(pref)
+            /* best-effort */
           }
         } else {
-          clearStrategyDirty(pref || st.active_strategy)
+          setOrderNote('Session auto-follow ON — waiting for a valid entry')
         }
         const map = {}
         for (const t of tk.ticks || []) map[t.symbol] = t
@@ -418,16 +421,19 @@ export default function App() {
   async function applyStrategy() {
     await run(async () => {
       const res = await api.setStrategy(strategy)
-      // Manual select + save preferred strategy on this account
+      // Save preferred label only — session auto-follow stays ON (JM_AUTO_STRATEGY).
       try {
         const saved = await api.setTradeSettings({ preferred_strategy: strategy })
         if (saved?.account) setAccount((prev) => ({ ...prev, ...saved.account }))
       } catch {
         /* save is best-effort if guest/desk */
       }
+      const autoOn = res?.auto?.enabled !== false
       setOrderNote(
         res?.message ||
-          `Strategy set to ${strategy} (saved · session auto-follow OFF)`,
+          (autoOn
+            ? `Parked ${strategy} · session auto-follow stays ON`
+            : `Strategy set to ${strategy}`),
       )
       return res
     })
@@ -659,7 +665,7 @@ export default function App() {
             className="btn-ghost"
             disabled={busy}
             onClick={() => applyStrategy()}
-            title="Lock + save preferred strategy; turn OFF gold session auto-follow"
+            title="Park this strategy for now; session auto-follow stays ON"
           >
             Apply & save strategy
           </button>
@@ -667,7 +673,7 @@ export default function App() {
             className="btn-ghost"
             disabled={busy}
             onClick={() => autoTransferBySession()}
-            title="Auto follow by session — also re-checks every UTC hour by itself"
+            title="Force session auto-follow ON — re-checks every UTC hour"
           >
             Auto transfer (hourly)
           </button>
@@ -676,12 +682,12 @@ export default function App() {
             disabled={busy}
             onClick={() =>
               run(async () => {
-                await api.setStrategy(strategy)
-                return api.start(strategy)
+                // Start with session auto — do not lock a manual strategy that kills auto.
+                return api.autoTransfer()
               })
             }
           >
-            Start engine
+            Start auto
           </button>
           <button
             className="btn-danger"
