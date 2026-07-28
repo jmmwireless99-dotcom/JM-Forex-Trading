@@ -61,9 +61,12 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="London",
         utc_start=7,
         utc_end=11,
-        strategy="London_Judas_Sweep",
+        strategy="EMA_RSI_Scalp",
         tier=SessionTier.ALLOWED,
-        reason="London Judas window (UTC 07:00–10:59 / PH 15:00–18:59) — sweep + FVG limit",
+        reason=(
+            "London window (UTC 07:00–10:59 / PH 15:00–18:59) — "
+            "paper lab: EMA_RSI (Judas paused — 0% WR wipe)"
+        ),
     ),
     SessionSlot(
         label="london_wind_down",

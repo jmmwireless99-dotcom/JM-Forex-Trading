@@ -19,11 +19,15 @@ class Settings(BaseSettings):
 
     # Gold desk risk defaults — tighter than multi-pair FX
     max_risk_per_trade_pct: float = 0.5
-    # Balance-scaled lot size: $1000 → 0.5 lot, $2000 → 1.0, etc.
-    # JM_LOTS_PER_1000=0.5
-    lots_per_1000: float = 0.5
-    # Allow stacking clear same-direction signals (not opposite flips).
-    max_open_positions: int = 3
+    # Paper lab default: $1000 → 0.02 lot (was 0.5 — too hot for strategy testing).
+    # JM_LOTS_PER_1000=0.02
+    lots_per_1000: float = 0.02
+    # Paper strategy lab: tiny risk, no live MT auto fills, single book.
+    # JM_PAPER_TEST_MODE=true
+    paper_test_mode: bool = True
+    paper_test_single_book: bool = True
+    # One position at a time while proving edge.
+    max_open_positions: int = 1
     # Min signal.strength to add another open trade on the same symbol/side.
     # EMA signals use strength 0.85 — require > that so EMA does not auto-stack.
     pyramid_min_strength: float = 0.90

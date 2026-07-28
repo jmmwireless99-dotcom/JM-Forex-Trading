@@ -61,8 +61,8 @@ async def test_desk_endpoint(client):
     assert res.status_code == 200
     data = res.json()
     assert data["mode"] == "scalp_desk"
-    assert data["recommended_strategy"] == "London_Judas_Sweep"
-    assert data["recommended_london"] == "London_Judas_Sweep"
+    assert data["recommended_strategy"] == "EMA_RSI_Scalp"
+    assert data["recommended_london"] == "EMA_RSI_Scalp"
     assert data["recommended_asia"] == "EMA_RSI_Scalp"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data
@@ -133,8 +133,8 @@ async def test_paper_deposit_changes_capital(client):
     assert preview.status_code == 200
     assert preview.json()["deposit"] == 1000.0
     assert preview.json()["risk_per_trade_usd"] == 5.0
-    assert preview.json()["suggested_lots"] == 0.5
-    assert preview.json()["lots_per_1000"] == 0.5
+    assert preview.json()["suggested_lots"] == 0.02
+    assert preview.json()["lots_per_1000"] == 0.02
 
     # Live account still at 500 until applied
     acc = await client.get("/api/account", headers=headers)

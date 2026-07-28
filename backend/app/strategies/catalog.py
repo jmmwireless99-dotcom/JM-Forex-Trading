@@ -42,8 +42,8 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "London_Judas_Sweep",
             "name": "London Judas Sweep",
-            "sessions": ["London (UTC 07–11 / PH 3–7PM)"],
-            "session_slots": ["london"],
+            "sessions": ["Manual only — paused from auto (paper lab)"],
+            "session_slots": [],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -81,9 +81,11 @@ def strategy_catalog() -> list[dict]:
             "name": "EMA + RSI Scalp",
             "sessions": [
                 "Asia (UTC 00–07 / PH 8AM–3PM) — auto",
+                "London (UTC 07–11 / PH 3–7PM) — auto paper lab",
             ],
             "session_slots": [
                 "asia",
+                "london",
             ],
             "timeframe": "M5",
             "signal_tf": "M5",

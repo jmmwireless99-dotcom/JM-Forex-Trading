@@ -806,7 +806,11 @@ export default function App() {
             </p>
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
-            {mode === 'paper' ? 'PAPER DEMO' : 'LIVE MT'}
+            {mt?.paper_test_mode || desk?.paper_test_mode
+              ? 'PAPER LAB'
+              : mode === 'paper'
+                ? 'PAPER DEMO'
+                : 'LIVE MT'}
           </span>
         </div>
 

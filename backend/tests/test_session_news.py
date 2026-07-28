@@ -88,7 +88,7 @@ def test_next_session_after_asia_is_london():
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
-    assert nxt["strategy"] == "London_Judas_Sweep"
+    assert nxt["strategy"] == "EMA_RSI_Scalp"
 
 
 def test_next_session_after_london_skips_kill_to_smc():

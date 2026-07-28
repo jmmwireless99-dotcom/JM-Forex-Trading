@@ -395,7 +395,7 @@ async def desk() -> dict:
     return {
         "symbol": "XAUUSD",
         "mode": "scalp_desk",
-        "recommended_strategy": "London_Judas_Sweep",
+        "recommended_strategy": "EMA_RSI_Scalp",
         "recommended_now": engine.recommended_now(),
         "active_strategy": engine.status().active_strategy,
         "auto": engine.auto_status(),
@@ -418,10 +418,11 @@ async def desk() -> dict:
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
         "recommended_asia": "EMA_RSI_Scalp",
-        "recommended_london": "London_Judas_Sweep",
+        "recommended_london": "EMA_RSI_Scalp",
         "recommended_overlap": "Liquidity_Sweep_SMC",
-        "recommended_ny": "EMA_RSI_Scalp",
+        "recommended_ny": "Trend_Breakout_ATR",
         "recommended_sr_scalp": "Liquidity_Sweep_SMC",
+        "paper_test_mode": bool(getattr(settings, "paper_test_mode", False)),
         "asia_desk_only": settings.asia_desk_only,
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [

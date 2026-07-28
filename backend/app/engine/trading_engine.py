@@ -781,6 +781,8 @@ class TradingEngine:
             "dual_bridge": bool(self.bridges),
             "paper_sync_live_gold": bool(self.settings.paper_sync_live_gold),
             "paper_mid": mids.get(self.settings.symbols[0]),
+            "paper_test_mode": bool(getattr(self.settings, "paper_test_mode", False)),
+            "lots_per_1000": float(getattr(self.settings, "lots_per_1000", 0.02) or 0.02),
             "candle_period_seconds": self.candles.period_seconds,
             "signal_period_seconds": self.signal_candles.period_seconds,
             "signal_timeframe": f"M{max(1, self.signal_candles.period_seconds // 60)}",
@@ -1854,12 +1856,31 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Auto signals fan out per client: paper demos fill on paper; MT-bound
-        # logins (Joel MT5 / Nonoy MT4) route to the Windows terminal.
-        # Desk execution_mode=paper still allows live fills for bound MT accounts
-        # so always-on auto strategy reaches both paper demos and live bridges.
+        # Auto signals fan out per client. Paper lab = one paper book only,
+        # never live MT — prove edge before real money.
         targets = self.accounts.auto_followers()
-        if self.mode == "paper":
+        paper_lab = bool(getattr(self.settings, "paper_test_mode", False))
+        if paper_lab or self.mode == "paper":
+            targets = [a for a in targets if self.uses_paper_book(a)]
+        if paper_lab:
+            targets = [
+                a
+                for a in targets
+                if not self.is_mt_bound(a) and not self.is_mt5_client(a)
+            ]
+            if bool(getattr(self.settings, "paper_test_single_book", True)) and targets:
+                lab = next(
+                    (
+                        a
+                        for a in targets
+                        if "lab" in (a.label or "").lower()
+                        or "paper" in (a.label or "").lower()
+                        or "demo" in (a.label or "").lower()
+                    ),
+                    None,
+                )
+                targets = [lab or sorted(targets, key=lambda a: (a.code or a.id))[0]]
+        elif self.mode == "paper":
             targets = [
                 a
                 for a in targets
@@ -1908,12 +1929,17 @@ class TradingEngine:
             # One pending limit at a time; filled opens may already exist.
             return
 
-        # Prefer per-account manual lot size; else scale from balance (0.5 / $1000).
-        if account.fixed_lots is not None:
+        # Prefer per-account manual lot size; else scale from balance.
+        # Paper lab ignores saved fixed_lots so a stale 0.5 lock cannot wipe the book.
+        paper_lab = bool(getattr(self.settings, "paper_test_mode", False))
+        if account.fixed_lots is not None and not paper_lab:
             signal_lots = float(account.fixed_lots)
         else:
             signal_lots = account.risk.lots_for_balance(self._balance(account))
         signal_lots = max(0.01, min(round(signal_lots, 2), 10.0))
+        if paper_lab:
+            # Hard cap while proving edge — never more than 0.05 in lab.
+            signal_lots = min(signal_lots, 0.05)
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
@@ -1975,8 +2001,12 @@ class TradingEngine:
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
         if tick is not None and self.uses_paper_book(acct):
             acct.broker._last_ticks[tick.symbol] = tick
-        honor_lots = bool(acct.fixed_lots is not None) or (
-            (request.strategy or "").lower() == "manual"
+        honor_lots = (
+            (not bool(getattr(self.settings, "paper_test_mode", False)))
+            and (
+                bool(acct.fixed_lots is not None)
+                or (request.strategy or "").lower() == "manual"
+            )
         )
         decision = acct.risk.evaluate(
             request,
