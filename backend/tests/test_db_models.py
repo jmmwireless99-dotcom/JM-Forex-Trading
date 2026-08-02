@@ -21,7 +21,7 @@ def test_seed_specs_match_prompt():
     ema = next(s for s in SEED_STRATEGIES if s["name"] == "EMA_RSI_Scalp")
     assert ema["parameters"]["ema_trend"] == 200
     assert ema["parameters"]["rsi_buy_zone"] == [40, 50]
-    assert ema["parameters"]["allow_soft_confirm"] is False
+    assert ema["parameters"]["allow_soft_confirm"] is True
     smc = next(s for s in SEED_STRATEGIES if s["name"] == "Liquidity_Sweep_SMC")
     assert "FVG" in smc["parameters"]["entry_zones"]
     assert "ASIAN_HIGH" in smc["parameters"]["liquidity"]

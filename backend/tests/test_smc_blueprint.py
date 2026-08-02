@@ -11,10 +11,12 @@ def test_smc_seed_ctor_wires_blueprint_flags():
     strat = create_strategy("Liquidity_Sweep_SMC")
     assert isinstance(strat, LiquiditySweepSmcStrategy)
     assert strat.require_displacement is True
+    assert strat.require_mss_confirm is False
     assert strat.prefer_pdh_pdl is True
     assert strat.use_limit_entry is True
     assert strat.fvg_entry_pct == 0.50
     assert strat.reward_r == 2.8
+    assert strat.min_displacement_atr == 0.35
     assert strat.mt_near_limit_pips == 120
     assert (7, 11) in strat.kill_zones_utc
     assert (13, 16) in strat.kill_zones_utc

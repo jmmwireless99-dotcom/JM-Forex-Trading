@@ -77,6 +77,7 @@ def _ctor_kwargs(name: str, overrides: dict) -> dict:
             "require_sweep",
             "require_zone_retest",
             "require_displacement",
+            "require_mss_confirm",
             "prefer_pdh_pdl",
             "use_limit_entry",
         ):

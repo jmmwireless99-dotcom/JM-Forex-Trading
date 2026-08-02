@@ -188,6 +188,7 @@ class LiquiditySweepSmcStrategy(Strategy):
         require_sweep: bool = True,
         require_zone_retest: bool = True,
         require_displacement: bool = True,
+        require_mss_confirm: bool = False,
         prefer_pdh_pdl: bool = True,
         use_limit_entry: bool = True,
         fvg_entry_pct: float = 0.50,
@@ -215,6 +216,8 @@ class LiquiditySweepSmcStrategy(Strategy):
         self.require_sweep = require_sweep
         self.require_zone_retest = require_zone_retest
         self.require_displacement = require_displacement
+        # False = enter on sweep (+ displacement) without waiting ChoCH/MSS.
+        self.require_mss_confirm = require_mss_confirm
         self.prefer_pdh_pdl = prefer_pdh_pdl
         self.use_limit_entry = use_limit_entry
         self.fvg_entry_pct = min(max(float(fvg_entry_pct), 0.35), 0.65)
@@ -495,14 +498,24 @@ class LiquiditySweepSmcStrategy(Strategy):
         if self.require_sweep and sweep is None:
             self.last_block_reason = "Waiting for PDH/PDL/Asia/swing liquidity sweep"
             return None
-        if sweep is not None and mss_bias is None:
+        if (
+            self.require_mss_confirm
+            and sweep is not None
+            and mss_bias is None
+        ):
             self.last_block_reason = "Sweep locked — waiting MSS/ChoCH confirm"
             return None
-        if sweep is not None and mss_bias is not None and mss_bias != sweep.bias:
-            self.last_block_reason = (
-                f"Sweep {sweep.bias} vs MSS {mss_bias} conflict — no entry"
-            )
-            return None
+        if (
+            sweep is not None
+            and mss_bias is not None
+            and mss_bias != sweep.bias
+        ):
+            # Conflict only blocks when MSS confirm is required.
+            if self.require_mss_confirm:
+                self.last_block_reason = (
+                    f"Sweep {sweep.bias} vs MSS {mss_bias} conflict — no entry"
+                )
+                return None
         bias = (sweep.bias if sweep else None) or mss_bias
         if bias is None:
             self.last_block_reason = "No sweep/MSS bias"
@@ -517,7 +530,7 @@ class LiquiditySweepSmcStrategy(Strategy):
                 min_atr=self.min_displacement_atr,
             ):
                 self.last_block_reason = (
-                    "Sweep+MSS ok — waiting displacement candle after sweep"
+                    "Sweep ok — waiting displacement candle after sweep"
                 )
                 return None
 

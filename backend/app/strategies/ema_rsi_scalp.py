@@ -38,8 +38,8 @@ class EmaRsiScalpStrategy(Strategy):
         rsi_sell: tuple[float, float] = (50.0, 60.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 8,  # setup maturity spacing (not a daily cap)
-        allow_soft_confirm: bool = False,
+        min_bars_between_signals: int = 5,  # setup maturity spacing (not a daily cap)
+        allow_soft_confirm: bool = True,
         reward_r: float = 2.5,
         min_stop_atr: float = 1.4,
         min_tp_atr: float = 3.0,
@@ -137,8 +137,8 @@ class EmaRsiScalpStrategy(Strategy):
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
-        # Clear EMA stack — avoid flat chop where analysis is unreliable
-        ema_sep = abs(e20 - e50) >= 0.12 * atr
+        # Clear EMA stack — soft sep so pullbacks still qualify in mild trends
+        ema_sep = abs(e20 - e50) >= 0.08 * atr
         uptrend = price > e200 and e20 >= e50 and ema_sep
         downtrend = price < e200 and e20 <= e50 and ema_sep
 

@@ -129,17 +129,17 @@ def strategy_catalog() -> list[dict]:
             "signal_tf": "M5",
             "chart_tf": "M1",
             "summary": (
-                "SMC blueprint: PDH/PDL (priority) sweep → displacement + MSS/ChoCH → "
-                "FVG50 LIMIT · SL beyond sweep wick · TP opposite liquidity / ≥2.8R."
+                "SMC blueprint: PDH/PDL sweep → displacement → FVG50 LIMIT · "
+                "MSS optional · SL beyond sweep wick · TP ≥2.8R."
             ),
             "entry_rules": [
                 "Kill zones only: London UTC 07–11 + NY overlap UTC 13–16 (no dead hours).",
                 "Mark PDH/PDL first, then Asia H/L + swings.",
-                "Sweep: wick beyond level, close back inside (depth 0.35–2.8 ATR).",
-                "Confirm: displacement candle + MSS/ChoCH after the sweep.",
+                "Sweep: wick beyond level, close back inside (depth 0.30–3.2 ATR).",
+                "Confirm: displacement after sweep (MSS/ChoCH optional in paper lab).",
                 "LIMIT at FVG 50% equilibrium (MARKET if already through).",
                 "SL beyond sweep wick (≥$1.50 / ATR buffer) · TP opposite major H/L or ≥2.8R.",
-                "Skip if R:R < 2.0 · sweep expires after 18 M5 bars.",
+                "Skip if R:R < 2.0 · sweep expires after 30 M5 bars.",
             ],
             "entry_flow": [
                 "PDH/PDL (or Asia/swing) sweep → displacement → MSS → FVG50 LIMIT.",
