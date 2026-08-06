@@ -82,10 +82,12 @@ def strategy_catalog() -> list[dict]:
             "sessions": [
                 "Asia (UTC 00–07 / PH 8AM–3PM) — auto",
                 "London (UTC 07–11 / PH 3–7PM) — auto paper lab",
+                "New York (UTC 16–20 / PH 12–4AM) — auto paper lab",
             ],
             "session_slots": [
                 "asia",
                 "london",
+                "new_york",
             ],
             "timeframe": "M5",
             "signal_tf": "M5",

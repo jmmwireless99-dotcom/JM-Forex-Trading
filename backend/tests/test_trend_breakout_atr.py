@@ -14,17 +14,17 @@ def test_registered_and_seeded():
     assert isinstance(strat, TrendBreakoutAtrStrategy)
     assert strat.channel_period == 20
     assert strat.reward_r == 2.5
-    assert strat.min_adx == 18.0
+    assert strat.min_adx == 5.0
 
 
-def test_auto_session_new_york_maps_to_breakout():
+def test_auto_session_new_york_maps_to_ema_paper_lab():
     ts = datetime(2026, 7, 23, 17, 0, tzinfo=timezone.utc)
     window = classify_full_sessions(ts)
     assert window.label == "new_york"
     from app.strategies.session import FULL_SESSION_SLOTS
 
     ny = next(s for s in FULL_SESSION_SLOTS if s.label == "new_york")
-    assert ny.strategy == "Trend_Breakout_ATR"
+    assert ny.strategy == "EMA_RSI_Scalp"
 
 
 def test_waits_without_breakout():

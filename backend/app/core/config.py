@@ -22,10 +22,11 @@ class Settings(BaseSettings):
     # Paper lab default: $1000 → 0.02 lot (was 0.5 — too hot for strategy testing).
     # JM_LOTS_PER_1000=0.02
     lots_per_1000: float = 0.02
-    # Paper strategy lab: tiny risk, no live MT auto fills, single book.
+    # Paper strategy lab: tiny risk, no live MT auto fills.
     # JM_PAPER_TEST_MODE=true
     paper_test_mode: bool = True
-    paper_test_single_book: bool = True
+    # False = every paper demo with follow_auto gets fills (see trades in your login).
+    paper_test_single_book: bool = False
     # One position at a time while proving edge.
     max_open_positions: int = 1
     # Min signal.strength to add another open trade on the same symbol/side.

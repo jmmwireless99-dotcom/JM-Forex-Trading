@@ -29,8 +29,8 @@ class TrendBreakoutAtrStrategy(Strategy):
         channel_period: int = 20,
         ema_trend: int = 200,
         adx_period: int = 14,
-        min_adx: float = 18.0,
-        min_break_atr: float = 0.15,
+        min_adx: float = 5.0,
+        min_break_atr: float = 0.05,
         reward_r: float = 2.5,
         min_stop_atr: float = 1.2,
         min_tp_atr: float = 2.8,
@@ -119,7 +119,7 @@ class TrendBreakoutAtrStrategy(Strategy):
         cur = bars[-1]
         prev = bars[-2]
         width = channel_high - channel_low
-        if width < 0.8 * atr:
+        if width < 0.35 * atr:
             self.last_block_reason = "Channel too tight — skip chop breakout"
             return None
 

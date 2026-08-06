@@ -420,7 +420,7 @@ async def desk() -> dict:
         "recommended_asia": "EMA_RSI_Scalp",
         "recommended_london": "EMA_RSI_Scalp",
         "recommended_overlap": "Liquidity_Sweep_SMC",
-        "recommended_ny": "Trend_Breakout_ATR",
+        "recommended_ny": "EMA_RSI_Scalp",
         "recommended_sr_scalp": "Liquidity_Sweep_SMC",
         "paper_test_mode": bool(getattr(settings, "paper_test_mode", False)),
         "asia_desk_only": settings.asia_desk_only,

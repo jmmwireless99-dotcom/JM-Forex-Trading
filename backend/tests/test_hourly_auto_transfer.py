@@ -43,7 +43,7 @@ async def test_hourly_transfer_switches_london_to_smc():
 
 
 @pytest.mark.asyncio
-async def test_hourly_transfer_switches_smc_to_trend_breakout():
+async def test_hourly_transfer_switches_smc_to_ema_ny():
     engine = TradingEngine(
         Settings(
             tick_interval_seconds=0.05,
@@ -60,7 +60,7 @@ async def test_hourly_transfer_switches_smc_to_trend_breakout():
 
     switched = await engine._run_hourly_auto_transfer(_tick(16, 0))
     assert switched is True
-    assert engine.active_name == "Trend_Breakout_ATR"
+    assert engine.active_name == "EMA_RSI_Scalp"
 
 
 @pytest.mark.asyncio

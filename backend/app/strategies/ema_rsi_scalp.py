@@ -34,11 +34,11 @@ class EmaRsiScalpStrategy(Strategy):
         ema_fast: int = 20,
         ema_slow: int = 50,
         rsi_period: int = 14,
-        rsi_buy: tuple[float, float] = (40.0, 50.0),
-        rsi_sell: tuple[float, float] = (50.0, 60.0),
+        rsi_buy: tuple[float, float] = (35.0, 58.0),
+        rsi_sell: tuple[float, float] = (42.0, 65.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 5,  # setup maturity spacing (not a daily cap)
+        min_bars_between_signals: int = 3,  # setup maturity spacing (not a daily cap)
         allow_soft_confirm: bool = True,
         reward_r: float = 2.5,
         min_stop_atr: float = 1.4,

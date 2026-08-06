@@ -103,11 +103,11 @@ FULL_SESSION_SLOTS: tuple[SessionSlot, ...] = (
         slot="New York",
         utc_start=16,
         utc_end=20,
-        strategy="Trend_Breakout_ATR",
+        strategy="EMA_RSI_Scalp",
         tier=SessionTier.ALLOWED,
         reason=(
             "New York session (UTC 16:00–19:59 / PH 00:00–03:59) — "
-            "Trend_Breakout_ATR Donchian + hard SL (USD drive)"
+            "EMA_RSI paper lab (Trend_Breakout paused — ADX often dead)"
         ),
     ),
     SessionSlot(

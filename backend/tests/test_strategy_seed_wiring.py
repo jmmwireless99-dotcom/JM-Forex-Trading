@@ -9,9 +9,9 @@ from app.strategies.liquidity_sweep_smc import _asia_window_bars
 
 def test_create_strategy_applies_seed_defaults():
     ema = create_strategy("EMA_RSI_Scalp")
-    assert ema.rsi_buy == (38.0, 55.0)
-    assert ema.rsi_sell == (45.0, 62.0)
-    assert ema.min_bars_between_signals == 5
+    assert ema.rsi_buy == (35.0, 58.0)
+    assert ema.rsi_sell == (42.0, 65.0)
+    assert ema.min_bars_between_signals == 3
     assert ema.allow_soft_confirm is True
     assert ema.reward_r == 2.5
     assert ema.max_stop_atr == 2.6
