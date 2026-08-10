@@ -23,6 +23,8 @@ def test_seed_specs_match_prompt():
     assert ema["parameters"]["rsi_buy_zone"] == [38, 52]
     smc = next(s for s in SEED_STRATEGIES if s["name"] == "Liquidity_Sweep_SMC")
     assert "FVG" in smc["parameters"]["entry_zones"]
+    assert "SWEEP" in smc["parameters"]["entry_zones"]
+    assert smc["parameters"]["sweep_valid_bars"] == 18
     assert "ASIAN_HIGH" in smc["parameters"]["liquidity"]
     london = next(s for s in SEED_STRATEGIES if s["name"] == "London_Judas_Sweep")
     assert london["parameters"]["kill_pending_utc"] == "12:00"

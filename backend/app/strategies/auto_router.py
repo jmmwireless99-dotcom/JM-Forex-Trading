@@ -148,13 +148,13 @@ class AutoStrategyRouter:
             },
             {
                 "days": "Mon-Fri",
-                "utc": "13:00-15:59",
+                "utc": "13:00-17:59",
                 "slot": "London/NY overlap",
                 "strategies": "Liquidity_Sweep_SMC",
             },
             {
                 "days": "Mon-Fri",
-                "utc": "16:00-19:59",
+                "utc": "18:00-19:59",
                 "slot": "New York",
                 "strategies": "EMA_VWAP_Scalp",
             },

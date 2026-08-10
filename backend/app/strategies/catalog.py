@@ -159,14 +159,14 @@ def strategy_catalog() -> list[dict]:
             "chart_tf": "M1",
             "summary": (
                 "Smart Money Concepts: sweep Asia H/L or PDH/PDL → "
-                "MSS/ChoCH → FVG or Order Block retest."
+                "immediate rejection, retest, FVG/OB, or momentum entry."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (00:00–07:00 UTC) + PDH/PDL.",
-                "Sweep: wick beyond level then close back inside (liquidity grab).",
-                "Structure shift: MSS preferred after the sweep (recent swing break).",
-                "Entry on retest of FVG or Order Block aligned with bias.",
-                "Soft entry: directional candle after sweep if no zone touch yet.",
+                "Mark liquidity: Asian High/Low (00:00–07:00 UTC) + PDH/PDL + swing pool.",
+                "Sweep: wick beyond level with rejection (not a clean breakout).",
+                "Enter on sweep bar, retest of swept level, FVG/OB, or soft momentum.",
+                "Structure shift (MSS) preferred but not required when sweep is fresh.",
+                "Up to 4 entries per day; sweep memory expires after 18 M5 bars (~90 min).",
             ],
             "entry_flow": [
                 "Detect sweep of ASIAN_HIGH/PDH (SELL) or ASIAN_LOW/PDL (BUY).",
@@ -192,6 +192,6 @@ def entry_rules_short() -> list[str]:
         "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
-        "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
+        "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

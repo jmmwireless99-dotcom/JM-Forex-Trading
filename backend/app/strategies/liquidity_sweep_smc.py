@@ -29,6 +29,12 @@ class SweepMemory:
     level: float
     swept_at: datetime
     session_day: date
+    bar_index: int = -1
+
+
+def _bar_utc(candle: Candle) -> datetime:
+    ts = candle.open_time or candle.timestamp
+    return ts.astimezone(timezone.utc)
 
 
 def _swing_high(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> bool:
@@ -57,14 +63,14 @@ def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
     if utc.hour < 7:
         start = start - timedelta(days=1)
         end = start + timedelta(hours=7)
-    return [c for c in bars if start <= c.timestamp.astimezone(timezone.utc) < end]
+    return [c for c in bars if start <= _bar_utc(c) < end]
 
 
 def _prev_day_bars(bars: list[Candle], now: datetime) -> list[Candle]:
     utc = now.astimezone(timezone.utc)
     day0 = utc.replace(hour=0, minute=0, second=0, microsecond=0)
     day_prev = day0 - timedelta(days=1)
-    return [c for c in bars if day_prev <= c.timestamp.astimezone(timezone.utc) < day0]
+    return [c for c in bars if day_prev <= _bar_utc(c) < day0]
 
 
 def _find_fvg(bars: list[Candle]) -> Zone | None:
@@ -105,6 +111,41 @@ def _find_order_block(bars: list[Candle], bias: str) -> Zone | None:
     return None
 
 
+def _wick_swept_high(bar: Candle, level: float, pad: float) -> bool:
+    """Wick took liquidity above level with rejection (not a clean breakout)."""
+    if bar.high <= level + pad:
+        return False
+    body_top = max(bar.open, bar.close)
+    rng = bar.high - bar.low + 1e-9
+    upper_wick = bar.high - body_top
+    return body_top <= level + pad * 0.4 or upper_wick / rng >= 0.4
+
+
+def _wick_swept_low(bar: Candle, level: float, pad: float) -> bool:
+    if bar.low >= level - pad:
+        return False
+    body_bot = min(bar.open, bar.close)
+    rng = bar.high - bar.low + 1e-9
+    lower_wick = body_bot - bar.low
+    return body_bot >= level - pad * 0.4 or lower_wick / rng >= 0.4
+
+
+def _soft_momentum(bar: Candle, bias: str) -> bool:
+    """Directional close without requiring a full engulfing body."""
+    rng = bar.high - bar.low + 1e-9
+    if bias == "BUY":
+        return bar.close >= bar.low + 0.42 * rng
+    return bar.close <= bar.high - 0.42 * rng
+
+
+def _sweep_retest(bar: Candle, sweep: SweepMemory, pad: float) -> bool:
+    """Price retested the swept level and rejected in sweep direction."""
+    level = sweep.level
+    if sweep.bias == "BUY":
+        return bar.low <= level + pad and bar.close > level - pad * 0.25
+    return bar.high >= level - pad and bar.close < level + pad * 0.25
+
+
 class LiquiditySweepSmcStrategy(Strategy):
     name = "Liquidity_Sweep_SMC"
     candle_driven = True
@@ -116,6 +157,9 @@ class LiquiditySweepSmcStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         require_sweep: bool = True,
+        sweep_lookback_bars: int = 36,
+        sweep_valid_bars: int = 18,
+        max_trades_per_day: int = 4,
     ) -> None:
         super().__init__(lookback=lookback)
         settings = get_settings()
@@ -124,12 +168,16 @@ class LiquiditySweepSmcStrategy(Strategy):
             settings.session_filter if session_filter is None else session_filter
         )
         self.require_sweep = require_sweep
+        self.sweep_lookback_bars = sweep_lookback_bars
+        self.sweep_valid_bars = sweep_valid_bars
+        self.max_trades_per_day = max_trades_per_day
         self.last_checklist: list[str] = []
         self.last_block_reason: str | None = None
         self.last_zones: list[dict] = []
         self._structure_bars: list[Candle] = []
         self._sweep: SweepMemory | None = None
         self._fired_keys: set[str] = set()
+        self._day_trade_count: dict[date, int] = {}
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -153,10 +201,8 @@ class LiquiditySweepSmcStrategy(Strategy):
             lo = min(c.low for c in prev_day)
             zones.append(Zone("PDH", high=hi, low=hi))
             zones.append(Zone("PDL", high=lo, low=lo))
-        # Recent swing pool — critical when price already left the Asia box
         recent = bars[-30:] if len(bars) >= 10 else bars
         if len(recent) >= 8:
-            # Exclude forming extremes of last 2 bars so a sweep can print against them
             body = recent[:-2]
             r_hi = max(c.high for c in body)
             r_lo = min(c.low for c in body)
@@ -165,31 +211,64 @@ class LiquiditySweepSmcStrategy(Strategy):
         return zones, asia, prev_day
 
     def _scan_sweep_on_bar(
-        self, bar: Candle, zones: list[Zone], pad: float, day: date
+        self,
+        bar: Candle,
+        zones: list[Zone],
+        pad: float,
+        day: date,
+        *,
+        bar_index: int,
     ) -> SweepMemory | None:
         for z in zones:
             if z.kind in {"ASIAN_HIGH", "PDH", "SWING_HIGH"}:
-                if bar.high > z.high + pad and bar.close < z.high:
+                if _wick_swept_high(bar, z.high, pad):
                     z.swept = True
-                    return SweepMemory("SELL", f"{z.kind} sweep", z.high, bar.timestamp, day)
+                    return SweepMemory(
+                        "SELL",
+                        f"{z.kind} sweep",
+                        z.high,
+                        _bar_utc(bar),
+                        day,
+                        bar_index=bar_index,
+                    )
             if z.kind in {"ASIAN_LOW", "PDL", "SWING_LOW"}:
-                if bar.low < z.low - pad and bar.close > z.low:
+                if _wick_swept_low(bar, z.low, pad):
                     z.swept = True
-                    return SweepMemory("BUY", f"{z.kind} sweep", z.low, bar.timestamp, day)
+                    return SweepMemory(
+                        "BUY",
+                        f"{z.kind} sweep",
+                        z.low,
+                        _bar_utc(bar),
+                        day,
+                        bar_index=bar_index,
+                    )
         return None
 
     def _refresh_sweep(
         self, bars: list[Candle], zones: list[Zone], pad: float, day: date
-    ) -> None:
+    ) -> SweepMemory | None:
         if self._sweep is not None and self._sweep.session_day != day:
             self._sweep = None
+
         newest: SweepMemory | None = None
-        for bar in bars[-24:]:
-            ev = self._scan_sweep_on_bar(bar, zones, pad, day)
+        start = max(0, len(bars) - self.sweep_lookback_bars)
+        for idx in range(start, len(bars)):
+            ev = self._scan_sweep_on_bar(bars[idx], zones, pad, day, bar_index=idx)
             if ev is not None:
                 newest = ev
+
         if newest is not None:
             self._sweep = newest
+
+        sweep = self._sweep
+        if sweep is None:
+            return None
+
+        age = len(bars) - 1 - sweep.bar_index
+        if age > self.sweep_valid_bars:
+            self._sweep = None
+            return None
+        return sweep
 
     def _mss_bias(self, bars: list[Candle]) -> str | None:
         if len(bars) < 10:
@@ -211,6 +290,65 @@ class LiquiditySweepSmcStrategy(Strategy):
         if sell and not buy:
             return "SELL"
         return None
+
+    def _can_fire(self, key: str, day: date) -> bool:
+        count = self._day_trade_count.get(day, 0)
+        if count >= self.max_trades_per_day:
+            self.last_block_reason = f"Daily cap reached ({self.max_trades_per_day} SMC trades)"
+            return False
+        if key in self._fired_keys:
+            self.last_block_reason = "Already taken this sweep setup"
+            return False
+        return True
+
+    def _mark_fired(self, key: str, day: date) -> None:
+        self._fired_keys.add(key)
+        self._day_trade_count[day] = self._day_trade_count.get(day, 0) + 1
+
+    def _build_signal(
+        self,
+        *,
+        bars: list[Candle],
+        tick: Tick,
+        side: Side,
+        bias: str,
+        sweep: SweepMemory | None,
+        mss_bias: str | None,
+        entry_zone: Zone,
+        atr: float,
+        day: date,
+        fire_key: str,
+    ) -> Signal:
+        reason = (
+            f"SMC {side.value} · {sweep.label if sweep else 'structure'} · "
+            f"{'MSS' if mss_bias else 'sweep-bias'} · {entry_zone.kind} entry"
+        )
+        self.last_checklist.append(
+            f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"
+        )
+        levels = structure_levels(
+            side,
+            entry=tick.ask if side == Side.BUY else tick.bid,
+            candles=bars,
+            atr=atr,
+            reward_r=1.8,
+            min_stop_atr=0.9,
+            min_tp_atr=1.8,
+            swing_lookback=3,
+            atr_pad=0.25,
+        )
+        self._mark_fired(fire_key, day)
+        return Signal(
+            strategy=self.name,
+            symbol=tick.symbol,
+            side=side,
+            strength=0.9,
+            reason=reason,
+            stop_loss=levels.stop_loss,
+            take_profit=levels.take_profit,
+            timestamp=tick.timestamp,
+            sweep_price=sweep.level if sweep else None,
+        )
 
     def on_bar(self, candles: list[Candle], tick: Tick) -> Signal | None:
         bars = self._structure_bars or candles
@@ -247,9 +385,10 @@ class LiquiditySweepSmcStrategy(Strategy):
             return None
 
         cur = bars[-1]
-        pad = max(0.08 * atr, 0.15)
-        self._refresh_sweep(bars, zones, pad, day)
-        sweep = self._sweep
+        cur_idx = len(bars) - 1
+        pad = max(0.05 * atr, 0.08)
+        sweep = self._refresh_sweep(bars, zones, pad, day)
+        sweep_now = self._scan_sweep_on_bar(cur, zones, pad, day, bar_index=cur_idx)
 
         mss_bias = self._mss_bias(bars)
         bias = (sweep.bias if sweep else None) or mss_bias
@@ -266,14 +405,14 @@ class LiquiditySweepSmcStrategy(Strategy):
                 "zone_type": z.kind,
                 "price_high": round(z.high, 2),
                 "price_low": round(z.low, 2),
-                "is_swept": z.swept or (bool(sweep) and z.kind in sweep.label),
+                "is_swept": z.swept or (bool(sweep) and z.kind in (sweep.label if sweep else "")),
             }
             for z in zones
         ]
 
         self.last_checklist = [
             f"asia_bars={len(asia)} prev_day={len(prev_day)} zones={len(zones)}",
-            f"sweep={sweep.label if sweep else 'none'} mss={mss_bias}",
+            f"sweep={sweep.label if sweep else 'none'} fresh={sweep_now is not None} mss={mss_bias}",
             f"ATR={atr:.2f} pad={pad:.2f}",
         ]
 
@@ -284,7 +423,50 @@ class LiquiditySweepSmcStrategy(Strategy):
             self.last_block_reason = "Sweep locked — waiting MSS"
             return None
 
-        # Prefer FVG/OB retest; else momentum candle after sweep+structure
+        side = Side.BUY if bias == "BUY" else Side.SELL
+
+        # 1) Immediate entry on the sweep rejection candle
+        if sweep_now is not None and sweep_now.bias == bias:
+            fire_key = f"{day}:{sweep_now.label}:{round(sweep_now.level, 1)}:{cur_idx}"
+            if self._can_fire(fire_key, day):
+                entry_zone = Zone(
+                    "SWEEP",
+                    high=cur.high,
+                    low=cur.low,
+                    side_bias=bias,
+                )
+                return self._build_signal(
+                    bars=bars,
+                    tick=tick,
+                    side=side,
+                    bias=bias,
+                    sweep=sweep_now,
+                    mss_bias=mss_bias,
+                    entry_zone=entry_zone,
+                    atr=atr,
+                    day=day,
+                    fire_key=fire_key,
+                )
+
+        # 2) Retest of swept level within validity window
+        if sweep is not None and _sweep_retest(cur, sweep, pad):
+            fire_key = f"{day}:retest:{sweep.label}:{round(sweep.level, 1)}:{cur_idx}"
+            if self._can_fire(fire_key, day):
+                entry_zone = Zone("RETEST", high=cur.high, low=cur.low, side_bias=bias)
+                return self._build_signal(
+                    bars=bars,
+                    tick=tick,
+                    side=side,
+                    bias=bias,
+                    sweep=sweep,
+                    mss_bias=mss_bias,
+                    entry_zone=entry_zone,
+                    atr=atr,
+                    day=day,
+                    fire_key=fire_key,
+                )
+
+        # 3) FVG / OB retest
         entry_zone = None
         for z in zones:
             if z.kind not in {"FVG", "ORDER_BLOCK"}:
@@ -301,50 +483,38 @@ class LiquiditySweepSmcStrategy(Strategy):
                 entry_zone = z
                 break
 
+        # 4) Soft momentum after sweep (no full engulfing required)
         if entry_zone is None:
-            bullish = cur.close > cur.open
-            bearish = cur.close < cur.open
-            if bias == "BUY" and bullish and (mss_bias == "BUY" or sweep is not None):
-                entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="BUY")
-            elif bias == "SELL" and bearish and (mss_bias == "SELL" or sweep is not None):
-                entry_zone = Zone("ORDER_BLOCK", high=cur.high, low=cur.low, side_bias="SELL")
+            if _soft_momentum(cur, bias) and (mss_bias == bias or sweep is not None):
+                entry_zone = Zone(
+                    "ORDER_BLOCK",
+                    high=cur.high,
+                    low=cur.low,
+                    side_bias=bias,
+                )
             else:
                 self.last_block_reason = (
-                    f"Sweep ok ({sweep.label if sweep else 'structure'}) — waiting FVG/OB/momentum"
+                    f"Sweep ok ({sweep.label if sweep else 'structure'}) — "
+                    "waiting retest/FVG/OB/momentum"
                 )
                 return None
 
-        key = f"{bias}-{day}-{round(entry_zone.low, 1)}-{round(entry_zone.high, 1)}"
-        if key in self._fired_keys:
-            self.last_block_reason = "Already taken this SMC zone today"
+        fire_key = (
+            f"{day}:{entry_zone.kind}:{round(entry_zone.low, 1)}:"
+            f"{round(entry_zone.high, 1)}:{cur_idx}"
+        )
+        if not self._can_fire(fire_key, day):
             return None
-        self._fired_keys.add(key)
 
-        side = Side.BUY if bias == "BUY" else Side.SELL
-        reason = (
-            f"SMC {side.value} · {sweep.label} · "
-            f"{'MSS' if mss_bias else 'sweep-bias'} · {entry_zone.kind} entry"
-        )
-        self.last_checklist.append(
-            f"entry={entry_zone.kind} {entry_zone.low:.2f}-{entry_zone.high:.2f}"
-        )
-
-        levels = structure_levels(
-            side,
-            entry=tick.ask if side == Side.BUY else tick.bid,
-            candles=bars,
-            atr=atr,
-            reward_r=1.8,
-            min_stop_atr=1.1,
-            min_tp_atr=2.0,
-        )
-        return Signal(
-            strategy=self.name,
-            symbol=tick.symbol,
+        return self._build_signal(
+            bars=bars,
+            tick=tick,
             side=side,
-            strength=0.9,
-            reason=reason,
-            stop_loss=levels.stop_loss,
-            take_profit=levels.take_profit,
-            timestamp=tick.timestamp,
+            bias=bias,
+            sweep=sweep,
+            mss_bias=mss_bias,
+            entry_zone=entry_zone,
+            atr=atr,
+            day=day,
+            fire_key=fire_key,
         )

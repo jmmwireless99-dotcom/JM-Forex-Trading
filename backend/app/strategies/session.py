@@ -60,8 +60,8 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
     London 07:00–10:59 — Judas sweep/entry (strategy window ends 11:00)
     London wind-down 11:00–11:59 — no new Judas entries (pre-kill)
     London close 12:00–12:59 — kill pending, no new entries
-    Overlap 13:00–15:59 — SMC
-    New York 16:00–19:59 — EMA_RSI
+    Overlap 13:00–17:59 — SMC
+    New York 18:00–19:59 — EMA_VWAP
     Off-hours / weekend — stand aside
     """
     utc = ts.astimezone(timezone.utc)
@@ -94,13 +94,13 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
             "london_close",
             "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
         )
-    if 13 <= hour < 16:
+    if 13 <= hour < 18:
         return SessionWindow(
             SessionTier.PRIME,
             "london_ny_overlap",
-            "London/NY overlap — best XAUUSD liquidity",
+            "London/NY overlap — best XAUUSD liquidity (SMC window)",
         )
-    if 16 <= hour < 20:
+    if 18 <= hour < 20:
         return SessionWindow(
             SessionTier.ALLOWED,
             "new_york",
