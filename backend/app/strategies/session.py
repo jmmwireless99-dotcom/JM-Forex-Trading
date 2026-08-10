@@ -165,7 +165,7 @@ _SESSION_STRATEGY = {
     "asia": "EMA_RSI_Scalp",
     "london": "London_Judas_Sweep",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
-    "new_york": "EMA_RSI_Scalp",
+    "new_york": "EMA_VWAP_Scalp",
 }
 
 

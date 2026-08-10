@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
+from app.models.domain import Candle
+
 
 def ema(values: list[float], period: int) -> float | None:
     if len(values) < period:
@@ -81,3 +85,48 @@ def adx(values: list[float], period: int = 14) -> float | None:
     if len(dx_vals) < period:
         return None
     return sum(dx_vals[-period:]) / period
+
+
+def ema_crossover(
+    closes: list[float], fast: int, slow: int
+) -> str | None:
+    """Return 'bull' when fast crosses above slow, 'bear' when below."""
+    if len(closes) < slow + 2:
+        return None
+    prev_fast = ema(closes[:-1], fast)
+    prev_slow = ema(closes[:-1], slow)
+    cur_fast = ema(closes, fast)
+    cur_slow = ema(closes, slow)
+    if None in (prev_fast, prev_slow, cur_fast, cur_slow):
+        return None
+    if prev_fast <= prev_slow and cur_fast > cur_slow:
+        return "bull"
+    if prev_fast >= prev_slow and cur_fast < cur_slow:
+        return "bear"
+    return None
+
+
+def _candle_session_date(candle: Candle) -> date:
+    ts = candle.open_time or candle.timestamp
+    if isinstance(ts, datetime):
+        return ts.date()
+    return ts
+
+
+def vwap(candles: list[Candle], session_date: date | None = None) -> float | None:
+    """Session VWAP from UTC midnight using typical price × volume."""
+    if not candles:
+        return None
+    session_date = session_date or _candle_session_date(candles[-1])
+    cum_pv = 0.0
+    cum_vol = 0.0
+    for candle in candles:
+        if _candle_session_date(candle) != session_date:
+            continue
+        typical = (candle.high + candle.low + candle.close) / 3
+        vol = max(float(candle.volume or 1.0), 1.0)
+        cum_pv += typical * vol
+        cum_vol += vol
+    if cum_vol <= 0:
+        return None
+    return cum_pv / cum_vol

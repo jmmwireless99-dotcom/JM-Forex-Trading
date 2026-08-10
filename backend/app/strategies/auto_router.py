@@ -53,7 +53,7 @@ class AutoStrategyRouter:
             "london": "London_Judas_Sweep",
             "london_close": None,
             "london_ny_overlap": "Liquidity_Sweep_SMC",
-            "new_york": "EMA_RSI_Scalp",
+            "new_york": "EMA_VWAP_Scalp",
             "friday_late": None,
             "weekend": None,
             "off_hours": None,
@@ -156,7 +156,7 @@ class AutoStrategyRouter:
                 "days": "Mon-Fri",
                 "utc": "16:00-19:59",
                 "slot": "New York",
-                "strategies": "EMA_RSI_Scalp",
+                "strategies": "EMA_VWAP_Scalp",
             },
             {
                 "days": "Mon-Fri",

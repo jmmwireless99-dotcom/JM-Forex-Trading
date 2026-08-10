@@ -29,6 +29,18 @@ SEED_STRATEGIES: list[dict] = [
         },
     },
     {
+        "name": "EMA_VWAP_Scalp",
+        "timeframe": "M5",
+        "description": "9/21 EMA crossover + session VWAP filter · swing SL · 2R TP",
+        "parameters": {
+            "ema_fast": 9,
+            "ema_slow": 21,
+            "reward_r": 2.0,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
+    {
         "name": "Liquidity_Sweep_SMC",
         "timeframe": "M5",
         "description": "Asia/PDH-PDL sweep + MSS/ChoCH + FVG/OB retest entry",

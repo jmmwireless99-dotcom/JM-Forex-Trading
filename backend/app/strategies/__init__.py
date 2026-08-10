@@ -1,5 +1,6 @@
 from app.strategies.base import Strategy
 from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
+from app.strategies.ema_vwap_scalp import EmaVwapScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
 from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
 from app.strategies.manual_only import ManualOnlyStrategy
@@ -7,6 +8,7 @@ from app.strategies.manual_only import ManualOnlyStrategy
 STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     ManualOnlyStrategy.name: ManualOnlyStrategy,
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
+    EmaVwapScalpStrategy.name: EmaVwapScalpStrategy,
     LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy,
     LondonJudasSweepStrategy.name: LondonJudasSweepStrategy,
 }
@@ -15,6 +17,9 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
 _ALIASES = {
     "ema_rsi_scalp": EmaRsiScalpStrategy.name,
     "ema_rsi": EmaRsiScalpStrategy.name,
+    "ema_vwap_scalp": EmaVwapScalpStrategy.name,
+    "ema_vwap": EmaVwapScalpStrategy.name,
+    "vwap_scalp": EmaVwapScalpStrategy.name,
     "smc": LiquiditySweepSmcStrategy.name,
     "liquidity_sweep_smc": LiquiditySweepSmcStrategy.name,
     "london": LondonJudasSweepStrategy.name,
@@ -51,6 +56,7 @@ __all__ = [
     "META_STRATEGIES",
     "ManualOnlyStrategy",
     "EmaRsiScalpStrategy",
+    "EmaVwapScalpStrategy",
     "LiquiditySweepSmcStrategy",
     "LondonJudasSweepStrategy",
     "Strategy",

@@ -12,7 +12,12 @@ from app.db.session import db_enabled, ping_db
 
 def test_seed_specs_match_prompt():
     names = {s["name"] for s in SEED_STRATEGIES}
-    assert names == {"EMA_RSI_Scalp", "Liquidity_Sweep_SMC", "London_Judas_Sweep"}
+    assert names == {
+        "EMA_RSI_Scalp",
+        "EMA_VWAP_Scalp",
+        "Liquidity_Sweep_SMC",
+        "London_Judas_Sweep",
+    }
     ema = next(s for s in SEED_STRATEGIES if s["name"] == "EMA_RSI_Scalp")
     assert ema["parameters"]["ema_trend"] == 200
     assert ema["parameters"]["rsi_buy_zone"] == [38, 52]

@@ -44,6 +44,7 @@ async def test_strategies_and_status(client):
     names = res.json()["strategies"]
     assert "manual_only" in names
     assert "EMA_RSI_Scalp" in names
+    assert "EMA_VWAP_Scalp" in names
     assert "Liquidity_Sweep_SMC" in names
     assert "London_Judas_Sweep" in names
 
@@ -68,7 +69,7 @@ async def test_desk_endpoint(client):
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
-    assert len(data["strategy_details"]) == 4
+    assert len(data["strategy_details"]) == 5
     london = next(s for s in data["strategy_details"] if s["id"] == "London_Judas_Sweep")
     assert london["order_type"] == "LIMIT"
     assert len(london["entry_rules"]) >= 4
@@ -253,6 +254,7 @@ async def test_auto_transfer_session_follow(client):
     assert body["to"] in {
         "manual_only",
         "EMA_RSI_Scalp",
+        "EMA_VWAP_Scalp",
         "London_Judas_Sweep",
         "Liquidity_Sweep_SMC",
     }

@@ -117,6 +117,39 @@ def strategy_catalog() -> list[dict]:
             "reward_r": 1.8,
         },
         {
+            "id": "EMA_VWAP_Scalp",
+            "name": "EMA + VWAP Scalp",
+            "sessions": ["New York", "London/NY overlap"],
+            "session_slots": ["new_york", "london_ny_overlap"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "9/21 EMA crossover with session VWAP filter — systematic "
+                "long/short signals during peak liquidity."
+            ),
+            "entry_rules": [
+                "Long: 9 EMA crosses above 21 EMA with price above session VWAP.",
+                "Short: 9 EMA crosses below 21 EMA with price below session VWAP.",
+                "Stop-loss at recent swing low/high (tight structure stop).",
+                "Take-profit at 1:2 risk-reward; hold to SL/TP (no auto reverse).",
+                "Cooldown ≥3 M5 bars between signals; flip blocked until setup matures.",
+            ],
+            "entry_flow": [
+                "Wait for EMA 9/21 crossover on M5 bar close.",
+                "Confirm price is on the correct side of session VWAP.",
+                "MARKET entry with swing-based SL and 2R TP.",
+            ],
+            "parameters": _seed_params("EMA_VWAP_Scalp"),
+            "safety": [
+                "Best during peak XAUUSD liquidity (NY / overlap sessions).",
+                "News blackout when desk news filter is on.",
+                "Needs 26+ M5 bars for EMA21 warmup.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 2.0,
+        },
+        {
             "id": "Liquidity_Sweep_SMC",
             "name": "Liquidity Sweep SMC",
             "sessions": ["London/NY overlap"],
@@ -158,6 +191,7 @@ def entry_rules_short() -> list[str]:
     return [
         "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
+        "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH-PDL sweep · MSS/ChoCH · FVG/OB retest",
         "Manual BUY/SELL with auto SL/TP always available",
     ]
