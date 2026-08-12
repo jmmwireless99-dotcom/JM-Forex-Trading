@@ -43,6 +43,7 @@ async def test_strategies_and_status(client):
     res = await client.get("/api/strategies")
     names = res.json()["strategies"]
     assert "manual_only" in names
+    assert "AI_ML" in names
     assert "EMA_RSI_Scalp" in names
     assert "EMA_VWAP_Scalp" in names
     assert "Liquidity_Sweep_SMC" in names
@@ -52,7 +53,7 @@ async def test_strategies_and_status(client):
     assert res.status_code == 200
     body = res.json()
     assert body["mode"] == "paper"
-    assert body["active_strategy"] == "manual_only"
+    assert body["active_strategy"] == "AI_ML"
     assert body["symbols"] == ["XAUUSD"]
 
 
@@ -62,14 +63,16 @@ async def test_desk_endpoint(client):
     assert res.status_code == 200
     data = res.json()
     assert data["mode"] == "scalp_desk"
-    assert data["recommended_strategy"] == "London_Judas_Sweep"
-    assert data["recommended_london"] == "London_Judas_Sweep"
-    assert data["recommended_asia"] == "EMA_RSI_Scalp"
+    assert data["recommended_strategy"] == "AI_ML"
+    assert data["recommended_london"] == "AI_ML → London_Judas_Sweep"
+    assert data["recommended_asia"] == "AI_ML → EMA_RSI_Scalp"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
-    assert len(data["strategy_details"]) == 5
+    assert len(data["strategy_details"]) == 6
+    aiml = next(s for s in data["strategy_details"] if s["id"] == "AI_ML")
+    assert "Machine Learning" in aiml["name"]
     london = next(s for s in data["strategy_details"] if s["id"] == "London_Judas_Sweep")
     assert london["order_type"] == "LIMIT"
     assert len(london["entry_rules"]) >= 4
@@ -253,6 +256,7 @@ async def test_auto_transfer_session_follow(client):
     assert body["auto_enabled"] is True
     assert body["to"] in {
         "manual_only",
+        "AI_ML",
         "EMA_RSI_Scalp",
         "EMA_VWAP_Scalp",
         "London_Judas_Sweep",

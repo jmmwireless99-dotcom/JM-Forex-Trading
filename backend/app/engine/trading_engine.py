@@ -40,9 +40,11 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 # Session-follow pool for auto transfer by time.
 _AUTO_POOL = (
+    "AI_ML",
     "EMA_RSI_Scalp",
     "London_Judas_Sweep",
     "Liquidity_Sweep_SMC",
+    "EMA_VWAP_Scalp",
 )
 
 
@@ -119,6 +121,13 @@ class TradingEngine:
             skip_confidence=settings.ai_skip_confidence,
         )
         self._last_advice: dict[str, Any] | None = None
+        # Bind AI & ML into any strategies that support it (esp. AI_ML).
+        for strat in self._strategies.values():
+            self._bind_advisor(strat)
+
+    def _bind_advisor(self, strategy: Strategy | None) -> None:
+        if strategy is not None and hasattr(strategy, "set_advisor"):
+            strategy.set_advisor(self.advisor)
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -337,6 +346,7 @@ class TradingEngine:
             if target not in STRATEGY_REGISTRY:
                 target = "manual_only"
             self._strategies[target] = create_strategy(target)
+            self._bind_advisor(self._strategies[target])
             self.active_name = target
             self.strategy = self._strategies[target]
             self._last_strategy_switch_at = time.time()
@@ -353,6 +363,7 @@ class TradingEngine:
             )
         self.auto_enabled = False
         self._strategies[name] = create_strategy(name)
+        self._bind_advisor(self._strategies[name])
         self.active_name = name
         self.strategy = self._strategies[name]
         self._last_strategy_switch_at = time.time()
@@ -400,26 +411,40 @@ class TradingEngine:
         ts = self.last_tick_at or utcnow()
         prices = self._signal_prices()
         rec = self.auto_router.recommend(ts, prices)
+        child = rec.get("child_strategy")
+        display = self.active_name
+        if (self.active_name == "AI_ML" or rec.get("strategy") == "AI_ML") and child:
+            display = f"AI_ML → {child}"
         return {
             **rec,
             "auto_enabled": self.auto_enabled,
             "current_strategy": self.active_name,
-            "display": self.active_name,
+            "display": display,
         }
 
     def auto_status(self) -> dict:
         decision = self.auto_router.last_decision
         rec = self.recommended_now()
+        child = decision.child_strategy if decision is not None else None
+        if self.active_name == "AI_ML" and hasattr(self.strategy, "active_child_name"):
+            child = getattr(self.strategy, "active_child_name", None) or child
+        display = (
+            f"AI_ML → {child}"
+            if self.active_name == "AI_ML" and child
+            else self.active_name
+        )
         return {
             "enabled": self.auto_enabled,
             "session_follow": self.auto_enabled,
             "active_strategy": self.active_name,
-            "display": self.active_name,
+            "child_strategy": child,
+            "display": display,
             "session_slot": self._last_session_slot,
             "last_transfer": self._last_transfer_note,
             "decision": decision.as_dict() if decision else None,
             "recommended": rec,
             "schedule": self.auto_router.schedule_table(),
+            "ai_ml": True,
         }
 
     def _park_strategy(self, name: str, *, note: str) -> bool:
@@ -430,6 +455,7 @@ class TradingEngine:
             if name not in STRATEGY_REGISTRY:
                 return False
             self._strategies[name] = create_strategy(name)
+        self._bind_advisor(self._strategies[name])
         if name == self.active_name:
             return False
         self.active_name = name

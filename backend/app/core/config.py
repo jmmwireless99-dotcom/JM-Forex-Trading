@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
-    # Scalp desk: session auto-follow on by default
-    # JM_DEFAULT_STRATEGY=manual_only  JM_AUTO_STRATEGY=true
-    default_strategy: str = "manual_only"
+    # Scalp desk: AI_ML auto-follow on by default
+    # JM_DEFAULT_STRATEGY=AI_ML  JM_AUTO_STRATEGY=true
+    default_strategy: str = "AI_ML"
     auto_strategy: bool = True
     # Avoid flip-flopping between strategies / overtrading paper noise
     strategy_stick_seconds: int = 300

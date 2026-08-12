@@ -64,7 +64,7 @@ def test_next_session_after_asia_is_london():
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
-    assert nxt["strategy"] == "London_Judas_Sweep"
+    assert nxt["strategy"] == "AI_ML"
 
 
 def test_weekend_avoided():

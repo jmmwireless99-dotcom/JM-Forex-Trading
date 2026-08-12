@@ -47,6 +47,38 @@ def strategy_catalog() -> list[dict]:
     """Return rich per-strategy cards for the scalp desk panel."""
     return [
         {
+            "id": "AI_ML",
+            "name": "AI & Machine Learning",
+            "sessions": ["Asia", "London", "London/NY overlap", "New York"],
+            "session_slots": ["asia", "london", "london_ny_overlap", "new_york"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "Primary JM FX stack: session child setup + AI & Machine Learning "
+                "win-probability filter (scikit-learn)."
+            ),
+            "entry_rules": [
+                "Asia → EMA_RSI_Scalp child · London → Judas · Overlap → SMC · NY → VWAP.",
+                "Child must print a valid setup on M5 close.",
+                "ML scores TAKE / CAUTION / SKIP from labeled trade history.",
+                "SKIP is blocked inside AI_ML (no order sent).",
+                "Model updates online on every closed trade; Retrain runs batch LogisticRegression.",
+            ],
+            "entry_flow": [
+                "Session auto-follow parks AI_ML.",
+                "Child strategy builds signal → ML filter → MARKET/LIMIT if TAKE/CAUTION.",
+            ],
+            "parameters": _seed_params("AI_ML"),
+            "safety": [
+                "Learns from your SL/TP history — weak Asia soft setups score low.",
+                "Optional JM_AI_GATE_ENTRIES also blocks SKIP at the engine layer.",
+                "Needs labeled closes to improve beyond cold-start coefficients.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": None,
+        },
+        {
             "id": "London_Judas_Sweep",
             "name": "London Judas Sweep",
             "sessions": ["London"],
@@ -189,6 +221,7 @@ def strategy_catalog() -> list[dict]:
 def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
+        "AI_ML — session child (EMA_RSI/Judas/SMC/VWAP) + AI & Machine Learning filter",
         "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",

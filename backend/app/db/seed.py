@@ -13,6 +13,28 @@ log = logging.getLogger(__name__)
 
 SEED_STRATEGIES: list[dict] = [
     {
+        "name": "AI_ML",
+        "timeframe": "M5",
+        "description": (
+            "AI & Machine Learning stack: session child setup "
+            "(EMA_RSI / Judas / SMC / VWAP) + sklearn win-probability filter"
+        ),
+        "parameters": {
+            "engine": "AI & Machine Learning",
+            "online_model": "SGDClassifier(log_loss)",
+            "batch_model": "LogisticRegression",
+            "session_children": {
+                "asia": "EMA_RSI_Scalp",
+                "london": "London_Judas_Sweep",
+                "london_ny_overlap": "Liquidity_Sweep_SMC",
+                "new_york": "EMA_VWAP_Scalp",
+            },
+            "actions": ["TAKE", "CAUTION", "SKIP"],
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
+    {
         "name": "EMA_RSI_Scalp",
         "timeframe": "M5",
         "description": "EMA 200 trend + EMA 20/50 retest + RSI 14 + engulfing/pin bar",

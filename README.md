@@ -50,23 +50,30 @@ chmod +x scripts/dev.sh
 - Dashboard: http://localhost:5173  
 - Desk filters: `GET /api/desk`
 
-## AI & Machine Learning
+## AI & Machine Learning strategy (`AI_ML`)
 
-The desk uses **AI & Machine Learning** (scikit-learn) to learn from your trade
-history and score new setups — no hand-rule overrides on the probability.
+`AI_ML` is the **primary auto FX strategy**. Session auto-follow parks on it; it
+picks a classic child setup, then filters with Machine Learning:
+
+| Session (UTC) | Child under `AI_ML` |
+| --- | --- |
+| Asia 00–07 | `EMA_RSI_Scalp` |
+| London 07–11 | `London_Judas_Sweep` |
+| Overlap 13–18 | `Liquidity_Sweep_SMC` |
+| New York 18–20 | `EMA_VWAP_Scalp` |
 
 - Online: `SGDClassifier(log_loss)` updates on every closed trade
 - Batch retrain: `LogisticRegression` on full labeled history
 - Storage: `data/ai_trade_history.jsonl` + `data/ai_trade_model.json`
-- `GET /api/ai/advice` — TAKE / CAUTION / SKIP + ML win probability
-- `GET /api/ai/history` — labeled feature history
-- `POST /api/ai/retrain` — backfill journal + Machine Learning retrain
-- `JM_AI_GATE_ENTRIES=true` → high-confidence **SKIP** blocks entry (`AI_SKIP`)
+- Desk select: **AI_ML (AI & Machine Learning stack)**
+- `GET /api/ai/advice` · `GET /api/ai/history` · `POST /api/ai/retrain`
+- SKIP blocked inside `AI_ML` (and optionally again via `JM_AI_GATE_ENTRIES`)
 
 ```bash
 export JM_AI_ASSIST=true
 export JM_AI_GATE_ENTRIES=true
-export JM_AI_MIN_WIN_PROB=0.40
+export JM_AUTO_STRATEGY=true
+export JM_DEFAULT_STRATEGY=AI_ML
 ```
 
 ## Tests

@@ -427,17 +427,31 @@ export default function App() {
             onChange={(e) => markStrategyChoice(e.target.value)}
             disabled={busy}
           >
-            {(strategies.length ? strategies : ['manual_only', 'EMA_RSI_Scalp', 'Liquidity_Sweep_SMC', 'London_Judas_Sweep']).map((name) => (
+            {(strategies.length
+              ? strategies
+              : [
+                  'AI_ML',
+                  'manual_only',
+                  'EMA_RSI_Scalp',
+                  'Liquidity_Sweep_SMC',
+                  'London_Judas_Sweep',
+                  'EMA_VWAP_Scalp',
+                ]
+            ).map((name) => (
               <option key={name} value={name}>
-                {name === 'manual_only'
-                  ? 'manual_only (no auto signals)'
-                  : name === 'EMA_RSI_Scalp'
-                    ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
-                    : name === 'Liquidity_Sweep_SMC'
-                      ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                      : name === 'London_Judas_Sweep'
-                        ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                        : name}
+                {name === 'AI_ML'
+                  ? 'AI_ML (AI & Machine Learning stack)'
+                  : name === 'manual_only'
+                    ? 'manual_only (no auto signals)'
+                    : name === 'EMA_RSI_Scalp'
+                      ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
+                      : name === 'Liquidity_Sweep_SMC'
+                        ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
+                        : name === 'London_Judas_Sweep'
+                          ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
+                          : name === 'EMA_VWAP_Scalp'
+                            ? 'EMA_VWAP_Scalp (9/21 EMA + VWAP)'
+                            : name}
               </option>
             ))}
           </select>
@@ -522,7 +536,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: London_Judas_Sweep · EMA_RSI · SMC · manual
+              Strategies: AI_ML · London_Judas · EMA_RSI · SMC · VWAP · manual
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
@@ -1177,7 +1191,7 @@ export default function App() {
           JM TECH SOLUTION
         </a>
         {' '}
-        · paper / MT4 / MT5 · live candles · EMA_RSI + SMC
+        · paper / MT4 / MT5 · live candles · AI_ML + EMA_RSI + SMC
       </p>
     </div>
   )

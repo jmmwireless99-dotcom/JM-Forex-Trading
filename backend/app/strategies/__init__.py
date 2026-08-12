@@ -1,3 +1,4 @@
+from app.ai.aiml_strategy import AIMLStrategy
 from app.strategies.base import Strategy
 from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.ema_vwap_scalp import EmaVwapScalpStrategy
@@ -6,6 +7,7 @@ from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
 from app.strategies.manual_only import ManualOnlyStrategy
 
 STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
+    AIMLStrategy.name: AIMLStrategy,
     ManualOnlyStrategy.name: ManualOnlyStrategy,
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
     EmaVwapScalpStrategy.name: EmaVwapScalpStrategy,
@@ -15,6 +17,11 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
 
 # Aliases for UI / older labels
 _ALIASES = {
+    "ai_ml": AIMLStrategy.name,
+    "aiml": AIMLStrategy.name,
+    "ai-ml": AIMLStrategy.name,
+    "machine_learning": AIMLStrategy.name,
+    "ml": AIMLStrategy.name,
     "ema_rsi_scalp": EmaRsiScalpStrategy.name,
     "ema_rsi": EmaRsiScalpStrategy.name,
     "ema_vwap_scalp": EmaVwapScalpStrategy.name,
@@ -39,7 +46,7 @@ def create_strategy(name: str, **kwargs) -> Strategy:
     kwargs.pop("managed_by_auto", None)
     key = (name or "").strip() or ManualOnlyStrategy.name
     if key.startswith("auto_gold"):
-        key = ManualOnlyStrategy.name
+        key = AIMLStrategy.name
     key = _ALIASES.get(key.lower(), key)
     cls = STRATEGY_REGISTRY.get(key)
     if cls is None:
@@ -54,6 +61,7 @@ def create_strategy(name: str, **kwargs) -> Strategy:
 __all__ = [
     "STRATEGY_REGISTRY",
     "META_STRATEGIES",
+    "AIMLStrategy",
     "ManualOnlyStrategy",
     "EmaRsiScalpStrategy",
     "EmaVwapScalpStrategy",

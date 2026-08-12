@@ -162,6 +162,13 @@ def next_session_hint(ts: datetime) -> dict:
 
 
 _SESSION_STRATEGY = {
+    "asia": "AI_ML",
+    "london": "AI_ML",
+    "london_ny_overlap": "AI_ML",
+    "new_york": "AI_ML",
+}
+
+_SESSION_CHILD = {
     "asia": "EMA_RSI_Scalp",
     "london": "London_Judas_Sweep",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
@@ -175,6 +182,9 @@ def _recommended_for_label(label: str, hour_utc: int) -> str | None:
 
 def _recommend_reason(label: str) -> str:
     pick = _SESSION_STRATEGY.get(label)
+    child = _SESSION_CHILD.get(label)
+    if pick and child:
+        return f"Next slot {label} → {pick}/{child}"
     if pick:
         return f"Next slot {label} → {pick}"
     return f"Next slot {label} — stand aside"
