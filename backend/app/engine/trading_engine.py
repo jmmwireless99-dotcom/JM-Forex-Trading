@@ -8,6 +8,7 @@ from collections import deque
 from datetime import timedelta
 from typing import Any, Awaitable, Callable
 
+from app.ai.advisor import TradeAdvisor
 from app.brokers.market_data import MarketDataSimulator
 from app.brokers.mt_bridge import resolve_mt_bridge
 from app.brokers.paper import PaperBroker
@@ -109,6 +110,15 @@ class TradingEngine:
         self._last_transfer_note: str | None = None
         self._journaled_limit_ids: set[str] = set()
         self._london_signal_ids: dict[str, str] = {}  # order.id -> london_signal uuid
+        self.advisor = TradeAdvisor(
+            history_path=settings.ai_history_path,
+            model_path=settings.ai_model_path,
+            enabled=settings.ai_assist,
+            gate_entries=settings.ai_gate_entries,
+            min_win_prob=settings.ai_min_win_prob,
+            skip_confidence=settings.ai_skip_confidence,
+        )
+        self._last_advice: dict[str, Any] | None = None
 
     def subscribe(self, listener: Listener) -> None:
         self._listeners.append(listener)
@@ -738,6 +748,64 @@ class TradingEngine:
     def recent_signals(self) -> list[Signal]:
         return list(self._recent_signals)
 
+    def ai_status(self) -> dict[str, Any]:
+        payload = self.advisor.status()
+        payload["last_advice"] = self._last_advice
+        return payload
+
+    def ai_advice(self, account: PaperAccount | None = None) -> dict[str, Any]:
+        """Score the newest signal; optionally backfill journal history first."""
+        acct = account or self._desk
+        if self.advisor.enabled:
+            try:
+                self.advisor.ingest_closed_trades(
+                    acct.journal.list(500, include_rejected=False),
+                    account_id=acct.id,
+                )
+            except Exception:
+                pass
+        signals = list(self._recent_signals)
+        if not signals:
+            return {
+                "ok": True,
+                "advice": None,
+                "message": "No recent signals to score",
+                "status": self.ai_status(),
+            }
+        signal = signals[0]
+        tick = self._recent_ticks.get(signal.symbol)
+        entry = None
+        if tick is not None:
+            entry = tick.ask if signal.side == Side.BUY else tick.bid
+        if signal.limit_price is not None:
+            entry = signal.limit_price
+        advice = self.advisor.advise_signal(signal, entry=entry)
+        self._last_advice = advice.as_dict()
+        return {
+            "ok": True,
+            "advice": self._last_advice,
+            "signal": signal.model_dump(mode="json"),
+            "status": self.ai_status(),
+        }
+
+    def ai_history(self, limit: int = 50) -> dict[str, Any]:
+        limit = max(1, min(int(limit), 200))
+        return {
+            "events": self.advisor.store.recent(limit),
+            "stats": self.advisor.store.stats(),
+        }
+
+    def ai_retrain(self, account: PaperAccount | None = None) -> dict[str, Any]:
+        acct = account or self._desk
+        ingested = self.advisor.ingest_closed_trades(
+            acct.journal.list(500, include_rejected=False),
+            account_id=acct.id,
+        )
+        result = self.advisor.retrain()
+        result["ingested_from_journal"] = ingested
+        result["status"] = self.ai_status()
+        return result
+
     def latest_ticks(self) -> list[Tick]:
         return list(self._recent_ticks.values())
 
@@ -750,6 +818,12 @@ class TradingEngine:
         if row:
             self._arm_entry_cooldown()
             await self._persist_trade_close(position)
+            if self.advisor.enabled:
+                try:
+                    self.advisor.record_close_from_trade(row)
+                    await self._emit("ai", self.ai_status())
+                except Exception:
+                    pass
             payload = {**row.model_dump(mode="json"), "account_id": account.id}
             await self._emit("trade", payload)
             await self._emit("trades", self._trades_payload(account))
@@ -776,6 +850,13 @@ class TradingEngine:
             row = acct.journal.record_open_position(position, mode=self.mode)
             self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
+            if self.advisor.enabled:
+                try:
+                    self.advisor.record_open_from_trade(
+                        row, account_id=acct.id, mode=self.mode
+                    )
+                except Exception:
+                    pass
         else:
             row = acct.journal.record_order(order, mode=self.mode)
         await self._emit("trade", {**row.model_dump(mode="json"), "account_id": acct.id})
@@ -1167,6 +1248,39 @@ class TradingEngine:
             and not self.using_mt()
             and account.broker.pending_orders()
         ):
+            return
+
+        entry_px = None
+        if tick is not None:
+            entry_px = tick.ask if signal.side == Side.BUY else tick.bid
+        if signal.limit_price is not None:
+            entry_px = signal.limit_price
+        advice = None
+        if self.advisor.enabled:
+            try:
+                advice = self.advisor.advise_signal(signal, entry=entry_px)
+                self._last_advice = advice.as_dict()
+                await self._emit("ai_advice", self._last_advice)
+            except Exception:
+                advice = None
+        if advice is not None and self.advisor.should_block(advice):
+            rejected = Order(
+                symbol=signal.symbol,
+                side=signal.side,
+                lots=0.01,
+                strategy=signal.strategy,
+                comment=(signal.reason or "")[:60],
+                status=OrderStatus.REJECTED,
+                reject_reason=(
+                    f"AI_SKIP p={advice.win_probability:.0%} · "
+                    + (advice.reasons[0] if advice.reasons else "low win probability")
+                ),
+                stop_loss=signal.stop_loss,
+                take_profit=signal.take_profit,
+            )
+            await self._journal_fill(
+                rejected, signal_db_id=signal_db_id, account=account
+            )
             return
 
         request = OrderRequest(

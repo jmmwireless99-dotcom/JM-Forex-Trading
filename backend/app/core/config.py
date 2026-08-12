@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     database_auto_migrate: bool = True
     database_seed_on_boot: bool = True
 
+    # AI / ML trade assist — records history + scores setups before entry
+    # JM_AI_ASSIST=true  JM_AI_GATE_ENTRIES=true
+    ai_assist: bool = True
+    ai_gate_entries: bool = True
+    ai_min_win_prob: float = 0.40
+    ai_skip_confidence: float = 0.55
+    ai_history_path: str = "data/ai_trade_history.jsonl"
+    ai_model_path: str = "data/ai_trade_model.json"
+
     @property
     def symbols(self) -> list[str]:
         return [s.strip().upper() for s in self.default_symbols.split(",") if s.strip()]

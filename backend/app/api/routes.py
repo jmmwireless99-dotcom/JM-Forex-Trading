@@ -282,6 +282,7 @@ async def desk() -> dict:
         },
         "last_block_reason": block,
         "server_time_utc": now.astimezone(timezone.utc).isoformat(),
+        "ai": engine.ai_status(),
     }
 
 
@@ -450,6 +451,34 @@ async def signals() -> dict:
     return {
         "signals": [s.model_dump(mode="json") for s in get_engine().recent_signals()]
     }
+
+
+@router.get("/ai/status")
+async def ai_status() -> dict:
+    """ML assist status — history size, model weights, last advice."""
+    return get_engine().ai_status()
+
+
+@router.get("/ai/advice")
+async def ai_advice(
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Score the latest signal using learned trade history."""
+    return get_engine().ai_advice(account)
+
+
+@router.get("/ai/history")
+async def ai_history(limit: int = 50) -> dict:
+    """Persisted ML feature history (opens + labeled closes)."""
+    return get_engine().ai_history(limit)
+
+
+@router.post("/ai/retrain")
+async def ai_retrain(
+    account: PaperAccount = Depends(require_paper_account),
+) -> dict:
+    """Backfill from this account's journal and retrain the logistic model."""
+    return get_engine().ai_retrain(account)
 
 
 @router.get("/ticks")

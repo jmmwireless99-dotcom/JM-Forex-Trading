@@ -92,6 +92,10 @@ export const api = {
   trades: (limit = 100) => request(`/trades?limit=${limit}`),
   clearTrades: () => request('/trades/clear', { method: 'POST' }),
   signals: () => request('/signals'),
+  aiStatus: () => request('/ai/status'),
+  aiAdvice: () => request('/ai/advice'),
+  aiHistory: (limit = 50) => request(`/ai/history?limit=${limit}`),
+  aiRetrain: () => request('/ai/retrain', { method: 'POST' }),
   ticks: () => request('/ticks'),
   strategies: () => request('/strategies'),
   start: (strategy) =>

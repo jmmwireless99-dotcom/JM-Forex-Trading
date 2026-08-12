@@ -13,6 +13,7 @@ htmlcov/
 # Paper multi-account persistence (local / VPS runtime)
 backend/app/data/
 backend/data/
+data/
 
 # Node
 node_modules/

@@ -57,6 +57,8 @@ export default function App() {
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
   const [signals, setSignals] = useState([])
+  const [aiAdvice, setAiAdvice] = useState(null)
+  const [aiStatus, setAiStatus] = useState(null)
   const [strategies, setStrategies] = useState([])
   const [strategy, setStrategy] = useState('manual_only')
   const [appliedStrategy, setAppliedStrategy] = useState('manual_only')
@@ -122,7 +124,7 @@ export default function App() {
           label: session.label,
         })
 
-        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto] =
+        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto, advice] =
           await Promise.all([
             api.status(),
             api.account(),
@@ -135,6 +137,7 @@ export default function App() {
             api.candles('XAUUSD', 200),
             api.trades(100),
             api.auto(),
+            api.aiAdvice().catch(() => null),
           ])
         if (!alive) return
         setStatus(st)
@@ -148,6 +151,9 @@ export default function App() {
         setDesk(deskInfo)
         setMt(mtInfo)
         setAutoInfo(auto)
+        if (advice?.advice) setAiAdvice(advice.advice)
+        if (advice?.status) setAiStatus(advice.status)
+        else if (deskInfo?.ai) setAiStatus(deskInfo.ai)
         setMode(st.mode || st.connection?.mode || 'paper')
         setCandles(candleInfo.candles || [])
         setTrades(tradeInfo.trades || [])
@@ -188,6 +194,13 @@ export default function App() {
           }
           if (msg.event === 'signal') {
             setSignals((prev) => [msg.data, ...prev].slice(0, 40))
+          }
+          if (msg.event === 'ai_advice') {
+            setAiAdvice(msg.data)
+          }
+          if (msg.event === 'ai') {
+            setAiStatus(msg.data)
+            if (msg.data?.last_advice) setAiAdvice(msg.data.last_advice)
           }
           if (msg.event === 'position_closed') {
             setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
@@ -825,6 +838,69 @@ export default function App() {
               ))
             )}
           </div>
+        </section>
+
+        <section className="panel" style={{ gridColumn: '1 / -1' }}>
+          <div className="chart-head">
+            <h2>AI trade coach</h2>
+            <span className="meta">
+              {aiStatus?.history?.labeled != null
+                ? `${aiStatus.history.labeled} labeled · model n=${aiStatus.model?.samples_seen ?? 0}`
+                : 'learns from closed SL/TP history'}
+            </span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const res = await api.aiRetrain()
+                  setAiStatus(res.status || res)
+                  const advice = await api.aiAdvice()
+                  if (advice?.advice) setAiAdvice(advice.advice)
+                  if (advice?.status) setAiStatus(advice.status)
+                  setOrderNote(
+                    `AI retrain · ${res.retrained_on ?? 0} samples` +
+                      (res.ingested_from_journal
+                        ? ` · +${res.ingested_from_journal} from journal`
+                        : ''),
+                  )
+                  return res
+                })
+              }
+            >
+              Retrain
+            </button>
+          </div>
+          {!aiAdvice ? (
+            <div className="empty">Waiting for a signal to score…</div>
+          ) : (
+            <div className={`ai-box action-${(aiAdvice.action || '').toLowerCase()}`}>
+              <div className="auto-head">
+                <strong>
+                  {aiAdvice.action} · win p={Math.round((aiAdvice.win_probability || 0) * 100)}%
+                </strong>
+                <span className={`side ${aiAdvice.action === 'TAKE' ? 'buy' : 'sell'}`}>
+                  {aiAdvice.gated ? 'GATED' : aiAdvice.action}
+                </span>
+              </div>
+              <p className="auto-reason">
+                {(aiAdvice.reasons && aiAdvice.reasons[0]) || 'Model score ready'}
+              </p>
+              <div className="meta">
+                Confidence {Math.round((aiAdvice.confidence || 0) * 100)}% · session{' '}
+                {aiAdvice.context?.session || '—'} ·{' '}
+                {aiAdvice.context?.soft_confirm ? 'soft confirm' : 'hard confirm'}
+                {aiAdvice.context?.rsi != null ? ` · RSI ${aiAdvice.context.rsi}` : ''}
+              </div>
+              {(aiAdvice.reasons || []).length > 1 ? (
+                <ul className="ai-reasons">
+                  {aiAdvice.reasons.slice(1).map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
         </section>
 
         <section className="panel" style={{ gridColumn: '1 / -1' }}>

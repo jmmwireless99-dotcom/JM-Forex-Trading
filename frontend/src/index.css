@@ -741,6 +741,36 @@ select {
   background: linear-gradient(180deg, rgba(201, 162, 39, 0.1), rgba(255, 255, 255, 0.02));
 }
 
+.ai-box {
+  border: 1px solid rgba(125, 255, 179, 0.22);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, rgba(20, 99, 92, 0.22), rgba(255, 255, 255, 0.02));
+}
+
+.ai-box.action-skip {
+  border-color: rgba(255, 107, 107, 0.35);
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.ai-box.action-caution {
+  border-color: rgba(242, 193, 78, 0.4);
+  background: linear-gradient(180deg, rgba(242, 193, 78, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.ai-box.action-take {
+  border-color: rgba(125, 255, 179, 0.35);
+}
+
+.ai-reasons {
+  margin: 0.65rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
 .auto-head {
   display: flex;
   justify-content: space-between;

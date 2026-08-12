@@ -50,6 +50,22 @@ chmod +x scripts/dev.sh
 - Dashboard: http://localhost:5173  
 - Desk filters: `GET /api/desk`
 
+## AI / ML trade coach
+
+The desk records every fill/close into `data/ai_trade_history.jsonl` and trains a
+lightweight logistic model (`data/ai_trade_model.json`) to score new setups:
+
+- `GET /api/ai/advice` — TAKE / CAUTION / SKIP + win probability
+- `GET /api/ai/history` — labeled feature history
+- `POST /api/ai/retrain` — backfill from your journal + retrain
+- When `JM_AI_GATE_ENTRIES=true`, high-confidence **SKIP** blocks the entry (`AI_SKIP`)
+
+```bash
+export JM_AI_ASSIST=true
+export JM_AI_GATE_ENTRIES=true
+export JM_AI_MIN_WIN_PROB=0.40
+```
+
 ## Tests
 
 ```bash
