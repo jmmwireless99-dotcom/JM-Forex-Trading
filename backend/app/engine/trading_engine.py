@@ -1272,8 +1272,8 @@ class TradingEngine:
                 comment=(signal.reason or "")[:60],
                 status=OrderStatus.REJECTED,
                 reject_reason=(
-                    f"AI_SKIP p={advice.win_probability:.0%} · "
-                    + (advice.reasons[0] if advice.reasons else "low win probability")
+                    f"AI_ML_SKIP p={advice.win_probability:.0%} · "
+                    + (advice.reasons[0] if advice.reasons else "low ML win probability")
                 ),
                 stop_loss=signal.stop_loss,
                 take_profit=signal.take_profit,

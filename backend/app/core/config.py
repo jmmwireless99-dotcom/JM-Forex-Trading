@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     database_auto_migrate: bool = True
     database_seed_on_boot: bool = True
 
-    # AI / ML trade assist — records history + scores setups before entry
+    # AI & Machine Learning — records history + ML scores setups before entry
     # JM_AI_ASSIST=true  JM_AI_GATE_ENTRIES=true
     ai_assist: bool = True
     ai_gate_entries: bool = True

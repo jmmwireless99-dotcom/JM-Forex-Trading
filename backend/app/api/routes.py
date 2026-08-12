@@ -455,7 +455,7 @@ async def signals() -> dict:
 
 @router.get("/ai/status")
 async def ai_status() -> dict:
-    """ML assist status — history size, model weights, last advice."""
+    """AI & Machine Learning status — history, sklearn metrics, last advice."""
     return get_engine().ai_status()
 
 
@@ -463,13 +463,13 @@ async def ai_status() -> dict:
 async def ai_advice(
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
-    """Score the latest signal using learned trade history."""
+    """Score the latest signal with AI & Machine Learning."""
     return get_engine().ai_advice(account)
 
 
 @router.get("/ai/history")
 async def ai_history(limit: int = 50) -> dict:
-    """Persisted ML feature history (opens + labeled closes)."""
+    """Persisted Machine Learning feature history (opens + labeled closes)."""
     return get_engine().ai_history(limit)
 
 
@@ -477,7 +477,7 @@ async def ai_history(limit: int = 50) -> dict:
 async def ai_retrain(
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
-    """Backfill from this account's journal and retrain the logistic model."""
+    """Backfill journal labels and retrain the Machine Learning model."""
     return get_engine().ai_retrain(account)
 
 

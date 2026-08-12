@@ -50,15 +50,18 @@ chmod +x scripts/dev.sh
 - Dashboard: http://localhost:5173  
 - Desk filters: `GET /api/desk`
 
-## AI / ML trade coach
+## AI & Machine Learning
 
-The desk records every fill/close into `data/ai_trade_history.jsonl` and trains a
-lightweight logistic model (`data/ai_trade_model.json`) to score new setups:
+The desk uses **AI & Machine Learning** (scikit-learn) to learn from your trade
+history and score new setups — no hand-rule overrides on the probability.
 
-- `GET /api/ai/advice` — TAKE / CAUTION / SKIP + win probability
+- Online: `SGDClassifier(log_loss)` updates on every closed trade
+- Batch retrain: `LogisticRegression` on full labeled history
+- Storage: `data/ai_trade_history.jsonl` + `data/ai_trade_model.json`
+- `GET /api/ai/advice` — TAKE / CAUTION / SKIP + ML win probability
 - `GET /api/ai/history` — labeled feature history
-- `POST /api/ai/retrain` — backfill from your journal + retrain
-- When `JM_AI_GATE_ENTRIES=true`, high-confidence **SKIP** blocks the entry (`AI_SKIP`)
+- `POST /api/ai/retrain` — backfill journal + Machine Learning retrain
+- `JM_AI_GATE_ENTRIES=true` → high-confidence **SKIP** blocks entry (`AI_SKIP`)
 
 ```bash
 export JM_AI_ASSIST=true

@@ -1,4 +1,4 @@
-"""AI / ML trade history + decision assist for JM Forex."""
+"""AI & Machine Learning — trade history + decision scoring for JM Forex."""
 
 from app.ai.advisor import Advice, TradeAdvisor
 

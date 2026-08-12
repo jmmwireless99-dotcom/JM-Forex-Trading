@@ -1,4 +1,13 @@
-"""Pure-Python online logistic regression for win-probability scoring."""
+"""AI & Machine Learning models for win-probability scoring.
+
+Primary stack (scikit-learn):
+- ``SGDClassifier(log_loss)`` — online learning on each closed trade
+- ``LogisticRegression`` — batch retrain on full labeled history
+
+Falls back to pure-Python logistic regression if sklearn is unavailable.
+Feature vectors always include a constant ``bias=1.0`` column; models use
+``fit_intercept=False`` so the bias weight is learned explicitly.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +19,20 @@ from typing import Any
 
 from app.ai.features import FEATURE_KEYS
 
+try:
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression, SGDClassifier
+    from sklearn.metrics import accuracy_score, log_loss
+
+    HAS_SKLEARN = True
+except Exception:  # pragma: no cover
+    np = None  # type: ignore
+    LogisticRegression = None  # type: ignore
+    SGDClassifier = None  # type: ignore
+    accuracy_score = None  # type: ignore
+    log_loss = None  # type: ignore
+    HAS_SKLEARN = False
+
 
 def _sigmoid(x: float) -> float:
     if x >= 20:
@@ -19,8 +42,21 @@ def _sigmoid(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def _default_weights() -> dict[str, float]:
+    """Cold-start ML coefficients (from desk SL audit patterns)."""
+    weights = {k: 0.0 for k in FEATURE_KEYS}
+    weights["bias"] = 0.05
+    weights["soft_confirm"] = -0.85
+    weights["sess_asia"] = -0.75
+    weights["sess_overlap"] = 0.45
+    weights["sess_ny"] = 0.25
+    weights["strat_ema_rsi"] = -0.15
+    weights["strat_smc"] = 0.2
+    return weights
+
+
 class OnlineLogisticModel:
-    """L2-regularized logistic regression trained one closed trade at a time."""
+    """AI & Machine Learning win classifier."""
 
     def __init__(
         self,
@@ -33,40 +69,86 @@ class OnlineLogisticModel:
         self.l2 = l2
         self.path = Path(path) if path else None
         self._lock = threading.Lock()
-        # Cold-start priors from desk SL audit: Asia + soft confirm hurt win rate.
-        self.weights: dict[str, float] = {k: 0.0 for k in FEATURE_KEYS}
-        self.weights["bias"] = 0.05
-        self.weights["soft_confirm"] = -0.85
-        self.weights["sess_asia"] = -0.75
-        self.weights["sess_overlap"] = 0.45
-        self.weights["sess_ny"] = 0.25
-        self.weights["strat_ema_rsi"] = -0.15
-        self.weights["strat_smc"] = 0.2
+        self.weights: dict[str, float] = _default_weights()
         self.samples_seen = 0
+        self.backend = "sklearn" if HAS_SKLEARN else "pure_python"
+        self.last_metrics: dict[str, Any] = {}
+        self._sgd = None
+        if HAS_SKLEARN:
+            self._init_sgd_from_weights()
         if self.path:
             self.load()
 
+    def _init_sgd_from_weights(self) -> None:
+        assert HAS_SKLEARN and np is not None
+        self._sgd = SGDClassifier(
+            loss="log_loss",
+            penalty="l2",
+            alpha=self.l2,
+            fit_intercept=False,
+            learning_rate="optimal",
+            random_state=42,
+        )
+        coef = np.array([self.weights[k] for k in FEATURE_KEYS], dtype=float).reshape(1, -1)
+        # Warm-start fitted state, then overwrite coefficients with priors.
+        self._sgd.partial_fit(coef, np.array([1]), classes=np.array([0, 1]))
+        self._sgd.coef_ = coef.copy()
+        self._sgd.intercept_ = np.array([0.0], dtype=float)
+
+    def _vector(self, features: dict[str, float]):
+        assert np is not None
+        return np.array([[float(features.get(k, 0.0)) for k in FEATURE_KEYS]], dtype=float)
+
+    def _matrix(self, rows: list[dict[str, Any]]):
+        assert np is not None
+        return np.array(
+            [[float(r["features"].get(k, 0.0)) for k in FEATURE_KEYS] for r in rows],
+            dtype=float,
+        )
+
+    def _sync_weights_from_sgd(self) -> None:
+        if self._sgd is None:
+            return
+        coef = self._sgd.coef_.ravel()
+        for i, key in enumerate(FEATURE_KEYS):
+            self.weights[key] = float(coef[i])
+
     def predict_proba(self, features: dict[str, float]) -> float:
-        z = 0.0
-        for key in FEATURE_KEYS:
-            z += self.weights.get(key, 0.0) * float(features.get(key, 0.0))
+        if HAS_SKLEARN and self._sgd is not None:
+            try:
+                proba = self._sgd.predict_proba(self._vector(features))[0]
+                classes = list(self._sgd.classes_)
+                if 1 in classes:
+                    return float(proba[classes.index(1)])
+                return float(proba[-1])
+            except Exception:
+                pass
+        z = sum(
+            self.weights.get(key, 0.0) * float(features.get(key, 0.0))
+            for key in FEATURE_KEYS
+        )
         return _sigmoid(z)
 
     def partial_fit(self, features: dict[str, float], label: int) -> float:
-        """One SGD step. Returns predicted probability before the update."""
-        y = 1.0 if int(label) == 1 else 0.0
+        """One online ML update. Returns probability before the update."""
+        y = 1 if int(label) == 1 else 0
         with self._lock:
             p = self.predict_proba(features)
-            err = p - y
-            for key in FEATURE_KEYS:
-                x = float(features.get(key, 0.0))
-                grad = err * x + self.l2 * self.weights.get(key, 0.0)
-                self.weights[key] = self.weights.get(key, 0.0) - self.lr * grad
+            if HAS_SKLEARN and self._sgd is not None:
+                self._sgd.partial_fit(self._vector(features), np.array([y]))
+                self._sync_weights_from_sgd()
+            else:
+                err = p - float(y)
+                for key in FEATURE_KEYS:
+                    x = float(features.get(key, 0.0))
+                    grad = err * x + self.l2 * self.weights.get(key, 0.0)
+                    self.weights[key] = self.weights.get(key, 0.0) - self.lr * grad
             self.samples_seen += 1
             self.save()
             return p
 
     def fit_many(self, rows: list[dict[str, Any]], epochs: int = 4) -> int:
+        """Batch Machine Learning retrain on labeled history."""
         labeled = [
             r
             for r in rows
@@ -75,17 +157,68 @@ class OnlineLogisticModel:
         if not labeled:
             return 0
         with self._lock:
-            for _ in range(max(1, epochs)):
-                for row in labeled:
-                    y = 1.0 if int(row["label"]) == 1 else 0.0
-                    feats = row["features"]
-                    p = self.predict_proba(feats)
-                    err = p - y
-                    for key in FEATURE_KEYS:
-                        x = float(feats.get(key, 0.0))
-                        grad = err * x + self.l2 * self.weights.get(key, 0.0)
-                        self.weights[key] = self.weights.get(key, 0.0) - self.lr * grad
-                    self.samples_seen += 1
+            if HAS_SKLEARN:
+                X = self._matrix(labeled)
+                y = np.array([int(r["label"]) for r in labeled], dtype=int)
+                if len(set(y.tolist())) < 2:
+                    for _ in range(max(1, epochs)):
+                        self._sgd.partial_fit(X, y)
+                    self._sync_weights_from_sgd()
+                    self.last_metrics = {
+                        "backend": "sklearn",
+                        "algorithm": "SGDClassifier",
+                        "samples": int(len(labeled)),
+                        "note": "single_class_batch",
+                    }
+                else:
+                    clf = LogisticRegression(
+                        penalty="l2",
+                        C=1.0 / max(self.l2, 1e-6),
+                        fit_intercept=False,
+                        max_iter=500,
+                        solver="lbfgs",
+                    )
+                    clf.fit(X, y)
+                    self._sgd = SGDClassifier(
+                        loss="log_loss",
+                        penalty="l2",
+                        alpha=self.l2,
+                        fit_intercept=False,
+                        learning_rate="optimal",
+                        random_state=42,
+                    )
+                    self._sgd.partial_fit(X, y, classes=np.array([0, 1]))
+                    self._sgd.coef_ = clf.coef_.copy()
+                    self._sgd.intercept_ = np.zeros(1, dtype=float)
+                    self._sync_weights_from_sgd()
+                    pred = clf.predict(X)
+                    proba = clf.predict_proba(X)
+                    self.last_metrics = {
+                        "backend": "sklearn",
+                        "algorithm": "LogisticRegression + SGDClassifier",
+                        "samples": int(len(labeled)),
+                        "accuracy": round(float(accuracy_score(y, pred)), 4),
+                        "log_loss": round(float(log_loss(y, proba)), 4),
+                        "positive_rate": round(float(y.mean()), 4),
+                    }
+                self.samples_seen = max(self.samples_seen, len(labeled))
+            else:
+                for _ in range(max(1, epochs)):
+                    for row in labeled:
+                        yv = 1.0 if int(row["label"]) == 1 else 0.0
+                        feats = row["features"]
+                        p = self.predict_proba(feats)
+                        err = p - yv
+                        for key in FEATURE_KEYS:
+                            x = float(feats.get(key, 0.0))
+                            grad = err * x + self.l2 * self.weights.get(key, 0.0)
+                            self.weights[key] = self.weights.get(key, 0.0) - self.lr * grad
+                        self.samples_seen += 1
+                self.last_metrics = {
+                    "backend": "pure_python",
+                    "algorithm": "online_logistic",
+                    "samples": len(labeled),
+                }
             self.save()
         return len(labeled)
 
@@ -102,26 +235,27 @@ class OnlineLogisticModel:
             contrib = self.weights.get(key, 0.0) * x
             scored.append((abs(contrib), key, contrib))
         scored.sort(reverse=True)
-        out = []
-        for _, key, contrib in scored[:limit]:
-            out.append(
-                {
-                    "feature": key,
-                    "contribution": round(contrib, 3),
-                    "helps": contrib > 0,
-                }
-            )
-        return out
+        return [
+            {
+                "feature": key,
+                "contribution": round(contrib, 3),
+                "helps": contrib > 0,
+            }
+            for _, key, contrib in scored[:limit]
+        ]
 
     def save(self) -> None:
         if not self.path:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "name": "AI & Machine Learning",
+            "backend": self.backend,
             "weights": self.weights,
             "samples_seen": self.samples_seen,
             "lr": self.lr,
             "l2": self.l2,
+            "metrics": self.last_metrics,
         }
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload), encoding="utf-8")
@@ -139,11 +273,23 @@ class OnlineLogisticModel:
             if key in weights:
                 self.weights[key] = float(weights[key])
         self.samples_seen = int(payload.get("samples_seen") or 0)
+        self.last_metrics = payload.get("metrics") or {}
+        if HAS_SKLEARN:
+            self._init_sgd_from_weights()
         return True
 
     def snapshot(self) -> dict[str, Any]:
         return {
+            "name": "AI & Machine Learning",
+            "backend": "sklearn" if HAS_SKLEARN else "pure_python",
+            "algorithm": (
+                "LogisticRegression + SGDClassifier (log_loss)"
+                if HAS_SKLEARN
+                else "online_logistic"
+            ),
             "samples_seen": self.samples_seen,
             "weights": {k: round(v, 4) for k, v in self.weights.items() if abs(v) > 1e-4},
+            "metrics": self.last_metrics,
             "path": str(self.path) if self.path else None,
+            "sklearn": HAS_SKLEARN,
         }

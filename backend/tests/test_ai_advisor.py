@@ -34,7 +34,11 @@ def test_asia_soft_setup_is_skipped(tmp_path: Path):
     assert advice.action == "SKIP"
     assert advice.win_probability < 0.4
     assert advisor.should_block(advice) is True
-    assert any("Asia" in r for r in advice.reasons)
+    assert advice.source == "AI & Machine Learning"
+    assert any("ML" in r or "probability" in r.lower() for r in advice.reasons)
+    # Machine Learning coefficients should flag soft_confirm / sess_asia
+    driver_names = {d["feature"] for d in advice.drivers}
+    assert "soft_confirm" in driver_names or "sess_asia" in driver_names
 
 
 def test_history_learn_from_close(tmp_path: Path):

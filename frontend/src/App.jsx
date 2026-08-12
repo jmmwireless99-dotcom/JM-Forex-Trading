@@ -842,11 +842,11 @@ export default function App() {
 
         <section className="panel" style={{ gridColumn: '1 / -1' }}>
           <div className="chart-head">
-            <h2>AI trade coach</h2>
+            <h2>AI &amp; Machine Learning</h2>
             <span className="meta">
               {aiStatus?.history?.labeled != null
-                ? `${aiStatus.history.labeled} labeled · model n=${aiStatus.model?.samples_seen ?? 0}`
-                : 'learns from closed SL/TP history'}
+                ? `${aiStatus.history.labeled} labeled · ${aiStatus.model?.algorithm || 'ML'} · n=${aiStatus.model?.samples_seen ?? 0}`
+                : 'scikit-learn model · learns from closed SL/TP history'}
             </span>
             <button
               type="button"
@@ -859,7 +859,7 @@ export default function App() {
                   if (advice?.advice) setAiAdvice(advice.advice)
                   if (advice?.status) setAiStatus(advice.status)
                   setOrderNote(
-                    `AI retrain · ${res.retrained_on ?? 0} samples` +
+                    `AI & ML retrain · ${res.retrained_on ?? 0} samples` +
                       (res.ingested_from_journal
                         ? ` · +${res.ingested_from_journal} from journal`
                         : ''),
@@ -884,10 +884,12 @@ export default function App() {
                 </span>
               </div>
               <p className="auto-reason">
-                {(aiAdvice.reasons && aiAdvice.reasons[0]) || 'Model score ready'}
+                {(aiAdvice.reasons && aiAdvice.reasons[0]) ||
+                  'AI & Machine Learning score ready'}
               </p>
               <div className="meta">
-                Confidence {Math.round((aiAdvice.confidence || 0) * 100)}% · session{' '}
+                {aiAdvice.source || 'AI & Machine Learning'} · confidence{' '}
+                {Math.round((aiAdvice.confidence || 0) * 100)}% · session{' '}
                 {aiAdvice.context?.session || '—'} ·{' '}
                 {aiAdvice.context?.soft_confirm ? 'soft confirm' : 'hard confirm'}
                 {aiAdvice.context?.rsi != null ? ` · RSI ${aiAdvice.context.rsi}` : ''}

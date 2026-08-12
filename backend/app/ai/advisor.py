@@ -1,4 +1,4 @@
-"""Trade decision advisor — records history and scores setups."""
+"""AI & Machine Learning decision layer — history + ML scoring only."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from app.ai.features import (
     features_from_signal,
     features_from_trade,
     session_bucket,
+    vectorize,
 )
 from app.ai.history_store import TradeHistoryStore
 from app.ai.model import OnlineLogisticModel
@@ -27,13 +28,14 @@ class Advice:
     context: dict[str, Any]
     model_samples: int
     gated: bool = False
+    source: str = "AI & Machine Learning"
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 class TradeAdvisor:
-    """ML-assisted entry coach backed by persistent trade history."""
+    """AI & Machine Learning entry scoring backed by persistent trade history."""
 
     def __init__(
         self,
@@ -51,7 +53,6 @@ class TradeAdvisor:
         self.skip_confidence = skip_confidence
         self.store = TradeHistoryStore(history_path)
         self.model = OnlineLogisticModel(path=model_path)
-        # Retrain from disk history once on boot if we already have labels.
         labeled = self.store.labeled()
         if labeled:
             self.model.fit_many(labeled, epochs=3)
@@ -87,8 +88,6 @@ class TradeAdvisor:
         take_profit: float | None,
         session: str | None = None,
     ) -> Advice:
-        from app.ai.features import vectorize
-
         sess = session or session_bucket(ts)
         feats = vectorize(
             strategy=strategy,
@@ -110,53 +109,38 @@ class TradeAdvisor:
         return self._advise(feats, ctx)
 
     def _advise(self, feats: dict[str, float], ctx: dict[str, Any]) -> Advice:
-        p = self.model.predict_proba(feats)
+        """Score using Machine Learning probability only (no rule overrides)."""
+        p = float(self.model.predict_proba(feats))
         drivers = self.model.top_drivers(feats)
-        reasons: list[str] = []
         samples = self.model.samples_seen
-        # Confidence grows with samples; cold-start uses prior rules + model.
-        conf = min(0.35 + 0.02 * samples, 0.9) if samples else 0.45
+        # Confidence from sample size + distance from 0.5 decision boundary
+        margin = abs(p - 0.5) * 2.0
+        conf = min(0.35 + 0.015 * samples + 0.35 * margin, 0.95) if samples else (
+            0.40 + 0.35 * margin
+        )
 
-        soft = bool(ctx.get("soft_confirm"))
-        sess = ctx.get("session") or "other"
-        if soft and sess == "asia":
-            p = min(p, 0.28)
-            reasons.append("Asia + soft confirm historically SL-heavy")
-            conf = max(conf, 0.7)
-        elif soft:
-            p = min(p, p * 0.9)
-            reasons.append("Soft candle confirm — weaker than engulf/pin")
-        if sess == "asia" and not soft:
-            reasons.append("Asia session — choppy; prefer tighter filters")
-        if sess == "overlap":
-            reasons.append("London/NY overlap — better liquidity window")
-            p = max(p, min(p + 0.05, 0.85))
-
-        # Blend empirical bucket win-rate when enough labels exist.
-        stats = self.store.stats()
-        sess_stats = (stats.get("by_session") or {}).get(sess) or {}
-        if (sess_stats.get("n") or 0) >= 8 and sess_stats.get("win_rate_pct") is not None:
-            emp = float(sess_stats["win_rate_pct"]) / 100.0
-            p = 0.65 * p + 0.35 * emp
+        reasons: list[str] = [
+            f"ML win probability {p:.0%} ({self.model.backend})"
+        ]
+        metrics = self.model.last_metrics or {}
+        if metrics.get("accuracy") is not None:
             reasons.append(
-                f"Session history {sess}: {sess_stats['win_rate_pct']}% WR "
-                f"({sess_stats['n']} trades)"
-            )
-            conf = max(conf, 0.6)
-
-        soft_stats = (stats.get("by_confirm") or {}).get("soft" if soft else "hard") or {}
-        if (soft_stats.get("n") or 0) >= 8 and soft_stats.get("win_rate_pct") is not None:
-            reasons.append(
-                f"{'Soft' if soft else 'Hard'} confirms: "
-                f"{soft_stats['win_rate_pct']}% WR ({soft_stats['n']})"
+                f"Model accuracy {metrics['accuracy']:.0%} on {metrics.get('samples', samples)} samples"
             )
 
-        for d in drivers[:2]:
+        for d in drivers[:3]:
             name = str(d["feature"]).replace("_", " ")
             if d["helps"]:
-                reasons.append(f"Model likes {name}")
+                reasons.append(f"ML feature + {name}")
             else:
-                reasons.append(f"Model flags {name}")
+                reasons.append(f"ML feature − {name}")
+
+        stats = self.store.stats()
+        if stats.get("labeled"):
+            reasons.append(
+                f"Training history {stats['labeled']} labeled · "
+                f"WR {stats.get('win_rate_pct')}%"
+            )
 
         if p >= 0.55:
             action = "TAKE"
@@ -164,9 +148,6 @@ class TradeAdvisor:
             action = "CAUTION"
         else:
             action = "SKIP"
-
-        if not reasons:
-            reasons.append("Model score from strategy/session/risk features")
 
         gated = bool(
             self.enabled
@@ -183,6 +164,7 @@ class TradeAdvisor:
             context=ctx,
             model_samples=samples,
             gated=gated,
+            source="AI & Machine Learning",
         )
 
     def should_block(self, advice: Advice) -> bool:
@@ -228,8 +210,9 @@ class TradeAdvisor:
             self.model.partial_fit(labeled["features"], int(labeled["label"]))
         return labeled
 
-    def ingest_closed_trades(self, trades: list[TradeLog], *, account_id: str | None = None) -> int:
-        """Backfill labeled history from an account journal (idempotent per ticket)."""
+    def ingest_closed_trades(
+        self, trades: list[TradeLog], *, account_id: str | None = None
+    ) -> int:
         existing = {r.get("ticket") for r in self.store.labeled()}
         existing.update(
             r.get("ticket")
@@ -238,7 +221,9 @@ class TradeAdvisor:
         )
         n = 0
         for trade in trades:
-            status = trade.status.value if hasattr(trade.status, "value") else str(trade.status)
+            status = (
+                trade.status.value if hasattr(trade.status, "value") else str(trade.status)
+            )
             if status != "CLOSED":
                 continue
             ticket = str(trade.ticket or trade.id)
@@ -254,6 +239,7 @@ class TradeAdvisor:
 
     def status(self) -> dict[str, Any]:
         return {
+            "name": "AI & Machine Learning",
             "enabled": self.enabled,
             "gate_entries": self.gate_entries,
             "min_win_prob": self.min_win_prob,
@@ -264,4 +250,8 @@ class TradeAdvisor:
 
     def retrain(self) -> dict[str, Any]:
         n = self.model.fit_many(self.store.labeled(), epochs=5)
-        return {"retrained_on": n, "model": self.model.snapshot()}
+        return {
+            "name": "AI & Machine Learning",
+            "retrained_on": n,
+            "model": self.model.snapshot(),
+        }
