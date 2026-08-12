@@ -32,6 +32,10 @@ upsert_env JM_AUTO_STRATEGY true
 upsert_env JM_AI_ASSIST true
 upsert_env JM_AI_GATE_ENTRIES true
 upsert_env JM_AI_MIN_WIN_PROB 0.40
+upsert_env JM_AI_BLOCK_SMC_SELL_OVERLAP true
+upsert_env JM_AI_SMC_SELL_OVERLAP_MIN_WR 0.35
+upsert_env JM_AI_SMC_SELL_OVERLAP_MIN_N 5
+upsert_env JM_AUTO_FILL_SINGLE_BOOK true
 upsert_env JM_EXECUTION_MODE paper
 upsert_env JM_DEFAULT_SYMBOLS XAUUSD
 
