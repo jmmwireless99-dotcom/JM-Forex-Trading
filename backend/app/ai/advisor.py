@@ -46,11 +46,17 @@ class TradeAdvisor:
         gate_entries: bool = False,
         min_win_prob: float = 0.40,
         skip_confidence: float = 0.55,
+        block_smc_sell_overlap: bool = True,
+        smc_sell_overlap_min_wr: float = 0.35,
+        smc_sell_overlap_min_n: int = 5,
     ) -> None:
         self.enabled = enabled
         self.gate_entries = gate_entries
         self.min_win_prob = min_win_prob
         self.skip_confidence = skip_confidence
+        self.block_smc_sell_overlap = block_smc_sell_overlap
+        self.smc_sell_overlap_min_wr = smc_sell_overlap_min_wr
+        self.smc_sell_overlap_min_n = smc_sell_overlap_min_n
         self.store = TradeHistoryStore(history_path)
         self.model = OnlineLogisticModel(path=model_path)
         labeled = self.store.labeled()
@@ -108,8 +114,38 @@ class TradeAdvisor:
         )
         return self._advise(feats, ctx)
 
+    def _smc_sell_overlap_block_reason(self, ctx: dict[str, Any]) -> str | None:
+        """Safety rail for the overnight SL pattern: SMC SELL in London/NY overlap.
+
+        Blocks until the labeled slice has enough samples *and* a minimum win rate.
+        Cold-start (n < min_n) is blocked — do not learn this path by bleeding.
+        """
+        if not self.block_smc_sell_overlap:
+            return None
+        if (ctx.get("strategy") or "") != "smc":
+            return None
+        if (ctx.get("side") or "").upper() != "SELL":
+            return None
+        if (ctx.get("session") or "") != "overlap":
+            return None
+        bucket = self.store.bucket_stats(strategy="smc", side="SELL", session="overlap")
+        n = int(bucket.get("n") or 0)
+        wr = bucket.get("win_rate")
+        min_n = max(1, int(self.smc_sell_overlap_min_n))
+        min_wr = float(self.smc_sell_overlap_min_wr)
+        if n < min_n:
+            return (
+                f"Safety: SMC SELL overlap blocked (cold-start {n}/{min_n} samples)"
+            )
+        if wr is not None and wr < min_wr:
+            return (
+                f"Safety: SMC SELL overlap blocked "
+                f"(WR {wr:.0%} < {min_wr:.0%} on {n} samples)"
+            )
+        return None
+
     def _advise(self, feats: dict[str, float], ctx: dict[str, Any]) -> Advice:
-        """Score using Machine Learning probability only (no rule overrides)."""
+        """Score with ML probability, plus hard safety rails for known toxic setups."""
         p = float(self.model.predict_proba(feats))
         drivers = self.model.top_drivers(feats)
         samples = self.model.samples_seen
@@ -148,6 +184,13 @@ class TradeAdvisor:
             action = "CAUTION"
         else:
             action = "SKIP"
+
+        safety = self._smc_sell_overlap_block_reason(ctx)
+        if safety:
+            action = "SKIP"
+            reasons.insert(0, safety)
+            # Raise confidence so gate_entries reliably blocks the fill path too.
+            conf = max(conf, self.skip_confidence)
 
         gated = bool(
             self.enabled
@@ -244,6 +287,9 @@ class TradeAdvisor:
             "gate_entries": self.gate_entries,
             "min_win_prob": self.min_win_prob,
             "skip_confidence": self.skip_confidence,
+            "block_smc_sell_overlap": self.block_smc_sell_overlap,
+            "smc_sell_overlap_min_wr": self.smc_sell_overlap_min_wr,
+            "smc_sell_overlap_min_n": self.smc_sell_overlap_min_n,
             "history": self.store.stats(),
             "model": self.model.snapshot(),
         }

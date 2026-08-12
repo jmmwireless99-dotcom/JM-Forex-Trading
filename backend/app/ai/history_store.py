@@ -127,6 +127,35 @@ class TradeHistoryStore:
         rows = self._read_all()
         return list(reversed(rows[-limit:]))
 
+    def bucket_stats(
+        self,
+        *,
+        strategy: str | None = None,
+        side: str | None = None,
+        session: str | None = None,
+    ) -> dict[str, Any]:
+        """Win/loss counts for a strategy/side/session slice of labeled history."""
+        wins = 0
+        n = 0
+        side_u = (side or "").upper() or None
+        for row in self.labeled():
+            ctx = row.get("context") or {}
+            if strategy is not None and (ctx.get("strategy") or "") != strategy:
+                continue
+            if side_u is not None and (ctx.get("side") or "").upper() != side_u:
+                continue
+            if session is not None and (ctx.get("session") or "") != session:
+                continue
+            n += 1
+            if row.get("label") == 1:
+                wins += 1
+        return {
+            "n": n,
+            "wins": wins,
+            "losses": n - wins,
+            "win_rate": (wins / n) if n else None,
+        }
+
     def stats(self) -> dict[str, Any]:
         labeled = self.labeled()
         wins = [r for r in labeled if r.get("label") == 1]

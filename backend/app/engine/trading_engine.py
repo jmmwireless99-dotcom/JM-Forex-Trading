@@ -119,6 +119,9 @@ class TradingEngine:
             gate_entries=settings.ai_gate_entries,
             min_win_prob=settings.ai_min_win_prob,
             skip_confidence=settings.ai_skip_confidence,
+            block_smc_sell_overlap=settings.ai_block_smc_sell_overlap,
+            smc_sell_overlap_min_wr=settings.ai_smc_sell_overlap_min_wr,
+            smc_sell_overlap_min_n=settings.ai_smc_sell_overlap_min_n,
         )
         self._last_advice: dict[str, Any] | None = None
         # Bind AI & ML into any strategies that support it (esp. AI_ML).
@@ -1231,6 +1234,28 @@ class TradingEngine:
             if self.auto_enabled:
                 await self._emit("auto", self.auto_status())
 
+    def _auto_fill_targets(self) -> list[PaperAccount]:
+        """Accounts that receive auto strategy fills.
+
+        Default: a single paper book only — cloning one SL across every
+        follow_auto client was the main loss multiplier (20× same trade).
+        """
+        if self.using_mt():
+            return [self._desk]
+        followers = self.accounts.auto_followers()
+        if not followers:
+            return []
+        if not self.settings.auto_fill_single_book:
+            return followers
+        code = (self.settings.auto_fill_account_code or "").strip().upper()
+        if code:
+            pinned = [a for a in followers if (a.code or "").upper() == code]
+            if pinned:
+                return pinned[:1]
+        # Stable pick: earliest created account among auto-followers
+        followers = sorted(followers, key=lambda a: a.created_at)
+        return followers[:1]
+
     async def _handle_signal(
         self,
         signal: Signal,
@@ -1239,9 +1264,8 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Auto signals fan out to each client account with that account's capital/risk.
-        # Desk book never receives client auto fills.
-        targets = self.accounts.auto_followers() if not self.using_mt() else [self._desk]
+        # Desk book never receives client auto fills (unless MT mode).
+        targets = self._auto_fill_targets()
         if not targets:
             return
         for acct in targets:

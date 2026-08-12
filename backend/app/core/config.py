@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     ai_skip_confidence: float = 0.55
     ai_history_path: str = "data/ai_trade_history.jsonl"
     ai_model_path: str = "data/ai_trade_model.json"
+    # Safety: don't let cold-start ML TAKE SMC SELL in overlap (last-night SL pattern)
+    ai_block_smc_sell_overlap: bool = True
+    ai_smc_sell_overlap_min_wr: float = 0.35
+    ai_smc_sell_overlap_min_n: int = 5
+
+    # Auto signal routing — ONE paper book only (prevents 20× cloned SL)
+    # JM_AUTO_FILL_SINGLE_BOOK=true
+    auto_fill_single_book: bool = True
+    # Optional: pin fills to this account code; else earliest auto-follower
+    auto_fill_account_code: str = ""
 
     @property
     def symbols(self) -> list[str]:
