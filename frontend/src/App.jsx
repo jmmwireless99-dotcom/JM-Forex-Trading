@@ -858,6 +858,7 @@ export default function App() {
           <CandleChart
             candles={candles}
             liveCandle={liveCandle}
+            livePrice={gold?.mid}
             symbol="XAUUSD"
             positions={positions}
             signals={signals}

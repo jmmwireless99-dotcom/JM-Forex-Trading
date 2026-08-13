@@ -171,9 +171,25 @@ function rangeFetchSpec(range) {
   return null
 }
 
+function resolveLivePrice(livePrice, liveCandle, candles) {
+  const direct = Number(livePrice)
+  if (Number.isFinite(direct) && direct > 0) return direct
+  if (liveCandle != null) {
+    const c = Number(liveCandle.close ?? liveCandle.mid)
+    if (Number.isFinite(c) && c > 0) return c
+  }
+  if (candles?.length) {
+    const last = candles[candles.length - 1]
+    const c = Number(last?.close)
+    if (Number.isFinite(c) && c > 0) return c
+  }
+  return null
+}
+
 export default function CandleChart({
   candles = [],
   liveCandle = null,
+  livePrice = null,
   symbol = 'XAUUSD',
   positions = [],
   signals = [],
@@ -188,6 +204,7 @@ export default function CandleChart({
   const rsiRef = useRef(null)
   const rsiLevelLinesRef = useRef([])
   const priceLinesRef = useRef([])
+  const livePriceLineRef = useRef(null)
   const candleTimesRef = useRef([])
   const displayRowsRef = useRef([])
 
@@ -244,6 +261,11 @@ export default function CandleChart({
       borderDownColor: '#ff6b6b',
       wickUpColor: '#7dffb3',
       wickDownColor: '#ff6b6b',
+      // Last-value line tracks the forming bar (kept live on every TF).
+      priceLineVisible: true,
+      lastValueVisible: true,
+      priceLineColor: 'rgba(255, 255, 255, 0.85)',
+      priceLineWidth: 1,
     })
     emaRefs.current.ema20 = chart.addLineSeries({
       color: '#f0c75e',
@@ -331,6 +353,7 @@ export default function CandleChart({
       rsiRef.current = null
       rsiLevelLinesRef.current = []
       priceLinesRef.current = []
+      livePriceLineRef.current = null
     }
   }, [])
 
@@ -422,6 +445,56 @@ export default function CandleChart({
     }
     rsiRef.current.setData(pack(rsiSeries(closes, rsiPeriod), 2))
   }, [displayRows, showEma, showRsi, rsiPeriod, range, histStatus])
+
+  // LIVE price line + forming-bar update on every timeframe (desk tick mid)
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const px = resolveLivePrice(livePrice, liveCandle, candles)
+    if (px == null) return
+
+    const title = `LIVE ${px.toFixed(2)}`
+    if (!livePriceLineRef.current) {
+      livePriceLineRef.current = series.createPriceLine({
+        price: px,
+        color: '#ffffff',
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title,
+      })
+    } else {
+      try {
+        livePriceLineRef.current.applyOptions({ price: px, title })
+      } catch {
+        livePriceLineRef.current = series.createPriceLine({
+          price: px,
+          color: '#ffffff',
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title,
+        })
+      }
+    }
+
+    const rows = displayRowsRef.current
+    if (!rows.length) return
+    const last = rows[rows.length - 1]
+    const updated = {
+      time: last.time,
+      open: last.open,
+      high: Math.max(Number(last.high), px),
+      low: Math.min(Number(last.low), px),
+      close: px,
+    }
+    try {
+      series.update(updated)
+      displayRowsRef.current = [...rows.slice(0, -1), updated]
+    } catch {
+      /* series may be mid-reset */
+    }
+  }, [livePrice, liveCandle, candles, displayRows, histStatus, range])
 
   // Entry / SL / TP
   useEffect(() => {
@@ -541,12 +614,14 @@ export default function CandleChart({
     const keys = new Set(displayRows.map((r) => utcDayKey(r.time)))
     return keys.size
   }, [displayRows])
+  const livePx = resolveLivePrice(livePrice, liveCandle, candles)
 
   return (
     <div className="chart-wrap">
       <div className="chart-head">
         <h2>{symbol} · desk tape</h2>
         <span className="meta">
+          {livePx != null ? `LIVE ${livePx.toFixed(2)} · ` : ''}
           {posCount ? `${posCount} open` : 'flat'} · {sigCount} signals
           {lastRsi != null ? ` · RSI ${lastRsi}` : ''}
           {displayRows.length ? ` · ${displayRows.length} bars` : ''}
@@ -586,6 +661,7 @@ export default function CandleChart({
         <span className="chart-leg ema50">EMA50</span>
         <span className="chart-leg ema200">EMA200</span>
         <span className="chart-leg rsi">RSI{rsiPeriod}</span>
+        <span className="chart-leg live">LIVE</span>
         <span className="chart-leg day">Day</span>
         <span className="chart-leg entry">Entry</span>
         <span className="chart-leg sl">SL</span>
@@ -596,8 +672,8 @@ export default function CandleChart({
       <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
       {range !== 'live' ? (
         <p className="desk-history-footnote">
-          History via market gold OHLC (GC=F / PAXG) · UTC day separators · Live strategy feed
-          remains on <strong>Live</strong> M1 desk tape.
+          History via market gold OHLC (GC=F / PAXG) · UTC day separators · white{' '}
+          <strong>LIVE</strong> price line + last bar track the desk tick on every timeframe.
         </p>
       ) : null}
     </div>

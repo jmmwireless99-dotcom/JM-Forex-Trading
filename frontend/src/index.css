@@ -645,6 +645,9 @@ select {
 .chart-leg.day {
   color: #f0c75e;
 }
+.chart-leg.live {
+  color: #ffffff;
+}
 .chart-leg.entry {
   color: #ff9f6b;
 }
