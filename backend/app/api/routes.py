@@ -653,6 +653,17 @@ async def websocket_feed(ws: WebSocket) -> None:
                 },
             }
         )
+        # Desk-wide signal tape — same for every browser/account (not filtered).
+        await ws.send_json(
+            {
+                "event": "signals",
+                "data": {
+                    "signals": [
+                        s.model_dump(mode="json") for s in engine.recent_signals()
+                    ]
+                },
+            }
+        )
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:

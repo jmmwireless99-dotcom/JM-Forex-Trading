@@ -157,25 +157,54 @@ export async function ensureAccountSession(options = {}) {
 
 export function connectFeed(onMessage) {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const session = loadAccountSession()
-  const qs = session
-    ? `?account_id=${encodeURIComponent(session.id)}&account_token=${encodeURIComponent(session.token)}`
-    : ''
-  const wsPath = `${BASE}api/ws${qs}`.replace(/\/{2,}/g, '/')
-  const ws = new WebSocket(`${proto}://${window.location.host}${wsPath}`)
-  ws.onmessage = (evt) => {
-    try {
-      onMessage(JSON.parse(evt.data))
-    } catch {
-      /* ignore malformed */
+  let closed = false
+  let ws = null
+  let ping = null
+  let retry = null
+  let attempt = 0
+
+  const connect = () => {
+    if (closed) return
+    const session = loadAccountSession()
+    const qs = session
+      ? `?account_id=${encodeURIComponent(session.id)}&account_token=${encodeURIComponent(session.token)}`
+      : ''
+    const wsPath = `${BASE}api/ws${qs}`.replace(/\/{2,}/g, '/')
+    ws = new WebSocket(`${proto}://${window.location.host}${wsPath}`)
+    ws.onmessage = (evt) => {
+      try {
+        onMessage(JSON.parse(evt.data))
+      } catch {
+        /* ignore malformed */
+      }
+    }
+    ws.onopen = () => {
+      attempt = 0
+      if (ping) clearInterval(ping)
+      ping = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send('ping')
+      }, 15000)
+    }
+    ws.onclose = () => {
+      if (ping) clearInterval(ping)
+      ping = null
+      if (closed) return
+      // Reconnect so late browsers keep receiving desk signals.
+      const delay = Math.min(1000 * 2 ** attempt, 15000)
+      attempt += 1
+      retry = setTimeout(connect, delay)
     }
   }
-  const ping = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) ws.send('ping')
-  }, 15000)
-  ws.onclose = () => clearInterval(ping)
+
+  connect()
   return () => {
-    clearInterval(ping)
-    ws.close()
+    closed = true
+    if (ping) clearInterval(ping)
+    if (retry) clearTimeout(retry)
+    try {
+      ws?.close()
+    } catch {
+      /* ignore */
+    }
   }
 }

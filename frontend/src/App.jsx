@@ -114,7 +114,169 @@ export default function App() {
   useEffect(() => {
     let alive = true
     let disconnect = () => {}
+
+    const applySignals = (list) => {
+      if (!alive || !Array.isArray(list)) return
+      setSignals(list.slice(0, 40))
+    }
+
+    const onFeed = (msg) => {
+      if (!alive) return
+      const myId = accountIdRef.current
+      const dataAid = msg.data?.account_id
+      if (
+        dataAid &&
+        myId &&
+        dataAid !== myId &&
+        ['account', 'positions', 'trades', 'trade', 'order', 'position', 'position_closed'].includes(
+          msg.event,
+        )
+      ) {
+        return
+      }
+      if (msg.event === 'engine') {
+        setStatus(msg.data)
+        if (msg.data?.mode) setMode(msg.data.mode)
+        if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
+      }
+      if (msg.event === 'account') setAccount(msg.data)
+      if (msg.event === 'positions') {
+        const list = Array.isArray(msg.data) ? msg.data : msg.data?.positions || []
+        setPositions(list)
+      }
+      if (msg.event === 'tick') {
+        setTicks((prev) => ({ ...prev, [msg.data.symbol]: msg.data }))
+      }
+      // Desk-wide: snapshot + live ticks — never account-filtered
+      if (msg.event === 'signals') {
+        applySignals(msg.data?.signals || [])
+      }
+      if (msg.event === 'signal') {
+        setSignals((prev) => {
+          const row = msg.data
+          if (!row) return prev
+          const key = `${row.timestamp}|${row.side}|${row.strategy}|${row.reason || ''}`
+          const rest = prev.filter(
+            (s) => `${s.timestamp}|${s.side}|${s.strategy}|${s.reason || ''}` !== key,
+          )
+          return [row, ...rest].slice(0, 40)
+        })
+      }
+      if (msg.event === 'ai_advice') {
+        setAiAdvice(msg.data)
+      }
+      if (msg.event === 'ai') {
+        setAiStatus(msg.data)
+        if (msg.data?.last_advice) setAiAdvice(msg.data.last_advice)
+      }
+      if (msg.event === 'position_closed') {
+        setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
+      }
+      if (msg.event === 'connection') {
+        setMt((prev) => ({ ...(prev || {}), ...msg.data }))
+        if (msg.data?.mode) setMode(msg.data.mode)
+      }
+      if (msg.event === 'candles') {
+        setCandles(msg.data.candles || [])
+      }
+      if (msg.event === 'candle') {
+        setLiveCandle(msg.data)
+        setCandles((prev) => {
+          const next = [...prev]
+          const idx = next.findIndex(
+            (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
+          )
+          if (idx >= 0) next[idx] = msg.data
+          else next.push(msg.data)
+          return next.slice(-240)
+        })
+      }
+      if (msg.event === 'candle_closed') {
+        setLiveCandle(null)
+        setCandles((prev) => {
+          const next = [
+            ...prev.filter(
+              (c) =>
+                (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp),
+            ),
+          ]
+          next.push(msg.data)
+          return next.slice(-240)
+        })
+      }
+      if (msg.event === 'trades') {
+        setTrades(msg.data?.trades || [])
+        setTradeSummary(msg.data?.summary || null)
+      }
+      if (msg.event === 'trade') {
+        setTrades((prev) => {
+          const rest = prev.filter((t) => t.id !== msg.data.id && t.ticket !== msg.data.ticket)
+          return [msg.data, ...rest].slice(0, 100)
+        })
+      }
+      if (msg.event === 'auto') setAutoInfo(msg.data)
+      if (msg.event === 'transfer') {
+        setAutoInfo((prev) => ({
+          ...(prev || {}),
+          last_transfer: `${msg.data.from_slot} → ${msg.data.to_slot}: ${msg.data.strategy}`,
+          session_slot: msg.data.to_slot,
+        }))
+      }
+    }
+
     ;(async () => {
+      // 1) Desk-wide tape first — signals/candles must work even if account auth fails
+      //    (different browsers create different paper accounts; signals are shared).
+      try {
+        const deskResults = await Promise.allSettled([
+          api.status(),
+          api.signals(),
+          api.ticks(),
+          api.strategies(),
+          api.desk(),
+          api.mtStatus(),
+          api.candles('XAUUSD', 200),
+          api.auto(),
+        ])
+        if (!alive) return
+        const val = (i) =>
+          deskResults[i].status === 'fulfilled' ? deskResults[i].value : null
+        const st = val(0)
+        const sig = val(1)
+        const tk = val(2)
+        const strat = val(3)
+        const deskInfo = val(4)
+        const mtInfo = val(5)
+        const candleInfo = val(6)
+        const auto = val(7)
+        if (st) {
+          setStatus(st)
+          setMode(st.mode || st.connection?.mode || 'paper')
+          clearStrategyDirty(st.active_strategy)
+        }
+        if (sig) applySignals(sig.signals || [])
+        if (strat) setStrategies(strat.strategies || [])
+        if (deskInfo) {
+          setDesk(deskInfo)
+          if (deskInfo.ai) setAiStatus(deskInfo.ai)
+        }
+        if (mtInfo) setMt(mtInfo)
+        if (auto) setAutoInfo(auto)
+        if (candleInfo) setCandles(candleInfo.candles || [])
+        if (tk) {
+          const map = {}
+          for (const t of tk.ticks || []) map[t.symbol] = t
+          setTicks(map)
+        }
+        const deskErr = deskResults.find((r) => r.status === 'rejected')
+        if (deskErr && !st) {
+          setError(deskErr.reason?.message || 'Failed to load desk API')
+        }
+      } catch (err) {
+        if (alive) setError(err.message || 'Failed to load desk API')
+      }
+
+      // 2) Private paper book for this browser (capital / positions / fills)
       try {
         const session = await ensureAccountSession({ deposit: 1000, label: 'Client demo' })
         if (!alive) return
@@ -124,142 +286,50 @@ export default function App() {
           code: session.code,
           label: session.label,
         })
-
-        const [st, acc, pos, sig, tk, strat, deskInfo, mtInfo, candleInfo, tradeInfo, auto, advice] =
-          await Promise.all([
-            api.status(),
-            api.account(),
-            api.positions(),
-            api.signals(),
-            api.ticks(),
-            api.strategies(),
-            api.desk(),
-            api.mtStatus(),
-            api.candles('XAUUSD', 200),
-            api.trades(100),
-            api.auto(),
-            api.aiAdvice().catch(() => null),
-          ])
+        const bookResults = await Promise.allSettled([
+          api.account(),
+          api.positions(),
+          api.trades(100),
+          api.aiAdvice().catch(() => null),
+        ])
         if (!alive) return
-        setStatus(st)
-        setAccount(acc)
-        setCapital(acc.capital || null)
-        if (acc.deposit != null) setDepositInput(String(acc.deposit))
-        else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
-        setPositions(pos.open || [])
-        setSignals(sig.signals || [])
-        setStrategies(strat.strategies || [])
-        setDesk(deskInfo)
-        setMt(mtInfo)
-        setAutoInfo(auto)
+        const bval = (i) =>
+          bookResults[i].status === 'fulfilled' ? bookResults[i].value : null
+        const acc = bval(0)
+        const pos = bval(1)
+        const tradeInfo = bval(2)
+        const advice = bval(3)
+        if (acc) {
+          setAccount(acc)
+          setCapital(acc.capital || null)
+          if (acc.deposit != null) setDepositInput(String(acc.deposit))
+          else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+        }
+        if (pos) setPositions(pos.open || [])
+        if (tradeInfo) {
+          setTrades(tradeInfo.trades || [])
+          setTradeSummary(tradeInfo.summary || null)
+        }
         if (advice?.advice) setAiAdvice(advice.advice)
         if (advice?.status) setAiStatus(advice.status)
-        else if (deskInfo?.ai) setAiStatus(deskInfo.ai)
-        setMode(st.mode || st.connection?.mode || 'paper')
-        setCandles(candleInfo.candles || [])
-        setTrades(tradeInfo.trades || [])
-        setTradeSummary(tradeInfo.summary || null)
-        clearStrategyDirty(st.active_strategy)
-        const map = {}
-        for (const t of tk.ticks || []) map[t.symbol] = t
-        setTicks(map)
-
-        disconnect = connectFeed((msg) => {
-          if (!alive) return
-          const myId = accountIdRef.current
-          const dataAid = msg.data?.account_id
-          if (
-            dataAid &&
-            myId &&
-            dataAid !== myId &&
-            ['account', 'positions', 'trades', 'trade', 'order', 'position', 'position_closed'].includes(
-              msg.event,
-            )
-          ) {
-            return
-          }
-          if (msg.event === 'engine') {
-            setStatus(msg.data)
-            if (msg.data?.mode) setMode(msg.data.mode)
-            if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
-          }
-          if (msg.event === 'account') setAccount(msg.data)
-          if (msg.event === 'positions') {
-            const list = Array.isArray(msg.data)
-              ? msg.data
-              : msg.data?.positions || []
-            setPositions(list)
-          }
-          if (msg.event === 'tick') {
-            setTicks((prev) => ({ ...prev, [msg.data.symbol]: msg.data }))
-          }
-          if (msg.event === 'signal') {
-            setSignals((prev) => [msg.data, ...prev].slice(0, 40))
-          }
-          if (msg.event === 'ai_advice') {
-            setAiAdvice(msg.data)
-          }
-          if (msg.event === 'ai') {
-            setAiStatus(msg.data)
-            if (msg.data?.last_advice) setAiAdvice(msg.data.last_advice)
-          }
-          if (msg.event === 'position_closed') {
-            setPositions((prev) => prev.filter((p) => p.id !== msg.data.id))
-          }
-          if (msg.event === 'connection') {
-            setMt((prev) => ({ ...(prev || {}), ...msg.data }))
-            if (msg.data?.mode) setMode(msg.data.mode)
-          }
-          if (msg.event === 'candles') {
-            setCandles(msg.data.candles || [])
-          }
-          if (msg.event === 'candle') {
-            setLiveCandle(msg.data)
-            setCandles((prev) => {
-              const next = [...prev]
-              const idx = next.findIndex(
-                (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
-              )
-              if (idx >= 0) next[idx] = msg.data
-              else next.push(msg.data)
-              return next.slice(-240)
-            })
-          }
-          if (msg.event === 'candle_closed') {
-            setLiveCandle(null)
-            setCandles((prev) => {
-              const next = [...prev.filter((c) => (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp))]
-              next.push(msg.data)
-              return next.slice(-240)
-            })
-          }
-          if (msg.event === 'trades') {
-            setTrades(msg.data?.trades || [])
-            setTradeSummary(msg.data?.summary || null)
-          }
-          if (msg.event === 'trade') {
-            setTrades((prev) => {
-              const rest = prev.filter((t) => t.id !== msg.data.id && t.ticket !== msg.data.ticket)
-              return [msg.data, ...rest].slice(0, 100)
-            })
-          }
-          if (msg.event === 'auto') setAutoInfo(msg.data)
-          if (msg.event === 'transfer') {
-            setAutoInfo((prev) => ({
-              ...(prev || {}),
-              last_transfer: `${msg.data.from_slot} → ${msg.data.to_slot}: ${msg.data.strategy}`,
-              session_slot: msg.data.to_slot,
-            }))
-          }
-        })
       } catch (err) {
-        if (alive) setError(err.message || 'Failed to load API')
+        if (alive) {
+          setError((prev) => prev || err.message || 'Failed to load paper account')
+        }
       }
+
+      if (!alive) return
+      disconnect = connectFeed(onFeed)
     })()
 
     const deskTimer = setInterval(() => {
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
       api.mtStatus().then((m) => alive && setMt(m)).catch(() => {})
+      // Refresh shared signal tape so other browsers stay in sync even if a WS event was missed
+      api
+        .signals()
+        .then((sig) => alive && applySignals(sig.signals || []))
+        .catch(() => {})
     }, 10000)
 
     return () => {
@@ -841,22 +911,29 @@ export default function App() {
         </section>
 
         <section className="panel">
-          <h2>Signals</h2>
+          <h2>Desk signals</h2>
+          <p className="meta" style={{ marginTop: 0 }}>
+            Shared desk tape — same BUY/SELL list on every browser. Paper fills stay on
+            this account ({accountMeta?.code || '…'}) only.
+          </p>
           <div className="signal-list">
             {signals.length === 0 ? (
               <div className="empty">Waiting for confluence signals…</div>
             ) : (
-              signals.map((s, i) => (
-                <div className="signal" key={`${s.timestamp}-${i}`}>
-                  <span className={`side ${s.side.toLowerCase()}`}>{s.side}</span>
-                  <div>
+              signals.map((s, i) => {
+                const side = String(s.side?.value || s.side || '').toUpperCase()
+                return (
+                  <div className="signal" key={`${s.timestamp}-${side}-${s.strategy}-${i}`}>
+                    <span className={`side ${side.toLowerCase()}`}>{side || '—'}</span>
                     <div>
-                      <strong>{s.symbol}</strong> · {s.strategy}
+                      <div>
+                        <strong>{s.symbol}</strong> · {s.strategy}
+                      </div>
+                      <div className="meta">{s.reason}</div>
                     </div>
-                    <div className="meta">{s.reason}</div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </section>
@@ -1011,7 +1088,10 @@ export default function App() {
             </button>
           </div>
           {trades.length === 0 ? (
-            <div className="empty">No trades yet — waiting for signals/fills.</div>
+            <div className="empty">
+              No fills on this paper account yet. Desk signals (right/top) are shared —
+              auto fill goes to one book only.
+            </div>
           ) : (
             <div className="trade-scroll">
               <table className="table">
