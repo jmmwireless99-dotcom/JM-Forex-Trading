@@ -281,15 +281,9 @@ export default function CandleChart({
 
     if (!showRsi || !rsiRef.current) {
       rsiRef.current?.setData([])
-      lastRsiRef.current = null
       return
     }
-    const rsiVals = rsiSeries(closes, rsiPeriod)
-    const rsiData = pack(rsiVals, 2)
-    rsiRef.current.setData(rsiData)
-    lastRsiRef.current = rsiData.length ? rsiData[rsiData.length - 1].value : null
-    // force a light re-render for RSI readout in header
-    hostRef.current?.setAttribute('data-rsi', String(lastRsiRef.current ?? ''))
+    rsiRef.current.setData(pack(rsiSeries(closes, rsiPeriod), 2))
   }, [candles, liveCandle, showEma, showRsi, rsiPeriod])
 
   // Open trade Entry / SL / TP price lines
