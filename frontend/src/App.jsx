@@ -779,7 +779,7 @@ export default function App() {
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? 'Live COMEX gold candles · strategies still use paper/MT feed'
-              : 'Desk tape — EMA + BUY/SELL arrows + Entry / SL / TP lines'}
+              : 'Desk tape — EMA + RSI(14) + BUY/SELL arrows + Entry / SL / TP'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (

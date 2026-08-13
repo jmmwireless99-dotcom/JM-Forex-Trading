@@ -28,6 +28,36 @@ function emaSeries(closes, period) {
   return out
 }
 
+/** Wilder RSI series (period 14 — same as EMA_RSI_Scalp). */
+function rsiSeries(closes, period = 14) {
+  const out = new Array(closes.length).fill(null)
+  if (closes.length < period + 1) return out
+  let avgGain = 0
+  let avgLoss = 0
+  for (let i = 1; i <= period; i += 1) {
+    const ch = closes[i] - closes[i - 1]
+    if (ch >= 0) avgGain += ch
+    else avgLoss -= ch
+  }
+  avgGain /= period
+  avgLoss /= period
+  const toRsi = (g, l) => {
+    if (l <= 1e-12) return 100
+    const rs = g / l
+    return 100 - 100 / (1 + rs)
+  }
+  out[period] = toRsi(avgGain, avgLoss)
+  for (let i = period + 1; i < closes.length; i += 1) {
+    const ch = closes[i] - closes[i - 1]
+    const gain = ch > 0 ? ch : 0
+    const loss = ch < 0 ? -ch : 0
+    avgGain = (avgGain * (period - 1) + gain) / period
+    avgLoss = (avgLoss * (period - 1) + loss) / period
+    out[i] = toRsi(avgGain, avgLoss)
+  }
+  return out
+}
+
 function strategyTag(name = '') {
   const n = String(name).toUpperCase()
   if (n.includes('VWAP')) return 'VWAP'
@@ -76,11 +106,15 @@ export default function CandleChart({
   positions = [],
   signals = [],
   showEma = true,
+  showRsi = true,
+  rsiPeriod = 14,
 }) {
   const hostRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
   const emaRefs = useRef({ ema20: null, ema50: null, ema200: null })
+  const rsiRef = useRef(null)
+  const rsiLevelLinesRef = useRef([])
   const priceLinesRef = useRef([])
   const candleTimesRef = useRef([])
 
@@ -104,7 +138,10 @@ export default function CandleChart({
         vertLines: { color: 'rgba(125, 255, 179, 0.06)' },
         horzLines: { color: 'rgba(125, 255, 179, 0.06)' },
       },
-      rightPriceScale: { borderColor: 'rgba(125, 255, 179, 0.15)' },
+      rightPriceScale: {
+        borderColor: 'rgba(125, 255, 179, 0.15)',
+        scaleMargins: { top: 0.05, bottom: 0.28 },
+      },
       timeScale: {
         borderColor: 'rgba(125, 255, 179, 0.15)',
         timeVisible: true,
@@ -147,6 +184,48 @@ export default function CandleChart({
       crosshairMarkerVisible: false,
       title: 'EMA200',
     })
+    // Bottom pane: RSI(14) on its own price scale
+    const rsiSeriesApi = chart.addLineSeries({
+      color: '#e8a0ff',
+      lineWidth: 2,
+      priceScaleId: 'rsi',
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      title: 'RSI',
+    })
+    chart.priceScale('rsi').applyOptions({
+      scaleMargins: { top: 0.78, bottom: 0.02 },
+      borderVisible: false,
+      drawTicks: false,
+    })
+    rsiLevelLinesRef.current = [
+      rsiSeriesApi.createPriceLine({
+        price: 70,
+        color: 'rgba(255, 107, 107, 0.55)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: '70',
+      }),
+      rsiSeriesApi.createPriceLine({
+        price: 50,
+        color: 'rgba(197, 212, 207, 0.35)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: false,
+        title: '',
+      }),
+      rsiSeriesApi.createPriceLine({
+        price: 30,
+        color: 'rgba(125, 255, 179, 0.55)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: '30',
+      }),
+    ]
+    rsiRef.current = rsiSeriesApi
     chartRef.current = chart
     seriesRef.current = series
 
@@ -165,11 +244,13 @@ export default function CandleChart({
       chartRef.current = null
       seriesRef.current = null
       emaRefs.current = { ema20: null, ema50: null, ema200: null }
+      rsiRef.current = null
+      rsiLevelLinesRef.current = []
       priceLinesRef.current = []
     }
   }, [])
 
-  // Candles + EMA overlays
+  // Candles + EMA + RSI overlays
   useEffect(() => {
     if (!seriesRef.current) return
     const data = buildCandleRows(candles, liveCandle)
@@ -178,25 +259,38 @@ export default function CandleChart({
     seriesRef.current.setData(data)
     chartRef.current?.timeScale().scrollToRealTime()
 
-    if (!showEma) {
-      emaRefs.current.ema20?.setData([])
-      emaRefs.current.ema50?.setData([])
-      emaRefs.current.ema200?.setData([])
-      return
-    }
     const closes = data.map((d) => d.close)
-    const pack = (values) =>
+    const pack = (values, digits = 3) =>
       data
         .map((d, i) =>
           values[i] == null
             ? null
-            : { time: d.time, value: Number(values[i].toFixed(3)) },
+            : { time: d.time, value: Number(values[i].toFixed(digits)) },
         )
         .filter(Boolean)
-    emaRefs.current.ema20?.setData(pack(emaSeries(closes, 20)))
-    emaRefs.current.ema50?.setData(pack(emaSeries(closes, 50)))
-    emaRefs.current.ema200?.setData(pack(emaSeries(closes, 200)))
-  }, [candles, liveCandle, showEma])
+
+    if (!showEma) {
+      emaRefs.current.ema20?.setData([])
+      emaRefs.current.ema50?.setData([])
+      emaRefs.current.ema200?.setData([])
+    } else {
+      emaRefs.current.ema20?.setData(pack(emaSeries(closes, 20)))
+      emaRefs.current.ema50?.setData(pack(emaSeries(closes, 50)))
+      emaRefs.current.ema200?.setData(pack(emaSeries(closes, 200)))
+    }
+
+    if (!showRsi || !rsiRef.current) {
+      rsiRef.current?.setData([])
+      lastRsiRef.current = null
+      return
+    }
+    const rsiVals = rsiSeries(closes, rsiPeriod)
+    const rsiData = pack(rsiVals, 2)
+    rsiRef.current.setData(rsiData)
+    lastRsiRef.current = rsiData.length ? rsiData[rsiData.length - 1].value : null
+    // force a light re-render for RSI readout in header
+    hostRef.current?.setAttribute('data-rsi', String(lastRsiRef.current ?? ''))
+  }, [candles, liveCandle, showEma, showRsi, rsiPeriod])
 
   // Open trade Entry / SL / TP price lines
   useEffect(() => {
@@ -287,6 +381,18 @@ export default function CandleChart({
 
   const posCount = openPositions.length
   const sigCount = (signals || []).length
+  const lastRsi = useMemo(() => {
+    const data = buildCandleRows(candles, liveCandle)
+    if (!showRsi || data.length < rsiPeriod + 1) return null
+    const vals = rsiSeries(
+      data.map((d) => d.close),
+      rsiPeriod,
+    )
+    for (let i = vals.length - 1; i >= 0; i -= 1) {
+      if (vals[i] != null) return Number(vals[i].toFixed(1))
+    }
+    return null
+  }, [candles, liveCandle, showRsi, rsiPeriod])
 
   return (
     <div className="chart-wrap">
@@ -294,19 +400,21 @@ export default function CandleChart({
         <h2>{symbol} · desk tape</h2>
         <span className="meta">
           {posCount ? `${posCount} open` : 'flat'} · {sigCount} signals
+          {lastRsi != null ? ` · RSI ${lastRsi}` : ''}
         </span>
       </div>
       <div className="chart-legend" aria-label="Chart legend">
         <span className="chart-leg ema20">EMA20</span>
         <span className="chart-leg ema50">EMA50</span>
         <span className="chart-leg ema200">EMA200</span>
+        <span className="chart-leg rsi">RSI{rsiPeriod}</span>
         <span className="chart-leg entry">Entry</span>
         <span className="chart-leg sl">SL</span>
         <span className="chart-leg tp">TP</span>
         <span className="chart-leg buy">▲ BUY</span>
         <span className="chart-leg sell">▼ SELL</span>
       </div>
-      <div className="chart-canvas" ref={hostRef} />
+      <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
     </div>
   )
 }

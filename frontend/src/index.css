@@ -600,6 +600,11 @@ select {
   min-height: 300px;
 }
 
+.chart-canvas-rsi {
+  height: min(62vh, 540px);
+  min-height: 360px;
+}
+
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -633,6 +638,9 @@ select {
 }
 .chart-leg.ema200 {
   color: #c79bff;
+}
+.chart-leg.rsi {
+  color: #e8a0ff;
 }
 .chart-leg.entry {
   color: #ff9f6b;
