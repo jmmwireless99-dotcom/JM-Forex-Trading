@@ -849,7 +849,7 @@ export default function App() {
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? 'Live COMEX gold candles · strategies still use paper/MT feed'
-              : 'Desk tape — EMA + RSI(14) + BUY/SELL arrows + Entry / SL / TP'}
+              : 'Desk tape — Live M1 · 1W/1M history · daily separators · EMA/RSI/SL/TP'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (

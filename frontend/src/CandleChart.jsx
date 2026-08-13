@@ -1,8 +1,26 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createChart, LineStyle } from 'lightweight-charts'
+import { api } from './api'
+
+const RANGE_OPTS = [
+  { id: 'live', label: 'Live', hint: 'Engine M1' },
+  { id: '1w', label: '1W', hint: 'H1 · day marks' },
+  { id: '1m', label: '1M Daily', hint: '1 day / bar' },
+  { id: '1m_h1', label: '1M H1', hint: 'H1 · day marks' },
+]
+
+function loadRange() {
+  try {
+    const saved = localStorage.getItem('jm_desk_chart_range')
+    if (RANGE_OPTS.some((r) => r.id === saved)) return saved
+  } catch {
+    /* ignore */
+  }
+  return 'live'
+}
 
 function toChartCandle(c) {
-  const t = Math.floor(new Date(c.open_time || c.timestamp).getTime() / 1000)
+  const t = Math.floor(new Date(c.open_time || c.timestamp || c.time * 1000).getTime() / 1000)
   return {
     time: t,
     open: Number(c.open),
@@ -77,7 +95,6 @@ function sideOf(value) {
 function snapToCandleTime(ts, candleTimes) {
   if (!candleTimes.length) return null
   const t = Math.floor(new Date(ts).getTime() / 1000)
-  // Prefer same-or-earlier bar so markers attach to an existing candle.
   let best = candleTimes[0]
   for (const ct of candleTimes) {
     if (ct <= t) best = ct
@@ -99,6 +116,50 @@ function buildCandleRows(candles, liveCandle) {
   return Array.from(map.values()).sort((a, b) => a.time - b.time)
 }
 
+function utcDayKey(unixSec) {
+  return new Date(unixSec * 1000).toISOString().slice(0, 10)
+}
+
+function formatDayLabel(unixSec) {
+  return new Date(unixSec * 1000).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+}
+
+/** First bar of each UTC day → square marker (daily separators). */
+function dayBoundaryMarkers(rows) {
+  const out = []
+  let prev = null
+  for (const r of rows) {
+    const key = utcDayKey(r.time)
+    if (key === prev) continue
+    prev = key
+    out.push({
+      time: r.time,
+      position: 'aboveBar',
+      color: 'rgba(240, 199, 94, 0.9)',
+      shape: 'square',
+      text: formatDayLabel(r.time),
+    })
+  }
+  return out
+}
+
+function sliceLastDays(rows, days) {
+  if (!rows.length) return rows
+  const cutoff = rows[rows.length - 1].time - days * 86400
+  return rows.filter((r) => r.time >= cutoff)
+}
+
+function rangeFetchSpec(range) {
+  if (range === '1w') return { interval: '60', limit: 250, days: 7, dayMarks: true }
+  if (range === '1m') return { interval: '1d', limit: 45, days: 31, dayMarks: true }
+  if (range === '1m_h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
+  return null
+}
+
 export default function CandleChart({
   candles = [],
   liveCandle = null,
@@ -117,6 +178,12 @@ export default function CandleChart({
   const rsiLevelLinesRef = useRef([])
   const priceLinesRef = useRef([])
   const candleTimesRef = useRef([])
+  const displayRowsRef = useRef([])
+
+  const [range, setRange] = useState(loadRange)
+  const [histRows, setHistRows] = useState([])
+  const [histStatus, setHistStatus] = useState('idle') // idle | loading | ready | error
+  const [histError, setHistError] = useState('')
 
   const openPositions = useMemo(
     () =>
@@ -126,6 +193,13 @@ export default function CandleChart({
       }),
     [positions],
   )
+
+  const liveRows = useMemo(
+    () => buildCandleRows(candles, liveCandle),
+    [candles, liveCandle],
+  )
+
+  const displayRows = range === 'live' ? liveRows : histRows
 
   useEffect(() => {
     if (!hostRef.current) return undefined
@@ -184,7 +258,6 @@ export default function CandleChart({
       crosshairMarkerVisible: false,
       title: 'EMA200',
     })
-    // Bottom pane: RSI(14) on its own price scale
     const rsiSeriesApi = chart.addLineSeries({
       color: '#e8a0ff',
       lineWidth: 2,
@@ -250,12 +323,65 @@ export default function CandleChart({
     }
   }, [])
 
-  // Candles + EMA + RSI overlays
+  // Fetch 1W / 1M history (gold market OHLC — desk engine only keeps ~hours live)
+  useEffect(() => {
+    const spec = rangeFetchSpec(range)
+    if (!spec) {
+      setHistStatus('idle')
+      setHistError('')
+      return undefined
+    }
+    let alive = true
+    setHistStatus('loading')
+    setHistError('')
+    ;(async () => {
+      try {
+        const data = await api.goldCandles({
+          interval: spec.interval,
+          limit: spec.limit,
+        })
+        if (!alive) return
+        let rows = (data.candles || [])
+          .map((c) => ({
+            time: Number(c.time),
+            open: Number(c.open),
+            high: Number(c.high),
+            low: Number(c.low),
+            close: Number(c.close),
+          }))
+          .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close))
+          .sort((a, b) => a.time - b.time)
+        rows = sliceLastDays(rows, spec.days)
+        if (!rows.length) throw new Error('No history candles returned')
+        setHistRows(rows)
+        setHistStatus('ready')
+      } catch (e) {
+        if (!alive) return
+        setHistRows([])
+        setHistStatus('error')
+        setHistError(e?.message || String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [range])
+
+  // Candles + EMA + RSI
   useEffect(() => {
     if (!seriesRef.current) return
-    const data = buildCandleRows(candles, liveCandle)
+    const data = displayRows
+    displayRowsRef.current = data
     candleTimesRef.current = data.map((d) => d.time)
-    if (!data.length) return
+    if (!data.length) {
+      if (range !== 'live' && histStatus === 'loading') return
+      seriesRef.current.setData([])
+      emaRefs.current.ema20?.setData([])
+      emaRefs.current.ema50?.setData([])
+      emaRefs.current.ema200?.setData([])
+      rsiRef.current?.setData([])
+      return
+    }
     seriesRef.current.setData(data)
     chartRef.current?.timeScale().scrollToRealTime()
 
@@ -284,9 +410,9 @@ export default function CandleChart({
       return
     }
     rsiRef.current.setData(pack(rsiSeries(closes, rsiPeriod), 2))
-  }, [candles, liveCandle, showEma, showRsi, rsiPeriod])
+  }, [displayRows, showEma, showRsi, rsiPeriod, range, histStatus])
 
-  // Open trade Entry / SL / TP price lines
+  // Entry / SL / TP
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
@@ -294,7 +420,7 @@ export default function CandleChart({
       try {
         series.removePriceLine(line)
       } catch {
-        /* already removed with chart */
+        /* ignore */
       }
     }
     priceLinesRef.current = []
@@ -340,19 +466,26 @@ export default function CandleChart({
     })
   }, [openPositions])
 
-  // Signal arrows (BUY ↑ / SELL ↓) with short strategy tags (EMA, SMC, …)
+  // Day separators + signal arrows
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
     const times = candleTimesRef.current
+    const rows = displayRowsRef.current
     if (!times.length) {
       series.setMarkers([])
       return
     }
-    const recent = (signals || []).slice(0, 40)
-    const markers = []
+
+    const spec = rangeFetchSpec(range)
+    const wantDayMarks = range === 'live' ? rows.length > 0 : Boolean(spec?.dayMarks)
+    const dayMarks = wantDayMarks ? dayBoundaryMarkers(rows) : []
+    // On pure daily bars, every bar is a day — keep labels, lighter noise OK.
+    const dayByTime = new Map(dayMarks.map((m) => [m.time, m]))
+
+    const signalMarks = []
     const seen = new Set()
-    for (const s of recent) {
+    for (const s of (signals || []).slice(0, 40)) {
       const side = sideOf(s.side)
       if (side !== 'BUY' && side !== 'SELL') continue
       const time = snapToCandleTime(s.timestamp || s.ts || s.created_at, times)
@@ -361,32 +494,42 @@ export default function CandleChart({
       const key = `${time}|${side}|${tag}`
       if (seen.has(key)) continue
       seen.add(key)
-      markers.push({
+      const day = dayByTime.get(time)
+      const dayTxt = day ? ` · ${day.text}` : ''
+      signalMarks.push({
         time,
         position: side === 'BUY' ? 'belowBar' : 'aboveBar',
         color: side === 'BUY' ? '#7dffb3' : '#ff6b6b',
         shape: side === 'BUY' ? 'arrowUp' : 'arrowDown',
-        text: `${side === 'BUY' ? '▲' : '▼'} ${tag}`,
+        text: `${side === 'BUY' ? '▲' : '▼'} ${tag}${dayTxt}`,
       })
+      // Prefer signal marker text when it lands on the day boundary bar
+      if (day) dayByTime.delete(time)
     }
-    markers.sort((a, b) => a.time - b.time)
+
+    const markers = [...dayByTime.values(), ...signalMarks].sort((a, b) => a.time - b.time)
     series.setMarkers(markers)
-  }, [signals, candles, liveCandle])
+  }, [signals, displayRows, range])
 
   const posCount = openPositions.length
   const sigCount = (signals || []).length
   const lastRsi = useMemo(() => {
-    const data = buildCandleRows(candles, liveCandle)
-    if (!showRsi || data.length < rsiPeriod + 1) return null
+    if (!showRsi || displayRows.length < rsiPeriod + 1) return null
     const vals = rsiSeries(
-      data.map((d) => d.close),
+      displayRows.map((d) => d.close),
       rsiPeriod,
     )
     for (let i = vals.length - 1; i >= 0; i -= 1) {
       if (vals[i] != null) return Number(vals[i].toFixed(1))
     }
     return null
-  }, [candles, liveCandle, showRsi, rsiPeriod])
+  }, [displayRows, showRsi, rsiPeriod])
+
+  const activeRange = RANGE_OPTS.find((r) => r.id === range) || RANGE_OPTS[0]
+  const dayCount = useMemo(() => {
+    const keys = new Set(displayRows.map((r) => utcDayKey(r.time)))
+    return keys.size
+  }, [displayRows])
 
   return (
     <div className="chart-wrap">
@@ -395,13 +538,44 @@ export default function CandleChart({
         <span className="meta">
           {posCount ? `${posCount} open` : 'flat'} · {sigCount} signals
           {lastRsi != null ? ` · RSI ${lastRsi}` : ''}
+          {displayRows.length ? ` · ${displayRows.length} bars` : ''}
+          {dayCount ? ` · ${dayCount}d` : ''}
         </span>
       </div>
+
+      <div className="desk-range-bar" role="tablist" aria-label="Desk chart range">
+        {RANGE_OPTS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            role="tab"
+            aria-selected={range === opt.id}
+            className={range === opt.id ? 'on' : ''}
+            onClick={() => {
+              setRange(opt.id)
+              try {
+                localStorage.setItem('jm_desk_chart_range', opt.id)
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="meta desk-range-hint">{activeRange.hint}</span>
+        {histStatus === 'loading' ? <span className="meta">Loading history…</span> : null}
+        {histStatus === 'error' ? (
+          <span className="meta desk-range-error">{histError || 'History failed'}</span>
+        ) : null}
+      </div>
+
       <div className="chart-legend" aria-label="Chart legend">
         <span className="chart-leg ema20">EMA20</span>
         <span className="chart-leg ema50">EMA50</span>
         <span className="chart-leg ema200">EMA200</span>
         <span className="chart-leg rsi">RSI{rsiPeriod}</span>
+        <span className="chart-leg day">Day</span>
         <span className="chart-leg entry">Entry</span>
         <span className="chart-leg sl">SL</span>
         <span className="chart-leg tp">TP</span>
@@ -409,6 +583,12 @@ export default function CandleChart({
         <span className="chart-leg sell">▼ SELL</span>
       </div>
       <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
+      {range !== 'live' ? (
+        <p className="desk-history-footnote">
+          History via market gold OHLC (GC=F / PAXG) · UTC day separators · Live strategy feed
+          remains on <strong>Live</strong> M1 desk tape.
+        </p>
+      ) : null}
     </div>
   )
 }

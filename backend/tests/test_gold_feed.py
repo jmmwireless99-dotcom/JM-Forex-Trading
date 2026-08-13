@@ -6,7 +6,10 @@ from app.market_data.gold_feed import INTERVAL_MAP, _yahoo_range_for_interval, f
 def test_interval_map_defaults():
     assert INTERVAL_MAP["5"] == "5m"
     assert INTERVAL_MAP["60"] == "60m"
+    assert INTERVAL_MAP["1d"] == "1d"
     assert _yahoo_range_for_interval("5m") == "5d"
+    assert _yahoo_range_for_interval("60m") == "1mo"
+    assert _yahoo_range_for_interval("1d") == "1mo"
 
 
 def test_fetch_gold_candles_live():

@@ -642,8 +642,51 @@ select {
 .chart-leg.rsi {
   color: #e8a0ff;
 }
+.chart-leg.day {
+  color: #f0c75e;
+}
 .chart-leg.entry {
   color: #ff9f6b;
+}
+
+.desk-range-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  margin: 0 0 0.55rem;
+}
+
+.desk-range-bar button {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted, #8fa39b);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+
+.desk-range-bar button.on {
+  color: var(--ink);
+  background: var(--mint);
+  border-color: var(--mint);
+}
+
+.desk-range-hint {
+  margin-left: 0.25rem;
+}
+
+.desk-range-error {
+  color: #ffb4b4;
+}
+
+.desk-history-footnote {
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted, #8fa39b);
+  line-height: 1.35;
 }
 .chart-leg.sl {
   color: #ff6b6b;
