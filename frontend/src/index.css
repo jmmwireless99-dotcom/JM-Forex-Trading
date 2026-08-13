@@ -600,6 +600,64 @@ select {
   min-height: 300px;
 }
 
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8fa39b);
+}
+
+.chart-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chart-leg::before {
+  content: '';
+  width: 0.7rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.chart-leg.ema20 {
+  color: #f0c75e;
+}
+.chart-leg.ema50 {
+  color: #6ec8ff;
+}
+.chart-leg.ema200 {
+  color: #c79bff;
+}
+.chart-leg.entry {
+  color: #ff9f6b;
+}
+.chart-leg.sl {
+  color: #ff6b6b;
+}
+.chart-leg.tp {
+  color: #7dffb3;
+}
+.chart-leg.buy,
+.chart-leg.sell {
+  letter-spacing: 0.02em;
+}
+.chart-leg.buy::before,
+.chart-leg.sell::before {
+  display: none;
+}
+.chart-leg.buy {
+  color: #7dffb3;
+}
+.chart-leg.sell {
+  color: #ff6b6b;
+}
+
 .trade-scroll {
   max-height: 420px;
   overflow: auto;

@@ -100,9 +100,10 @@ export default function App() {
   const [chartMode, setChartMode] = useState(() => {
     try {
       const saved = localStorage.getItem('jm_chart_mode')
-      return saved === 'desk' || saved === 'tradingview' ? saved : 'tradingview'
+      // Default desk tape — shows EMA + signal arrows + Entry/SL/TP lines
+      return saved === 'desk' || saved === 'tradingview' ? saved : 'desk'
     } catch {
-      return 'tradingview'
+      return 'desk'
     }
   }) // tradingview | desk
   const [depositInput, setDepositInput] = useState('1000')
@@ -778,13 +779,19 @@ export default function App() {
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? 'Live COMEX gold candles · strategies still use paper/MT feed'
-              : 'Engine candles — paper sim or MT bridge when online'}
+              : 'Desk tape — EMA + BUY/SELL arrows + Entry / SL / TP lines'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
           <TradingViewGoldChart symbol="TVC:GOLD" interval="5" />
         ) : (
-          <CandleChart candles={candles} liveCandle={liveCandle} symbol="XAUUSD" />
+          <CandleChart
+            candles={candles}
+            liveCandle={liveCandle}
+            symbol="XAUUSD"
+            positions={positions}
+            signals={signals}
+          />
         )}
       </section>
 
