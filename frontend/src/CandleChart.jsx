@@ -4,15 +4,25 @@ import { api } from './api'
 
 const RANGE_OPTS = [
   { id: 'live', label: 'Live', hint: 'Engine M1' },
-  { id: '1w', label: '1W', hint: 'H1 · day marks' },
+  { id: 'm5', label: 'M5', hint: '5m · ~5 days' },
+  { id: 'm15', label: 'M15', hint: '15m · ~5 days' },
+  { id: 'h1', label: 'H1', hint: '1h · ~1 month' },
   { id: '1m', label: '1M Daily', hint: '1 day / bar' },
-  { id: '1m_h1', label: '1M H1', hint: 'H1 · day marks' },
 ]
+
+const RANGE_ALIASES = {
+  '1w': 'h1',
+  '1m_h1': 'h1',
+  '60': 'h1',
+  '5': 'm5',
+  '15': 'm15',
+}
 
 function loadRange() {
   try {
     const saved = localStorage.getItem('jm_desk_chart_range')
-    if (RANGE_OPTS.some((r) => r.id === saved)) return saved
+    const mapped = RANGE_ALIASES[saved] || saved
+    if (RANGE_OPTS.some((r) => r.id === mapped)) return mapped
   } catch {
     /* ignore */
   }
@@ -154,9 +164,10 @@ function sliceLastDays(rows, days) {
 }
 
 function rangeFetchSpec(range) {
-  if (range === '1w') return { interval: '60', limit: 250, days: 7, dayMarks: true }
+  if (range === 'm5') return { interval: '5', limit: 1000, days: 5, dayMarks: true }
+  if (range === 'm15') return { interval: '15', limit: 1000, days: 5, dayMarks: true }
+  if (range === 'h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
   if (range === '1m') return { interval: '1d', limit: 45, days: 31, dayMarks: true }
-  if (range === '1m_h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
   return null
 }
 
