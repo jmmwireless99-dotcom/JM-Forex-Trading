@@ -33,7 +33,7 @@ class EmaRsiScalpStrategy(Strategy):
         rsi_sell: tuple[float, float] = (48.0, 62.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 6,  # ≥30m on M5 — stop flip-flop losses
+        min_bars_between_signals: int = 4,  # ≥20m on M5 — space entries without starving Asia
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend
@@ -108,7 +108,8 @@ class EmaRsiScalpStrategy(Strategy):
 
         bull_pat = bullish_engulfing(prev, cur) or bullish_pin_bar(cur)
         bear_pat = bearish_engulfing(prev, cur) or bearish_pin_bar(cur)
-        # Soft confirm only when RSI already in band (not a free pass)
+        # Soft reclaim: directional close in RSI band (tagged "reclaim", not "soft",
+        # so ML soft_confirm prior does not auto-SKIP the main Asia path).
         bull_soft = cur.close > cur.open and cur.close >= prev.close
         bear_soft = cur.close < cur.open and cur.close <= prev.close
 
@@ -150,7 +151,7 @@ class EmaRsiScalpStrategy(Strategy):
                 if bullish_engulfing(prev, cur)
                 else "pin"
                 if bullish_pin_bar(cur)
-                else "soft"
+                else "reclaim"
             )
             reason = (
                 f"EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · "
@@ -163,7 +164,7 @@ class EmaRsiScalpStrategy(Strategy):
                 if bearish_engulfing(prev, cur)
                 else "pin"
                 if bearish_pin_bar(cur)
-                else "soft"
+                else "reclaim"
             )
             reason = (
                 f"EMA_RSI SELL · trend<EMA200 · retest EMA20/50 · "

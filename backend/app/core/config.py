@@ -81,7 +81,8 @@ class Settings(BaseSettings):
     ai_skip_confidence: float = 0.55
     ai_history_path: str = "data/ai_trade_history.jsonl"
     ai_model_path: str = "data/ai_trade_model.json"
-    # Safety: don't let cold-start ML TAKE SMC SELL in overlap (last-night SL pattern)
+    # Safety: block SMC SELL overlap only after enough weak labeled samples
+    # (cold-start is allowed so overlap is not permanently frozen)
     ai_block_smc_sell_overlap: bool = True
     ai_smc_sell_overlap_min_wr: float = 0.35
     ai_smc_sell_overlap_min_n: int = 5

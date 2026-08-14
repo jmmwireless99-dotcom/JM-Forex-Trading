@@ -34,13 +34,29 @@ def test_aiml_blocks_skip_from_ml(tmp_path: Path, monkeypatch):
     strat = AIMLStrategy()
     strat.set_advisor(advisor)
 
-    # Force Asia child path and a soft-confirm signal the ML priors dislike.
+    # Force a SKIP via advisor stub (model priors alone may be CAUTION).
+    from app.ai.advisor import Advice
+
+    def _skip_advise(signal, entry=None, session=None):
+        return Advice(
+            action="SKIP",
+            win_probability=0.2,
+            confidence=0.7,
+            reasons=["forced SKIP for unit test"],
+            drivers=[],
+            context={},
+            model_samples=0,
+            gated=False,
+        )
+
+    advisor.advise_signal = _skip_advise  # type: ignore[method-assign]
+
     child_signal = Signal(
         strategy="EMA_RSI_Scalp",
         symbol="XAUUSD",
         side=Side.BUY,
         strength=0.85,
-        reason="EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · RSI 45 · soft",
+        reason="EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · RSI 45 · reclaim",
         stop_loss=4370.0,
         take_profit=4450.0,
         timestamp=datetime(2026, 8, 12, 3, 5, tzinfo=timezone.utc),
@@ -85,3 +101,66 @@ def test_aiml_blocks_skip_from_ml(tmp_path: Path, monkeypatch):
     out = strat.on_bar(bars, tick)
     assert out is None
     assert strat.last_block_reason and "AI_ML SKIP" in strat.last_block_reason
+
+
+def test_aiml_passes_caution_reclaim(tmp_path: Path):
+    advisor = TradeAdvisor(
+        history_path=str(tmp_path / "h.jsonl"),
+        model_path=str(tmp_path / "m.json"),
+        enabled=True,
+        gate_entries=True,
+    )
+    strat = AIMLStrategy()
+    strat.set_advisor(advisor)
+
+    child_signal = Signal(
+        strategy="EMA_RSI_Scalp",
+        symbol="XAUUSD",
+        side=Side.BUY,
+        strength=0.85,
+        reason="EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · RSI 45 · reclaim",
+        stop_loss=4370.0,
+        take_profit=4450.0,
+        timestamp=datetime(2026, 8, 12, 3, 5, tzinfo=timezone.utc),
+    )
+
+    class _Stub:
+        candle_driven = True
+        last_checklist = ["stub"]
+        last_block_reason = None
+
+        def set_structure_bars(self, candles):
+            return None
+
+        def on_bar(self, candles, tick):
+            return child_signal
+
+        def evaluate(self, tick):
+            return None
+
+    strat._children["EMA_RSI_Scalp"] = _Stub()  # type: ignore[assignment]
+    tick = Tick(
+        symbol="XAUUSD",
+        bid=4394.9,
+        ask=4395.1,
+        mid=4395.0,
+        timestamp=datetime(2026, 8, 12, 3, 5, tzinfo=timezone.utc),
+    )
+    bars = [
+        Candle(
+            symbol="XAUUSD",
+            open=4390,
+            high=4396,
+            low=4388,
+            close=4395,
+            volume=1,
+            period_seconds=300,
+            open_time=datetime(2026, 8, 12, 3, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 8, 12, 3, 5, tzinfo=timezone.utc),
+            is_closed=True,
+        )
+    ]
+    out = strat.on_bar(bars, tick)
+    assert out is not None
+    assert out.strategy.startswith("AI_ML/")
+    assert "AI_ML" in out.reason
