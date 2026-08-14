@@ -136,11 +136,13 @@ def session_allows_asia_scalp(ts: datetime) -> bool:
 
 
 def next_session_hint(ts: datetime) -> dict:
-    """What comes after the current slot — strategy recommendation for planning."""
+    """What comes after the current slot — strategy recommendation for planning.
+
+    Looks up to 72h ahead so Friday night / weekend still arms Monday Asia.
+    """
     utc = ts.astimezone(timezone.utc)
     current = classify_session(utc)
-    for add in range(1, 25):
-        probe_hour = (utc.hour + add) % 24
+    for add in range(1, 73):
         probe = utc + timedelta(hours=add)
         nxt = classify_session(probe)
         if nxt.label != current.label and nxt.tier != SessionTier.AVOID:
@@ -148,18 +150,16 @@ def next_session_hint(ts: datetime) -> dict:
                 "from_session": current.label,
                 "session": nxt.label,
                 "tier": nxt.tier.value,
-                "hour_utc": probe_hour,
-                "strategy": _recommended_for_label(nxt.label, probe_hour),
+                "hour_utc": probe.hour,
+                "strategy": _recommended_for_label(nxt.label, probe.hour),
                 "reason": _recommend_reason(nxt.label),
             }
-        if nxt.label != current.label and nxt.tier == SessionTier.AVOID:
-            continue
     return {
         "from_session": current.label,
         "session": None,
         "tier": "avoid",
-        "strategy": None,
-        "reason": "No tradeable session in the next 24h",
+        "strategy": "AI_ML",
+        "reason": "No nearer session — keep AI_ML armed",
     }
 
 
