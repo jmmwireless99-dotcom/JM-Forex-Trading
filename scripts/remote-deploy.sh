@@ -9,7 +9,7 @@
 #   JM_VPS_SSH_PASSWORD  (needs sshpass)
 #
 # Optional:
-#   BRANCH=cursor/ai-ml-trade-assist-c11c
+#   BRANCH=cursor/restore-aiml-trade-freq-073b
 #   JM_VPS_DIR=/opt/jm-forex-trading
 set -euo pipefail
 

@@ -417,13 +417,17 @@ class TradingEngine:
             raise ValueError(
                 f"Unknown strategy: {name}. Available: {list_strategy_names()}"
             )
-        self.auto_enabled = False
+        # AI_ML is the session stack — keep auto session-follow ON so stand-aside
+        # parks the next slot instead of locking the desk on manual_only forever.
+        self.auto_enabled = name == "AI_ML"
         self._strategies[name] = create_strategy(name)
         self._bind_advisor(self._strategies[name])
         self.active_name = name
         self.strategy = self._strategies[name]
         self._last_strategy_switch_at = time.time()
         self._last_auto_key = None
+        if name == "AI_ML":
+            self._last_transfer_note = "AI_ML armed · session-follow ON"
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
