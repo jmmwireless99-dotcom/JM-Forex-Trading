@@ -67,6 +67,15 @@ def test_next_session_after_asia_is_london():
     assert nxt["strategy"] == "AI_ML"
 
 
+def test_friday_night_arms_monday_asia():
+    # Fri 22:00 UTC is off_hours; next tradeable is Monday Asia (beyond 24h).
+    ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
+    nxt = next_session_hint(ts)
+    assert nxt["session"] == "asia"
+    assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 0
+
+
 def test_weekend_avoided():
     ts = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)  # Sunday
     assert classify_session(ts).tier == SessionTier.AVOID
