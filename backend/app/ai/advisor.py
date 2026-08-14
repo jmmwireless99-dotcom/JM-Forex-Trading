@@ -59,7 +59,14 @@ class TradeAdvisor:
         self.smc_sell_overlap_min_n = smc_sell_overlap_min_n
         self.store = TradeHistoryStore(history_path)
         self.model = OnlineLogisticModel(path=model_path)
-        labeled = self.store.labeled()
+        # Train only on strategy-tagged desk setups — manual/other rows were
+        # poisoning bias/side_buy/sess_asia and SKIPping every AI_ML child.
+        labeled = [
+            r
+            for r in self.store.labeled()
+            if (r.get("context") or {}).get("strategy")
+            in {"ema_rsi", "smc", "judas", "vwap", "trend"}
+        ]
         if labeled:
             self.model.fit_many(labeled, epochs=3)
 
@@ -115,10 +122,11 @@ class TradeAdvisor:
         return self._advise(feats, ctx)
 
     def _smc_sell_overlap_block_reason(self, ctx: dict[str, Any]) -> str | None:
-        """Safety rail for the overnight SL pattern: SMC SELL in London/NY overlap.
+        """Safety rail for toxic SMC SELL in London/NY overlap.
 
-        Blocks until the labeled slice has enough samples *and* a minimum win rate.
-        Cold-start (n < min_n) is blocked — do not learn this path by bleeding.
+        BUY is never blocked here. SELL is allowed on cold-start so the desk can
+        trade; only after enough *labeled* samples with a weak win rate do we SKIP.
+        (Blocking cold-start permanently froze overlap — n could never reach min_n.)
         """
         if not self.block_smc_sell_overlap:
             return None
@@ -133,10 +141,9 @@ class TradeAdvisor:
         wr = bucket.get("win_rate")
         min_n = max(1, int(self.smc_sell_overlap_min_n))
         min_wr = float(self.smc_sell_overlap_min_wr)
+        # Cold-start: allow SELL so frequency is not stuck at zero forever.
         if n < min_n:
-            return (
-                f"Safety: SMC SELL overlap blocked (cold-start {n}/{min_n} samples)"
-            )
+            return None
         if wr is not None and wr < min_wr:
             return (
                 f"Safety: SMC SELL overlap blocked "

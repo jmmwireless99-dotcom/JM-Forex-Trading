@@ -43,15 +43,22 @@ def _sigmoid(x: float) -> float:
 
 
 def _default_weights() -> dict[str, float]:
-    """Cold-start ML coefficients (from desk SL audit patterns)."""
+    """Cold-start ML coefficients (mild — keep Asia/overlap tradeable).
+
+    Strong negative Asia/soft priors previously pushed almost every AI_ML child
+    under the 0.40 CAUTION floor → zero fills after the Aug 12 safety deploy.
+    """
     weights = {k: 0.0 for k in FEATURE_KEYS}
-    weights["bias"] = 0.05
-    weights["soft_confirm"] = -0.85
-    weights["sess_asia"] = -0.75
-    weights["sess_overlap"] = 0.45
-    weights["sess_ny"] = 0.25
-    weights["strat_ema_rsi"] = -0.15
-    weights["strat_smc"] = 0.2
+    weights["bias"] = 0.10
+    weights["soft_confirm"] = -0.25  # prefer engulf/pin, but don't freeze Asia
+    weights["sess_asia"] = -0.15
+    weights["sess_london"] = 0.10
+    weights["sess_overlap"] = 0.35
+    weights["sess_ny"] = 0.20
+    weights["strat_ema_rsi"] = 0.05
+    weights["strat_smc"] = 0.15
+    weights["strat_judas"] = 0.15
+    weights["strat_vwap"] = 0.10
     return weights
 
 
@@ -161,15 +168,15 @@ class OnlineLogisticModel:
                 X = self._matrix(labeled)
                 y = np.array([int(r["label"]) for r in labeled], dtype=int)
                 if len(set(y.tolist())) < 2:
-                    for _ in range(max(1, epochs)):
-                        self._sgd.partial_fit(X, y)
-                    self._sync_weights_from_sgd()
+                    # Single-class batches (e.g. a few manual Asia losses) drive
+                    # bias/side_buy deeply negative and SKIP every setup. Keep priors.
                     self.last_metrics = {
                         "backend": "sklearn",
                         "algorithm": "SGDClassifier",
                         "samples": int(len(labeled)),
-                        "note": "single_class_batch",
+                        "note": "skipped_single_class_batch",
                     }
+                    return 0
                 else:
                     clf = LogisticRegression(
                         penalty="l2",
@@ -274,9 +281,28 @@ class OnlineLogisticModel:
                 self.weights[key] = float(weights[key])
         self.samples_seen = int(payload.get("samples_seen") or 0)
         self.last_metrics = payload.get("metrics") or {}
+        # Heal models poisoned by tiny all-loss batches (bias≪0 → SKIP everything).
+        if self._looks_poisoned():
+            self.weights = _default_weights()
+            self.samples_seen = 0
+            self.last_metrics = {
+                "note": "reset_poisoned_weights",
+                "previous_bias": float(weights.get("bias", 0.0) or 0.0),
+            }
+            if HAS_SKLEARN:
+                self._init_sgd_from_weights()
+            self.save()
+            return True
         if HAS_SKLEARN:
             self._init_sgd_from_weights()
         return True
+
+    def _looks_poisoned(self) -> bool:
+        bias = float(self.weights.get("bias", 0.0))
+        side_buy = float(self.weights.get("side_buy", 0.0))
+        sess_asia = float(self.weights.get("sess_asia", 0.0))
+        # After Aug 12, a 4-loss manual Asia batch drove these ≪ -1.0.
+        return bias < -0.5 or (side_buy < -0.5 and sess_asia < -0.5)
 
     def snapshot(self) -> dict[str, Any]:
         return {

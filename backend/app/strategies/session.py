@@ -80,9 +80,11 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         return SessionWindow(
             SessionTier.ALLOWED,
             "london",
-            "London Judas window (UTC 07:00–10:59) — sweep + FVG limit",
+            "London Judas window (UTC 07:00–10:59) — sweep + ChoCH (+ FVG or market)",
         )
     if 11 <= hour < 12:
+        # Keep wind-down, but still tradeable for AI_ML/Judas late fills that
+        # already confirmed structure before 11:00 UTC (router parks AI_ML).
         return SessionWindow(
             SessionTier.AVOID,
             "london_wind_down",

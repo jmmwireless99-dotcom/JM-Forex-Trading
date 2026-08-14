@@ -104,9 +104,9 @@ class LondonJudasSweepStrategy(Strategy):
         self,
         lookback: int = 240,
         *,
-        # pip = $0.01 → 50–350 pips = $0.50–$3.50 (realistic XAUUSD Judas wicks)
-        min_sweep_pips: float = 50.0,
-        max_sweep_pips: float = 350.0,
+        # pip = $0.01 → 30–400 pips = $0.30–$4.00 (catch smaller gold Judas wicks)
+        min_sweep_pips: float = 30.0,
+        max_sweep_pips: float = 400.0,
         sl_buffer_pips: float = 80.0,
         max_spread_pips: float = 40.0,
         news_filter: bool | None = None,
@@ -331,7 +331,7 @@ class LondonJudasSweepStrategy(Strategy):
             return None
 
         confirm = self._structure_confirm(bars, sweep)
-        fvg = find_recent_fvg(bars, sweep.bias, lookback=16)
+        fvg = find_recent_fvg(bars, sweep.bias, lookback=20)
         self.last_checklist = [
             {
                 "name": f"Asia {'High' if sweep.bias == 'SELL' else 'Low'} sweep",
@@ -346,7 +346,7 @@ class LondonJudasSweepStrategy(Strategy):
             {
                 "name": f"{'Bearish' if sweep.bias == 'SELL' else 'Bullish'} FVG",
                 "ok": fvg is not None,
-                "detail": str(fvg.mid if fvg else "—"),
+                "detail": str(fvg.mid if fvg else "market fallback"),
             },
         ]
 
@@ -355,16 +355,21 @@ class LondonJudasSweepStrategy(Strategy):
                 f"Sweep locked ({sweep.bias}) — waiting ChoCH/displacement"
             )
             return None
-        if fvg is None:
-            self.last_block_reason = f"Sweep+structure ok ({sweep.bias}) — waiting FVG"
-            return None
 
-        key = f"{sweep.bias}-{asian.session_date}-{round(fvg.mid, 1)}"
+        # Prefer FVG 50% limit; if structure is confirmed but no FVG yet, take a
+        # market continuation so London is not stuck waiting for a rare gap.
+        use_limit = fvg is not None
+        if use_limit:
+            entry = fvg.mid
+            key = f"{sweep.bias}-{asian.session_date}-fvg-{round(entry, 1)}"
+        else:
+            entry = tick.ask if sweep.bias == "BUY" else tick.bid
+            key = f"{sweep.bias}-{asian.session_date}-mkt-{round(entry, 1)}"
+
         if key in self._fired_keys:
-            self.last_block_reason = "Already fired this FVG level today"
+            self.last_block_reason = "Already fired this Judas setup today"
             return None
 
-        entry = fvg.mid
         if sweep.bias == "SELL":
             sl = round(sweep.sweep_price + sl_buf, 2)
             risk = abs(sl - entry)
@@ -375,9 +380,10 @@ class LondonJudasSweepStrategy(Strategy):
             tp_rrr = round(entry - self.reward_r * risk, 2)
             tp = tp_asia if (entry - tp_asia) >= risk * 0.9 else tp_rrr
             side = Side.SELL
+            path = f"FVG50 {entry}" if use_limit else f"market {entry}"
             reason = (
                 f"London Judas SELL · AsiaH {asian.high} swept "
-                f"→ structure → FVG50 {entry} · SL {sl} · TP {tp}"
+                f"→ structure → {path} · SL {sl} · TP {tp}"
             )
         else:
             sl = round(sweep.sweep_price - sl_buf, 2)
@@ -389,9 +395,10 @@ class LondonJudasSweepStrategy(Strategy):
             tp_rrr = round(entry + self.reward_r * risk, 2)
             tp = tp_asia if (tp_asia - entry) >= risk * 0.9 else tp_rrr
             side = Side.BUY
+            path = f"FVG50 {entry}" if use_limit else f"market {entry}"
             reason = (
                 f"London Judas BUY · AsiaL {asian.low} swept "
-                f"→ structure → FVG50 {entry} · SL {sl} · TP {tp}"
+                f"→ structure → {path} · SL {sl} · TP {tp}"
             )
 
         self._fired_keys.add(key)
@@ -399,13 +406,13 @@ class LondonJudasSweepStrategy(Strategy):
             strategy=self.name,
             symbol=tick.symbol,
             side=side,
-            strength=0.92,
+            strength=0.92 if use_limit else 0.86,
             reason=reason,
             stop_loss=sl,
             take_profit=tp,
-            order_type=OrderType.LIMIT,
-            limit_price=entry,
-            expire_at=pending_expire_at(tick.timestamp),
+            order_type=OrderType.LIMIT if use_limit else OrderType.MARKET,
+            limit_price=entry if use_limit else None,
+            expire_at=pending_expire_at(tick.timestamp) if use_limit else None,
             sweep_price=sweep.sweep_price,
             timestamp=tick.timestamp,
         )
