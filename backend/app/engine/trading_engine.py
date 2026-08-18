@@ -417,13 +417,17 @@ class TradingEngine:
             raise ValueError(
                 f"Unknown strategy: {name}. Available: {list_strategy_names()}"
             )
-        self.auto_enabled = False
+        # AI_ML is the session stack — keep auto session-follow ON so stand-aside
+        # parks the next slot instead of locking the desk on manual_only forever.
+        self.auto_enabled = name == "AI_ML"
         self._strategies[name] = create_strategy(name)
         self._bind_advisor(self._strategies[name])
         self.active_name = name
         self.strategy = self._strategies[name]
         self._last_strategy_switch_at = time.time()
         self._last_auto_key = None
+        if name == "AI_ML":
+            self._last_transfer_note = "AI_ML armed · session-follow ON"
 
     def status(self) -> EngineStatus:
         uptime = time.time() - self._started_at if self._started_at else 0.0
@@ -529,9 +533,16 @@ class TradingEngine:
         target = nxt.get("strategy")
         if target and target in STRATEGY_REGISTRY:
             hour = nxt.get("hour_utc")
-            slot = nxt.get("session")
-            note = f"Stand aside now — armed {target} for {slot} @ {hour}:00 UTC"
+            slot = nxt.get("session") or "next session"
+            if hour is not None:
+                note = f"Stand aside now — armed {target} for {slot} @ {hour}:00 UTC"
+            else:
+                note = f"Stand aside now — armed {target} for {slot}"
             return target, note
+        # Never park on manual_only when AI_ML exists — weekend/off-hours must
+        # wake into the session stack, not a dead manual desk.
+        if "AI_ML" in STRATEGY_REGISTRY:
+            return "AI_ML", "Stand aside — AI_ML armed for next tradeable session"
         return "manual_only", "Stand aside — no tradeable session soon"
 
     async def auto_transfer(self, *, start_engine: bool = True) -> dict:

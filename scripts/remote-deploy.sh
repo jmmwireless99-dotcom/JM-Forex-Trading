@@ -9,14 +9,14 @@
 #   JM_VPS_SSH_PASSWORD  (needs sshpass)
 #
 # Optional:
-#   BRANCH=cursor/ai-ml-trade-assist-c11c
+#   BRANCH=cursor/restore-aiml-trade-freq-073b
 #   JM_VPS_DIR=/opt/jm-forex-trading
 set -euo pipefail
 
 HOST="${JM_VPS_HOST:-72.62.73.235}"
 USER="${JM_VPS_USER:?Set JM_VPS_USER (e.g. root)}"
 DIR="${JM_VPS_DIR:-/opt/jm-forex-trading}"
-BRANCH="${BRANCH:-cursor/ai-ml-trade-assist-c11c}"
+BRANCH="${BRANCH:-cursor/restore-aiml-trade-freq-073b}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
 
