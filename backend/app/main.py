@@ -9,8 +9,11 @@ from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api.deps import get_engine
+from app.api.investment_routes import router as investment_router
 from app.api.routes import router
 from app.core.config import get_settings
+from app.investment.demo_seed import bootstrap_investment_demo
+from app.investment.users import get_user_registry
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +48,28 @@ def _bootstrap_database() -> None:
         log.exception("database bootstrap failed — continuing without DB")
 
 
+def _bootstrap_investment_admin() -> None:
+    settings = get_settings()
+    email = (settings.invest_admin_email or "").strip()
+    password = settings.invest_admin_password or ""
+    if not email or not password:
+        return
+    try:
+        users = get_user_registry()
+        users.ensure_admin(
+            email=email,
+            password=password,
+            full_name=settings.invest_admin_name,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("investment admin bootstrap failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _bootstrap_database()
+    _bootstrap_investment_admin()
+    bootstrap_investment_demo()
     # Auto-start paper engine so the dashboard has live data immediately
     engine = get_engine()
     await engine.start()
@@ -90,6 +112,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(router, prefix=settings.api_prefix)
+    app.include_router(investment_router, prefix=settings.api_prefix)
 
     static_dir = _static_dir()
     if static_dir is not None:

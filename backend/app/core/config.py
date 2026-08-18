@@ -92,6 +92,20 @@ class Settings(BaseSettings):
     # Optional: pin fills to this account code; else earliest auto-follower
     auto_fill_account_code: str = ""
 
+    # Investment dashboard (30% / 30 days default yield model)
+    invest_secret: str = "jm-fx-invest-dev-secret-change-me"
+    invest_admin_email: str = "admin@jmfx.local"
+    invest_admin_password: str = "admin123"
+    invest_admin_name: str = "JM FX Admin"
+    invest_demo_enabled: bool = False
+    invest_demo_email: str = "demo@jmfx.local"
+    invest_demo_password: str = "demo1234"
+    invest_demo_name: str = "Demo Investor"
+    invest_demo_deposit: float = 1000.0
+    invest_demo_backdate_days: int = 7
+    invest_period_rate: float = 0.30
+    invest_period_days: int = 30
+
     @property
     def symbols(self) -> list[str]:
         return [s.strip().upper() for s in self.default_symbols.split(",") if s.strip()]
