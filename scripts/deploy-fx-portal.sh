@@ -69,7 +69,14 @@ elif [[ -x /opt/jm-forex-trading/backend/.venv/bin/pip ]]; then
   /opt/jm-forex-trading/backend/.venv/bin/pip install -q -r "$ROOT/backend/requirements.txt"
 fi
 
-echo "[5/5] Restart jm-forex..."
+echo "[5/6] Sync systemd env (systemd overrides .env for jm-forex)..."
+UNIT="/etc/systemd/system/jm-forex.service"
+if [[ -f "$UNIT" ]]; then
+  sed -i 's/^Environment=JM_AUTO_FILL_SINGLE_BOOK=.*/Environment=JM_AUTO_FILL_SINGLE_BOOK=false/' "$UNIT"
+  systemctl daemon-reload
+fi
+
+echo "[6/6] Restart jm-forex..."
 systemctl restart jm-forex.service
 sleep 3
 systemctl is-active jm-forex.service
