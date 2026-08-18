@@ -164,16 +164,27 @@ class TradingEngine:
     def auto_fill_status(self) -> dict[str, Any]:
         followers = self.accounts.auto_followers()
         targets = self._auto_fill_targets()
-        target = targets[0] if targets else None
         selection = "none"
-        if target is not None:
-            pinned = (self.settings.auto_fill_account_code or "").strip().upper()
-            if pinned and (target.code or "").upper() == pinned:
-                selection = "pinned"
-            elif target.id in self._connected_accounts:
-                selection = "connected"
+        if targets:
+            if not self.settings.auto_fill_single_book:
+                selection = "all"
             else:
-                selection = "earliest"
+                target = targets[0]
+                pinned = (self.settings.auto_fill_account_code or "").strip().upper()
+                if pinned and (target.code or "").upper() == pinned:
+                    selection = "pinned"
+                elif target.id in self._connected_accounts:
+                    selection = "connected"
+                else:
+                    selection = "earliest"
+        target_payload = [
+            {
+                "account_id": a.id,
+                "code": a.code,
+                "label": a.label,
+            }
+            for a in targets
+        ]
         return {
             "single_book": self.settings.auto_fill_single_book,
             "pinned_code": (self.settings.auto_fill_account_code or "").strip().upper()
@@ -181,15 +192,9 @@ class TradingEngine:
             "followers": len(followers),
             "connected_followers": len(self._connected_followers()),
             "selection": selection,
-            "target": (
-                {
-                    "account_id": target.id,
-                    "code": target.code,
-                    "label": target.label,
-                }
-                if target
-                else None
-            ),
+            "targets": target_payload,
+            # Back-compat for older UI/clients
+            "target": target_payload[0] if target_payload else None,
         }
 
     def create_client_account(
@@ -1302,8 +1307,9 @@ class TradingEngine:
     def _auto_fill_targets(self) -> list[PaperAccount]:
         """Accounts that receive auto strategy fills.
 
-        Default: a single paper book only — cloning one SL across every
-        follow_auto client was the main loss multiplier (20× same trade).
+        Default (JM_AUTO_FILL_SINGLE_BOOK=false): every follow_auto client
+        gets the same desk signal — one signal, all accounts trade together.
+        Single-book mode remains available for ops that want one fill target.
         """
         if self.using_mt():
             return [self._desk]

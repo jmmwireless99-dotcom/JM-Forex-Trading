@@ -653,28 +653,41 @@ export default function App() {
       {(() => {
         const fill = autoInfo?.auto_fill || desk?.auto?.auto_fill
         const myCode = (accountMeta?.code || account.account_code || '').toUpperCase()
-        const targetCode = (fill?.target?.code || '').toUpperCase()
-        if (!fill?.single_book || !myCode) return null
-        const isTarget = targetCode && myCode === targetCode
+        if (!fill || !myCode) return null
+        const targets = fill.targets || (fill.target ? [fill.target] : [])
+        const inFanOut = !fill.single_book
+        const isTarget = targets.some((t) => (t.code || '').toUpperCase() === myCode)
+        if (inFanOut) {
+          return (
+            <section className="panel auto-fill-active" aria-label="Auto fill routing">
+              <p className="meta">
+                <strong>Centralized desk</strong> — one signal for all accounts. Auto fills
+                go to <strong>{fill.followers ?? targets.length}</strong> follow_auto book
+                {fill.followers === 1 ? '' : 's'} including <strong>{myCode}</strong>.
+              </p>
+            </section>
+          )
+        }
+        const targetCode = (fill.target?.code || '').toUpperCase()
+        const isSingleTarget = targetCode && myCode === targetCode
         return (
           <section
-            className={`panel ${isTarget ? 'auto-fill-active' : 'auto-fill-warn'}`}
+            className={`panel ${isSingleTarget ? 'auto-fill-active' : 'auto-fill-warn'}`}
             aria-label="Auto fill routing"
           >
-            {isTarget ? (
+            {isSingleTarget ? (
               <p className="meta">
-                <strong>Auto fills active</strong> — signals on this desk open trades on{' '}
+                <strong>Auto fills active</strong> — signals open trades on{' '}
                 <strong>{myCode}</strong> (this account). Keep this tab open during sessions.
               </p>
-            ) : fill?.target ? (
+            ) : fill.target ? (
               <p className="meta">
                 <strong>Signals only on this account</strong> — auto fills go to account{' '}
                 <strong>{targetCode}</strong>
                 {fill.selection === 'connected'
                   ? ' (another browser is connected). '
                   : ' (older server account). '}
-                Refresh with this tab open, or clear site data and reload to get a new linked
-                account.
+                Refresh with this tab open, or clear site data and reload.
               </p>
             ) : (
               <p className="meta">
@@ -1126,8 +1139,8 @@ export default function App() {
           </div>
           {trades.length === 0 ? (
             <div className="empty">
-              No fills on this paper account yet. When auto fills are active (banner above),
-              the next TAKE/CAUTION signal opens a trade here with P&amp;L.
+              No fills on this paper account yet. Desk signals are shared — when auto is on,
+              the same TAKE/CAUTION signal opens a trade on every follow_auto account.
             </div>
           ) : (
             <div className="trade-scroll">

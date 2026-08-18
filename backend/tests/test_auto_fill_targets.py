@@ -49,7 +49,7 @@ async def test_auto_fill_targets_single_book(tmp_path):
     assert len(pinned) == 1
     assert pinned[0].id == a2.id
 
-    # fan-out mode restores all auto followers
+    # fan-out mode: all auto followers (default / centralized desk)
     engine.settings = settings.model_copy(
         update={"auto_fill_single_book": False, "auto_fill_account_code": ""}
     )

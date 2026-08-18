@@ -87,9 +87,8 @@ class Settings(BaseSettings):
     ai_smc_sell_overlap_min_wr: float = 0.35
     ai_smc_sell_overlap_min_n: int = 5
 
-    # Auto signal routing — ONE paper book only (prevents 20× cloned SL)
-    # JM_AUTO_FILL_SINGLE_BOOK=true
-    auto_fill_single_book: bool = True
+    # Auto signal routing — false = one desk signal fills every follow_auto account
+    auto_fill_single_book: bool = False
     # Optional: pin fills to this account code; else earliest auto-follower
     auto_fill_account_code: str = ""
 
