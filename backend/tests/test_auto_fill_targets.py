@@ -35,6 +35,14 @@ async def test_auto_fill_targets_single_book(tmp_path):
     assert len(targets) == 1
     assert targets[0].id == a1.id
 
+    # connected session wins over earliest when single-book
+    engine.register_connected_account(a2)
+    connected = engine._auto_fill_targets()
+    assert len(connected) == 1
+    assert connected[0].id == a2.id
+    engine.unregister_connected_account(a2.id)
+    assert engine._auto_fill_targets()[0].id == a1.id
+
     # pinned code wins over earliest
     engine.settings = settings.model_copy(update={"auto_fill_account_code": a2.code})
     pinned = engine._auto_fill_targets()

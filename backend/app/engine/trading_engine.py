@@ -124,6 +124,8 @@ class TradingEngine:
             smc_sell_overlap_min_n=settings.ai_smc_sell_overlap_min_n,
         )
         self._last_advice: dict[str, Any] | None = None
+        # Live browser sessions — auto fills prefer connected follow_auto accounts.
+        self._connected_accounts: dict[str, float] = {}
         # Bind AI & ML into any strategies that support it (esp. AI_ML).
         for strat in self._strategies.values():
             self._bind_advisor(strat)
@@ -138,6 +140,57 @@ class TradingEngine:
     def unsubscribe(self, listener: Listener) -> None:
         if listener in self._listeners:
             self._listeners.remove(listener)
+
+    def register_connected_account(self, account: PaperAccount) -> None:
+        """Track an open desk session for single-book auto-fill routing."""
+        if account.is_desk or not account.follow_auto:
+            return
+        self._connected_accounts[account.id] = time.time()
+
+    def unregister_connected_account(self, account_id: str) -> None:
+        self._connected_accounts.pop(account_id, None)
+
+    def _connected_followers(self) -> list[PaperAccount]:
+        followers = self.accounts.auto_followers()
+        if not followers:
+            return []
+        live = [a for a in followers if a.id in self._connected_accounts]
+        live.sort(
+            key=lambda a: self._connected_accounts.get(a.id, 0.0),
+            reverse=True,
+        )
+        return live
+
+    def auto_fill_status(self) -> dict[str, Any]:
+        followers = self.accounts.auto_followers()
+        targets = self._auto_fill_targets()
+        target = targets[0] if targets else None
+        selection = "none"
+        if target is not None:
+            pinned = (self.settings.auto_fill_account_code or "").strip().upper()
+            if pinned and (target.code or "").upper() == pinned:
+                selection = "pinned"
+            elif target.id in self._connected_accounts:
+                selection = "connected"
+            else:
+                selection = "earliest"
+        return {
+            "single_book": self.settings.auto_fill_single_book,
+            "pinned_code": (self.settings.auto_fill_account_code or "").strip().upper()
+            or None,
+            "followers": len(followers),
+            "connected_followers": len(self._connected_followers()),
+            "selection": selection,
+            "target": (
+                {
+                    "account_id": target.id,
+                    "code": target.code,
+                    "label": target.label,
+                }
+                if target
+                else None
+            ),
+        }
 
     def create_client_account(
         self,
@@ -448,6 +501,7 @@ class TradingEngine:
             "recommended": rec,
             "schedule": self.auto_router.schedule_table(),
             "ai_ml": True,
+            "auto_fill": self.auto_fill_status(),
         }
 
     def _park_strategy(self, name: str, *, note: str) -> bool:
@@ -1252,7 +1306,11 @@ class TradingEngine:
             pinned = [a for a in followers if (a.code or "").upper() == code]
             if pinned:
                 return pinned[:1]
-        # Stable pick: earliest created account among auto-followers
+        # Prefer the browser session that is open right now (fixes stale earliest-account routing).
+        connected = self._connected_followers()
+        if connected:
+            return connected[:1]
+        # Fallback when nobody is connected: earliest created auto-follower.
         followers = sorted(followers, key=lambda a: a.created_at)
         return followers[:1]
 

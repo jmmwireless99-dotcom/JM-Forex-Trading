@@ -618,6 +618,8 @@ async def websocket_feed(ws: WebSocket) -> None:
             engine.unsubscribe(listener)
 
     engine.subscribe(listener)
+    if account is not None:
+        engine.register_connected_account(account)
     try:
         await ws.send_json({"event": "engine", "data": engine.status().model_dump(mode="json")})
         if account is not None:
@@ -669,4 +671,6 @@ async def websocket_feed(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        if account is not None:
+            engine.unregister_connected_account(account.id)
         engine.unsubscribe(listener)

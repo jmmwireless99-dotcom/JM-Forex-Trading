@@ -650,6 +650,42 @@ export default function App() {
         </div>
       </section>
 
+      {(() => {
+        const fill = autoInfo?.auto_fill || desk?.auto?.auto_fill
+        const myCode = (accountMeta?.code || account.account_code || '').toUpperCase()
+        const targetCode = (fill?.target?.code || '').toUpperCase()
+        if (!fill?.single_book || !myCode) return null
+        const isTarget = targetCode && myCode === targetCode
+        return (
+          <section
+            className={`panel ${isTarget ? 'auto-fill-active' : 'auto-fill-warn'}`}
+            aria-label="Auto fill routing"
+          >
+            {isTarget ? (
+              <p className="meta">
+                <strong>Auto fills active</strong> — signals on this desk open trades on{' '}
+                <strong>{myCode}</strong> (this account). Keep this tab open during sessions.
+              </p>
+            ) : fill?.target ? (
+              <p className="meta">
+                <strong>Signals only on this account</strong> — auto fills go to account{' '}
+                <strong>{targetCode}</strong>
+                {fill.selection === 'connected'
+                  ? ' (another browser is connected). '
+                  : ' (older server account). '}
+                Refresh with this tab open, or clear site data and reload to get a new linked
+                account.
+              </p>
+            ) : (
+              <p className="meta">
+                <strong>No auto-fill target</strong> — reload the desk so your demo account
+                connects; trades will not copy from signals until then.
+              </p>
+            )}
+          </section>
+        )
+      })()}
+
       <section className="panel deposit-panel" aria-label="Paper deposit">
         <div className="deposit-head">
           <div>
@@ -1090,8 +1126,8 @@ export default function App() {
           </div>
           {trades.length === 0 ? (
             <div className="empty">
-              No fills on this paper account yet. Desk signals (right/top) are shared —
-              auto fill goes to one book only.
+              No fills on this paper account yet. When auto fills are active (banner above),
+              the next TAKE/CAUTION signal opens a trade here with P&amp;L.
             </div>
           ) : (
             <div className="trade-scroll">
