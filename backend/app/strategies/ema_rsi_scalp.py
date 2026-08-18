@@ -34,6 +34,10 @@ class EmaRsiScalpStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         min_bars_between_signals: int = 4,  # ≥20m on M5 — space entries without starving Asia
+        # Asia scalp: tighter SL, 1:2 R — easier TP than swing sessions
+        reward_r: float = 2.0,
+        min_stop_atr: float = 1.15,
+        min_tp_atr: float = 2.3,
     ) -> None:
         super().__init__(lookback=lookback)
         self.ema_trend = ema_trend
@@ -43,6 +47,9 @@ class EmaRsiScalpStrategy(Strategy):
         self.rsi_buy = rsi_buy
         self.rsi_sell = rsi_sell
         self.min_bars_between_signals = min_bars_between_signals
+        self.reward_r = reward_r
+        self.min_stop_atr = min_stop_atr
+        self.min_tp_atr = min_tp_atr
         settings = get_settings()
         self.news_filter = settings.news_filter if news_filter is None else news_filter
         self.session_filter = (
@@ -200,9 +207,11 @@ class EmaRsiScalpStrategy(Strategy):
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=2.5,
-            min_stop_atr=2.0,
-            min_tp_atr=5.0,
+            swing_lookback=3,
+            atr_pad=0.3,
+            reward_r=self.reward_r,
+            min_stop_atr=self.min_stop_atr,
+            min_tp_atr=self.min_tp_atr,
         )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side

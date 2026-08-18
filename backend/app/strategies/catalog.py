@@ -136,7 +136,7 @@ def strategy_catalog() -> list[dict]:
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (wider stops: ~1.4×ATR / ~2.2×ATR).",
+                "SL/TP from ATR structure (Asia scalp: ~1.15×ATR SL · 1:2 TP).",
             ],
             "parameters": _seed_params("EMA_RSI_Scalp"),
             "safety": [
@@ -146,7 +146,7 @@ def strategy_catalog() -> list[dict]:
                 "Daily loss kill-switch disabled by default (JM_MAX_DAILY_LOSS_PCT=0).",
             ],
             "order_type": "MARKET",
-            "reward_r": 2.5,
+            "reward_r": 2.0,
         },
         {
             "id": "EMA_VWAP_Scalp",
