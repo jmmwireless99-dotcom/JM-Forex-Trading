@@ -1,0 +1,485 @@
+.invest-app {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.25rem 0 3rem;
+  animation: rise 600ms ease both;
+}
+
+.invest-hero {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.invest-kicker {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.invest-title {
+  margin: 0.35rem 0 0;
+  font-family: var(--display);
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.invest-sub {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.invest-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.invest-badge span {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--mint);
+}
+
+.invest-badge small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.invest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.invest-btn {
+  border-radius: 999px;
+  padding: 0.75rem 1.35rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.invest-btn-in {
+  background: linear-gradient(135deg, #14635c, #0b3d3a);
+  color: var(--mint);
+  border-color: rgba(125, 255, 179, 0.35);
+}
+
+.invest-btn-out {
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffb4b4;
+  border-color: rgba(255, 107, 107, 0.35);
+}
+
+.invest-btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.65rem 1.1rem;
+}
+
+.invest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.invest-card {
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.invest-card-main {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, rgba(20, 99, 92, 0.55), rgba(12, 32, 30, 0.85));
+}
+
+.invest-card-earn {
+  border-color: rgba(125, 255, 179, 0.25);
+}
+
+.invest-label {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.invest-balance {
+  margin: 0.35rem 0 0;
+  font-size: clamp(2rem, 6vw, 2.85rem);
+  font-family: var(--display);
+  color: var(--gold);
+}
+
+.invest-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.invest-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.invest-positive {
+  color: var(--win);
+}
+
+.invest-negative {
+  color: var(--loss);
+}
+
+.invest-rate-box,
+.invest-panel {
+  margin-bottom: 1.25rem;
+  padding: 1.1rem 1.2rem;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.invest-rate-box h2,
+.invest-panel h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.invest-rate-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid rgba(125, 255, 179, 0.08);
+  font-size: 0.92rem;
+}
+
+.invest-rate-row strong {
+  color: var(--mint);
+}
+
+.invest-note {
+  margin: 0.85rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.invest-table-wrap {
+  overflow-x: auto;
+}
+
+.invest-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.invest-table th,
+.invest-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(125, 255, 179, 0.08);
+}
+
+.invest-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.invest-tag {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.invest-tag-cash_in {
+  background: rgba(125, 255, 179, 0.12);
+  color: var(--mint);
+}
+
+.invest-tag-cash_out {
+  background: rgba(255, 107, 107, 0.12);
+  color: #ffb4b4;
+}
+
+.invest-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.invest-error {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ffb4b4;
+}
+
+.invest-loading {
+  text-align: center;
+  color: var(--muted);
+  padding: 3rem;
+}
+
+.invest-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.invest-modal {
+  width: min(400px, 100%);
+  padding: 1.35rem;
+  border-radius: 16px;
+  background: #102422;
+  border: 1px solid var(--line);
+}
+
+.invest-modal h3 {
+  margin: 0 0 0.35rem;
+}
+
+.invest-modal p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.invest-modal label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.invest-modal input {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+}
+
+.invest-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.15rem;
+}
+
+.shell-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.65rem 0;
+  margin-bottom: 0.5rem;
+  backdrop-filter: blur(8px);
+  background: rgba(12, 20, 19, 0.85);
+  border-bottom: 1px solid var(--line);
+}
+
+.shell-nav-inner {
+  width: min(1240px, calc(100% - 2rem));
+  margin: 0 auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.shell-tab {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.shell-tab.active {
+  background: rgba(20, 99, 92, 0.45);
+  border-color: rgba(125, 255, 179, 0.25);
+  color: var(--mint);
+}
+
+.shell-user {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.shell-logout {
+  margin-left: 0.25rem;
+  color: #ffb4b4 !important;
+  border-color: rgba(255, 107, 107, 0.25) !important;
+}
+
+.invest-auth-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+}
+
+.invest-auth-card {
+  width: min(420px, 100%);
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.invest-auth-form {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.invest-auth-form label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.invest-auth-form input {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+}
+
+.invest-auth-switch {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.invest-link {
+  background: none;
+  border: none;
+  color: var(--mint);
+  padding: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invest-admin-hint {
+  margin-top: 1rem;
+  font-size: 0.72rem;
+}
+
+.invest-admin-hint code {
+  color: var(--gold);
+}
+
+.invest-auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
+.invest-auth-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--mint);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.invest-auth-pill:hover {
+  border-color: rgba(125, 255, 179, 0.35);
+  background: rgba(125, 255, 179, 0.08);
+}
+
+.invest-referral-top {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(20, 99, 92, 0.12));
+  margin-bottom: 1.25rem;
+}
+
+.invest-referral-top h2 {
+  color: #fde68a;
+  font-size: 1.25rem;
+}
+
+.invest-referral-box {
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.invest-referral-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.invest-referral-link {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--gold);
+  word-break: break-all;
+}
+
+.invest-tag-referral {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde68a;
+}
+
+@media (min-width: 720px) {
+  .invest-card-main {
+    grid-column: span 2;
+  }
+}
