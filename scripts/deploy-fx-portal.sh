@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-BRANCH="${BRANCH:-cursor/ai-ml-trade-assist-c11c}"
+BRANCH="${BRANCH:-main}"
 
 echo "[1/5] Fetch + checkout ${BRANCH}..."
 git fetch origin "${BRANCH}"
