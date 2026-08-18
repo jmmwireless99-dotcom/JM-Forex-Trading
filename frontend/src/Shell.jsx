@@ -21,35 +21,37 @@ function initialView() {
       return q
     }
     const stored = localStorage.getItem(VIEW_KEY)
-    if (stored === "trading" || stored === "admin") return stored
+    if (stored === "admin" || stored === "invest" || stored === "referral" || stored === "trading") {
+      return stored
+    }
   } catch {
     /* ignore */
   }
+  const session = loadAuthSession()
+  if (session?.user?.role === "investor") return "invest"
+  if (session?.user?.role === "admin") return "admin"
   return "trading"
 }
 
 function ShellNav({ view, switchView, auth, admin, onLogout }) {
+  const loggedIn = Boolean(auth?.user)
   return (
     <nav className="shell-nav">
       <div className="shell-nav-inner">
-        {auth?.user?.role !== "admin" && (
-          <>
-            <button
-              type="button"
-              className={`shell-tab${view === "invest" ? " active" : ""}`}
-              onClick={() => switchView("invest")}
-            >
-              My Investment
-            </button>
-            <button
-              type="button"
-              className={`shell-tab${view === "referral" ? " active" : ""}`}
-              onClick={() => switchView("referral")}
-            >
-              Referral Link
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          className={`shell-tab${view === "invest" ? " active" : ""}`}
+          onClick={() => switchView("invest")}
+        >
+          My Investment
+        </button>
+        <button
+          type="button"
+          className={`shell-tab${view === "referral" ? " active" : ""}`}
+          onClick={() => switchView("referral")}
+        >
+          Referral Link
+        </button>
         {admin && (
           <button
             type="button"
@@ -66,11 +68,19 @@ function ShellNav({ view, switchView, auth, admin, onLogout }) {
         >
           Trading Desk
         </button>
-        {auth ? (
+        {loggedIn ? (
           <button type="button" className="shell-tab shell-logout" onClick={onLogout}>
             Logout
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className={`shell-tab${view === "invest" ? " active" : ""}`}
+            onClick={() => switchView("invest")}
+          >
+            Login
+          </button>
+        )}
         {auth?.user && (
           <span className="shell-user">
             {auth.user.full_name || auth.user.email}
@@ -126,6 +136,7 @@ export default function Shell() {
   }
 
   const admin = isAdmin()
+  const loggedIn = Boolean(auth?.user)
 
   if (checking && view !== "trading") {
     return (
@@ -164,7 +175,7 @@ export default function Shell() {
         onLogout={handleLogout}
       />
       {view === "admin" && admin && <AdminPanel />}
-      {(view === "invest" || view === "referral") && auth?.user?.role !== "admin" && (
+      {(view === "invest" || view === "referral") && loggedIn && (
         <InvestmentDashboard focusReferral={view === "referral"} />
       )}
       {view === "trading" && <App />}
