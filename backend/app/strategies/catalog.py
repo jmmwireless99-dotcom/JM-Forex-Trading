@@ -146,7 +146,7 @@ def strategy_catalog() -> list[dict]:
                 "Daily loss kill-switch disabled by default (JM_MAX_DAILY_LOSS_PCT=0).",
             ],
             "order_type": "MARKET",
-            "reward_r": 1.8,
+            "reward_r": 2.5,
         },
         {
             "id": "EMA_VWAP_Scalp",
@@ -179,7 +179,7 @@ def strategy_catalog() -> list[dict]:
                 "Needs 26+ M5 bars for EMA21 warmup.",
             ],
             "order_type": "MARKET",
-            "reward_r": 2.0,
+            "reward_r": 2.5,
         },
         {
             "id": "Liquidity_Sweep_SMC",
@@ -212,7 +212,7 @@ def strategy_catalog() -> list[dict]:
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
             "order_type": "MARKET",
-            "reward_r": 1.8,
+            "reward_r": 2.5,
         },
         _MANUAL_CARD,
     ]

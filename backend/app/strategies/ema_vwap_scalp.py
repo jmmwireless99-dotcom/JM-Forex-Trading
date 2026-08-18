@@ -26,7 +26,7 @@ class EmaVwapScalpStrategy(Strategy):
         *,
         ema_fast: int = 9,
         ema_slow: int = 21,
-        reward_r: float = 2.0,
+        reward_r: float = 2.5,
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         min_bars_between_signals: int = 3,
@@ -148,10 +148,10 @@ class EmaVwapScalpStrategy(Strategy):
             candles=bars,
             atr=atr,
             swing_lookback=3,
-            atr_pad=0.2,
-            min_stop_atr=0.8,
+            atr_pad=0.35,
+            min_stop_atr=1.8,
             reward_r=self.reward_r,
-            min_tp_atr=1.6,
+            min_tp_atr=4.5,
         )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side

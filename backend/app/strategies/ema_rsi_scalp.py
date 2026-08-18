@@ -200,9 +200,9 @@ class EmaRsiScalpStrategy(Strategy):
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=1.8,
-            min_stop_atr=1.4,
-            min_tp_atr=2.2,
+            reward_r=2.5,
+            min_stop_atr=2.0,
+            min_tp_atr=5.0,
         )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side

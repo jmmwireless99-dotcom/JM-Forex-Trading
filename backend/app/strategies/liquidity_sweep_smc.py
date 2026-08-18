@@ -331,11 +331,11 @@ class LiquiditySweepSmcStrategy(Strategy):
             entry=tick.ask if side == Side.BUY else tick.bid,
             candles=bars,
             atr=atr,
-            reward_r=1.8,
-            min_stop_atr=0.9,
-            min_tp_atr=1.8,
+            reward_r=2.5,
+            min_stop_atr=1.8,
+            min_tp_atr=4.5,
             swing_lookback=3,
-            atr_pad=0.25,
+            atr_pad=0.35,
         )
         self._mark_fired(fire_key, day)
         return Signal(

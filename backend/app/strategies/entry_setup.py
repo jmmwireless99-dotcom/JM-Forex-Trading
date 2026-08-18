@@ -38,28 +38,29 @@ def structure_levels(
     candles: list[Candle],
     atr: float,
     swing_lookback: int = 3,
-    atr_pad: float = 0.35,
-    min_stop_atr: float = 1.2,
-    reward_r: float = 1.8,
-    min_tp_atr: float = 2.5,
+    atr_pad: float = 0.45,
+    min_stop_atr: float = 2.0,
+    reward_r: float = 2.5,
+    min_tp_atr: float = 5.0,
 ) -> Levels:
-    """SL beyond recent swing + ATR pad; TP at least reward_r × risk."""
+    """SL beyond recent swing + ATR pad; TP at reward_r × risk (target 2–3R)."""
     window = candles[-swing_lookback:] if len(candles) >= swing_lookback else candles
+    min_risk = min_stop_atr * atr
     if side == Side.BUY:
         swing = min(c.low for c in window)
         raw_sl = swing - atr_pad * atr
-        min_sl = entry - min_stop_atr * atr
+        min_sl = entry - min_risk
         sl = min(raw_sl, min_sl)
-        risk = max(entry - sl, min_stop_atr * atr * 0.5)
+        risk = max(entry - sl, min_risk)
         sl = entry - risk
         tp_dist = max(reward_r * risk, min_tp_atr * atr)
         tp = entry + tp_dist
     else:
         swing = max(c.high for c in window)
         raw_sl = swing + atr_pad * atr
-        max_sl = entry + min_stop_atr * atr
+        max_sl = entry + min_risk
         sl = max(raw_sl, max_sl)
-        risk = max(sl - entry, min_stop_atr * atr * 0.5)
+        risk = max(sl - entry, min_risk)
         sl = entry + risk
         tp_dist = max(reward_r * risk, min_tp_atr * atr)
         tp = entry - tp_dist

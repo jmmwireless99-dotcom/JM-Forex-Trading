@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     max_daily_loss_pct: float = 0.0  # 0 = disabled (no daily loss kill-switch)
 
     # Fallback stops if a strategy does not supply ATR levels (gold points)
-    # pip=0.1 → 55 pips = $5.5 move on XAUUSD
-    default_stop_loss_pips: float = 55.0
-    default_take_profit_pips: float = 90.0
+    # pip=0.1 → 90 pips = $9.00 move on XAUUSD; TP at 2.5R = 225 pips ($22.50)
+    default_stop_loss_pips: float = 90.0
+    default_take_profit_pips: float = 225.0
 
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0

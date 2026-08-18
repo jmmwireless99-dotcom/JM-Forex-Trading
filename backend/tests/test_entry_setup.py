@@ -42,7 +42,7 @@ def test_true_atr_and_structure_sl_tp():
     levels = structure_levels(Side.BUY, entry=bars[-1].close, candles=bars, atr=atr)
     assert levels.stop_loss < bars[-1].close
     assert levels.take_profit > bars[-1].close
-    assert levels.reward_r >= 1.5
+    assert levels.reward_r >= 2.0
 
 
 def test_manual_only_never_signals():
