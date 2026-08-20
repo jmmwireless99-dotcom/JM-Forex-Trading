@@ -1,3 +1,6 @@
+/** Pairs in the lab suite dashboard (mirrors lab-backend PAIR_SUITE_SYMBOLS) */
+export const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
+
 /** Pair → lab auto strategy preset (mirrors lab-backend/app/pair_strategies.py) */
 export const PAIR_PRESETS = {
   EURUSD: {
