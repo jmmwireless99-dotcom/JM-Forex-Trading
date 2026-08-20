@@ -27,6 +27,18 @@ def _short_code() -> str:
     return secrets.token_hex(3).upper()  # 6 chars
 
 
+def _parse_stored_dt(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _contract_size(symbol: str) -> float:
     return PaperBroker.CONTRACT_SIZES.get(symbol.upper(), PaperBroker.DEFAULT_CONTRACT_SIZE)
 
@@ -425,6 +437,8 @@ class PaperAccountRegistry:
                             realized_pnl=float(t.get("realized_pnl") or 0),
                             mode=t.get("mode") or "paper",
                             reject_reason=t.get("reject_reason"),
+                            opened_at=_parse_stored_dt(t.get("opened_at")),
+                            closed_at=_parse_stored_dt(t.get("closed_at")),
                         )
                         journal._trades.append(row_log)
                         journal._by_ticket[row_log.ticket] = row_log

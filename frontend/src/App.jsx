@@ -1219,7 +1219,11 @@ export default function App() {
                   {trades.map((t) => (
                     <tr key={t.id || t.ticket}>
                       <td className="meta">
-                        {t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}
+                        {(() => {
+                          const raw =
+                            t.status === 'CLOSED' && t.closed_at ? t.closed_at : t.opened_at
+                          return raw ? new Date(raw).toLocaleString() : '—'
+                        })()}
                       </td>
                       <td>
                         <span
