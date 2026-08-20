@@ -8,7 +8,7 @@ import secrets
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from app.investment.yield_calc import accrue_through, daily_earning, daily_rate, period_days, period_rate_pct
@@ -59,7 +59,37 @@ class InvestmentAccount:
                 "at": utcnow().isoformat(),
             },
         )
-        self.transactions = self.transactions[:200]
+        self.transactions = self.transactions[:500]
+
+    def _earnings_month_chart(self) -> list[dict]:
+        """Daily earnings for the current calendar month (oldest → newest)."""
+        today = utcnow().date()
+        month_start = today.replace(day=1)
+        by_date = {
+            str(r.get("date")): r
+            for r in self.earnings_log
+            if r.get("date") and str(r["date"]) >= month_start.isoformat()
+        }
+        rate_pct = round(daily_rate() * 100, 4)
+        rows: list[dict] = []
+        cur = month_start
+        while cur <= today:
+            key = cur.isoformat()
+            hit = by_date.get(key)
+            rows.append(
+                {
+                    "date": key,
+                    "earning": round(float(hit.get("earning") or 0), 4) if hit else 0.0,
+                    "daily_rate_pct": float(hit.get("daily_rate_pct") or rate_pct) if hit else rate_pct,
+                    "balance_after": round(float(hit.get("balance_after") or 0), 2) if hit else None,
+                }
+            )
+            cur += timedelta(days=1)
+        return rows
+
+    def _recent_earnings_view(self, *, limit: int = 31) -> list[dict]:
+        """Newest-first earnings rows — at least the last calendar month."""
+        return list(self.earnings_log[: max(limit, 31)])
 
     def sync_accrual(self, registry=None) -> list[dict]:
         """Accrue missing daily earnings; pay referral commissions to upline."""
@@ -76,7 +106,8 @@ class InvestmentAccount:
             self.last_accrual_date = new_last
             for row in rows:
                 self.earnings_log.insert(0, row)
-            self.earnings_log = self.earnings_log[:365]
+            # Keep ~3 years of daily rows — never drop recent history on deploy
+            self.earnings_log = self.earnings_log[:1095]
             if registry is not None:
                 from app.investment.referrals import credit_referral_commissions
 
@@ -145,8 +176,9 @@ class InvestmentAccount:
                 self.last_accrual_date.isoformat() if self.last_accrual_date else None
             ),
             "created_at": self.created_at.isoformat(),
-            "recent_transactions": self.transactions[:20],
-            "recent_earnings": self.earnings_log[:30],
+            "recent_transactions": self.transactions[:50],
+            "recent_earnings": self._recent_earnings_view(limit=31),
+            "earnings_month_chart": self._earnings_month_chart(),
         }
         if registry is not None:
             from app.investment.referrals import referral_dashboard

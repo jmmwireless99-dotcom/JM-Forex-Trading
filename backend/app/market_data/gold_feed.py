@@ -63,7 +63,7 @@ def _yahoo_range_for_interval(interval: str) -> str:
     if interval in {"30m", "60m", "1h"}:
         return "1mo"
     if interval in {"1d", "1wk"}:
-        return "1mo"
+        return "3mo"
     return "3mo"
 
 

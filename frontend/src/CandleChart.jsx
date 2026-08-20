@@ -3,11 +3,11 @@ import { createChart, LineStyle } from 'lightweight-charts'
 import { api } from './api'
 
 const RANGE_OPTS = [
+  { id: '1m', label: '1M Daily', hint: '1 day / bar · buong buwan' },
   { id: 'live', label: 'Live', hint: 'Engine M1' },
   { id: 'm5', label: 'M5', hint: '5m · ~5 days' },
   { id: 'm15', label: 'M15', hint: '15m · ~5 days' },
   { id: 'h1', label: 'H1', hint: '1h · ~1 month' },
-  { id: '1m', label: '1M Daily', hint: '1 day / bar' },
 ]
 
 const RANGE_ALIASES = {
@@ -26,7 +26,7 @@ function loadRange() {
   } catch {
     /* ignore */
   }
-  return 'live'
+  return '1m'
 }
 
 function toChartCandle(c) {
@@ -167,7 +167,7 @@ function rangeFetchSpec(range) {
   if (range === 'm5') return { interval: '5', limit: 1000, days: 5, dayMarks: true }
   if (range === 'm15') return { interval: '15', limit: 1000, days: 5, dayMarks: true }
   if (range === 'h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
-  if (range === '1m') return { interval: '1d', limit: 45, days: 31, dayMarks: true }
+  if (range === '1m') return { interval: '1d', limit: 35, days: 31, dayMarks: true }
   return null
 }
 
@@ -417,7 +417,11 @@ export default function CandleChart({
       return
     }
     seriesRef.current.setData(data)
-    chartRef.current?.timeScale().scrollToRealTime()
+    if (range === 'live') {
+      chartRef.current?.timeScale().scrollToRealTime()
+    } else {
+      chartRef.current?.timeScale().fitContent()
+    }
 
     const closes = data.map((d) => d.close)
     const pack = (values, digits = 3) =>

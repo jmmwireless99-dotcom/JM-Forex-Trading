@@ -10,12 +10,32 @@ cd "$ROOT"
 
 BRANCH="${BRANCH:-main}"
 
-echo "[1/5] Fetch + checkout ${BRANCH}..."
+echo "[1/6] Backup live account data (investment + paper)..."
+DATA_DIR="$ROOT/backend/app/data"
+BACKUP_DIR="${JM_FX_DATA_BACKUP:-/var/backups/jm-fx-data}"
+mkdir -p "$BACKUP_DIR"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+for f in investment_accounts.json investment_users.json paper_accounts.json; do
+  if [[ -f "$DATA_DIR/$f" ]]; then
+    cp -a "$DATA_DIR/$f" "$BACKUP_DIR/${f}.${STAMP}.bak"
+    cp -a "$DATA_DIR/$f" "$BACKUP_DIR/${f}.latest.bak"
+  fi
+done
+
+echo "[2/6] Fetch + checkout ${BRANCH}..."
 git fetch origin "${BRANCH}"
 git checkout -B "${BRANCH}" "origin/${BRANCH}"
 git reset --hard "origin/${BRANCH}"
 
-echo "[2/5] Ensure AI_ML runtime env..."
+echo "[2b/6] Restore account data if missing..."
+for f in investment_accounts.json investment_users.json paper_accounts.json; do
+  if [[ ! -f "$DATA_DIR/$f" && -f "$BACKUP_DIR/${f}.latest.bak" ]]; then
+    cp -a "$BACKUP_DIR/${f}.latest.bak" "$DATA_DIR/$f"
+    echo "  restored $f from backup"
+  fi
+done
+
+echo "[3/6] Ensure AI_ML runtime env..."
 ENV_FILE="$ROOT/.env"
 touch "$ENV_FILE"
 # Upsert key AI_ML settings without wiping other secrets
@@ -48,7 +68,7 @@ upsert_env JM_INVEST_DEMO_ENABLED false
 upsert_env JM_INVEST_PERIOD_RATE 0.30
 upsert_env JM_INVEST_PERIOD_DAYS 30
 
-echo "[3/5] Build frontend with base=/fx/ ..."
+echo "[4/6] Build frontend with base=/fx/ ..."
 cd "$ROOT/frontend"
 if [[ ! -d node_modules ]]; then
   npm ci --silent
@@ -57,7 +77,7 @@ else
 fi
 JM_BASE=/fx/ npm run build
 
-echo "[4/5] Publish static assets..."
+echo "[5/6] Publish static assets..."
 rm -rf "$ROOT/backend/static"
 mkdir -p "$ROOT/backend/static"
 cp -a "$ROOT/frontend/dist/." "$ROOT/backend/static/"
@@ -76,14 +96,14 @@ elif [[ -x /opt/jm-forex-trading/backend/.venv/bin/pip ]]; then
   /opt/jm-forex-trading/backend/.venv/bin/pip install -q -r "$ROOT/backend/requirements.txt"
 fi
 
-echo "[5/6] Sync systemd env (systemd overrides .env for jm-forex)..."
+echo "[6/6] Sync systemd env (systemd overrides .env for jm-forex)..."
 UNIT="/etc/systemd/system/jm-forex.service"
 if [[ -f "$UNIT" ]]; then
   sed -i 's/^Environment=JM_AUTO_FILL_SINGLE_BOOK=.*/Environment=JM_AUTO_FILL_SINGLE_BOOK=false/' "$UNIT"
   systemctl daemon-reload
 fi
 
-echo "[6/6] Restart jm-forex..."
+echo "[7/7] Restart jm-forex..."
 systemctl restart jm-forex.service
 sleep 3
 systemctl is-active jm-forex.service

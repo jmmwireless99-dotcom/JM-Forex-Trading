@@ -478,6 +478,47 @@
   color: #fde68a;
 }
 
+.invest-earn-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 140px;
+  padding: 0.75rem 0.25rem 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow-x: auto;
+}
+
+.invest-earn-bar-wrap {
+  flex: 1 1 12px;
+  min-width: 10px;
+  max-width: 28px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.invest-earn-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, #7dffb3, #14635c);
+}
+
+.invest-earn-bar.zero {
+  background: rgba(255, 255, 255, 0.08);
+  min-height: 2px;
+}
+
+.invest-earn-bar-label {
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
 @media (min-width: 720px) {
   .invest-card-main {
     grid-column: span 2;

@@ -65,11 +65,25 @@ def _bootstrap_investment_admin() -> None:
         log.exception("investment admin bootstrap failed")
 
 
+def _bootstrap_investment_accrual() -> None:
+    """Accrue daily earnings for all investors on boot (data persists in JSON)."""
+    try:
+        from app.investment.registry import get_investment_registry
+
+        reg = get_investment_registry()
+        for acc in reg.list_all():
+            acc.sync_accrual(reg)
+        reg.save()
+    except Exception:  # noqa: BLE001
+        log.exception("investment accrual bootstrap failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _bootstrap_database()
     _bootstrap_investment_admin()
     bootstrap_investment_demo()
+    _bootstrap_investment_accrual()
     # Auto-start paper engine so the dashboard has live data immediately
     engine = get_engine()
     await engine.start()
