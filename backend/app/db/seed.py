@@ -59,7 +59,7 @@ SEED_STRATEGIES: list[dict] = [
         "parameters": {
             "ema_fast": 9,
             "ema_slow": 21,
-            "reward_r": 2.0,
+            "reward_r": 2.5,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },

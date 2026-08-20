@@ -82,12 +82,25 @@ def test_ema_rsi_starts_7am_manila():
     assert in_ema_rsi_ph_window(start) is True
 
 
-def test_friday_night_arms_monday_asia():
+def test_friday_night_arms_monday_smc():
+    """After weekend, first tradeable slot is Mon 00:00 Manila (SMC), not 7AM Asia."""
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
+    nxt = next_session_hint(ts)
+    assert nxt["session"] == "london_ny_overlap"
+    assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 16
+    assert nxt["minute_utc"] == 0
+
+
+def test_monday_morning_arms_asia_at_7am():
+    ts = datetime(2026, 8, 16, 22, 59, tzinfo=timezone.utc)  # Mon 6:59 AM Manila — off
+    assert classify_full_sessions(ts).label == "off_hours"
+    start = datetime(2026, 8, 16, 23, 0, tzinfo=timezone.utc)  # Mon 7:00 AM Manila
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
     assert nxt["hour_utc"] == 23
+    assert classify_full_sessions(start).label == "asia"
 
 
 def test_weekend_avoided():

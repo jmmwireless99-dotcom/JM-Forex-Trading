@@ -274,7 +274,7 @@ async def desk() -> dict:
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
             "AI & Machine Learning filter on every auto entry",
-            "EMA_RSI active PH 8:00AM–8:30PM · SMC from 8:31PM · VWAP NY slot",
+            "EMA_RSI active PH 7:00AM–8:30PM · SMC from 8:31PM · VWAP NY slot",
             "EMA 200 / 20 / 50 + RSI 14",
             "Engulfing + pin bar confirmation",
             "Spread > 30 pips ($0.30) blocked · UK/EUR news −15m",

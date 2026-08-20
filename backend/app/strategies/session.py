@@ -25,7 +25,7 @@ ASIA_PH_START_MINUTE = 0
 ASIA_PH_END_HOUR = 20
 ASIA_PH_END_MINUTE = 30  # inclusive → until 8:30 PM Manila
 
-# UTC mirrors (Manila = UTC+8): 00:00 UTC = 8:00 AM PH … 12:30 UTC = 8:30 PM PH
+# UTC mirrors (Manila = UTC+8): 23:00 UTC = 7:00 AM PH … 12:30 UTC = 8:30 PM PH
 EMA_RSI_UTC_END_HOUR = 12
 EMA_RSI_UTC_END_MINUTE = 30
 OVERLAP_UTC_END_HOUR = 18  # exclusive — 8:31 PM PH through 1:59 AM PH

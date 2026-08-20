@@ -49,7 +49,7 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "AI_ML",
             "name": "AI & Machine Learning",
-            "sessions": ["Asia (PH 8AM–8:30PM)", "London/NY overlap", "New York"],
+            "sessions": ["Asia (PH 7AM–8:30PM)", "London/NY overlap", "New York"],
             "session_slots": ["asia", "london_ny_overlap", "new_york"],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -81,7 +81,7 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
-            "sessions": ["Asia (PH 8AM–8:30PM)"],
+            "sessions": ["Asia (PH 7AM–8:30PM)"],
             "session_slots": ["asia"],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -96,7 +96,7 @@ def strategy_catalog() -> list[dict]:
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
-                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
+                "Cooldown spacing ≥4 M5 bars; no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
@@ -187,7 +187,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "AI_ML — session child (EMA_RSI/SMC/VWAP) + AI & Machine Learning filter",
-        "EMA_RSI_Scalp — PH 8AM–8:30PM · EMA200 + RSI · 1:2 Asia scalp",
+        "EMA_RSI_Scalp — PH 7AM–8:30PM · EMA200 + RSI · 1:2 Asia scalp",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — PH 8:31PM–2AM overlap · sweep + FVG/OB",
         "Manual BUY/SELL with auto SL/TP always available",
