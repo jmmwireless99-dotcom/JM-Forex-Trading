@@ -65,6 +65,7 @@ jobs:
         run: |
           code=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/")
           test "$code" = "200" || (echo "Lab HTTP $code" && exit 1)
-          api=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/api/health")
+          api=$(curl -sS -o /tmp/lab-health.json -w '%{http_code}' "https://jmtechsolution.cloud/lab/api/health")
           test "$api" = "200" || (echo "Lab API HTTP $api" && exit 1)
+          grep -q '"JM Lab Trading"' /tmp/lab-health.json || (echo "Lab API returned non-JSON" && exit 1)
           echo "JM Lab OK (UI + API)"

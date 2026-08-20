@@ -38,13 +38,14 @@ echo "Smoke checks..."
 curl -fsS "https://jmtechsolution.cloud/fx/api/health" >/dev/null && echo "JM FX health: OK"
 LAB_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/")
 echo "JM Lab /lab/: HTTP ${LAB_CODE}"
-LAB_API=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/api/health")
+LAB_API=$(curl -sS -o /tmp/lab-health.json -w '%{http_code}' "https://jmtechsolution.cloud/lab/api/health")
 echo "JM Lab /lab/api/health: HTTP ${LAB_API}"
 if [[ "$LAB_CODE" != "200" ]]; then
   echo "Lab may need Apache snippet — run install-apache-lab-snippet.sh on VPS"
   exit 1
 fi
-if [[ "$LAB_API" != "200" ]]; then
+if [[ "$LAB_API" != "200" ]] || ! grep -q '"JM Lab Trading"' /tmp/lab-health.json 2>/dev/null; then
   echo "Lab API not reachable — check jm-lab.service and Apache /lab/api/ proxy"
+  cat /tmp/lab-health.json 2>/dev/null | head -3 || true
   exit 1
 fi
