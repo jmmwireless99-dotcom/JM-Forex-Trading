@@ -43,13 +43,44 @@ if marker in text:
     elif "Alias /lab /opt/jm-lab/dist" in text:
         # Already inside vhost — ensure ProxyPass exclusion + API proxy
         changed = False
-        if "ProxyPass /lab !" not in text:
+        if "ProxyPass /lab !" not in text and "ProxyPass /lab/ !" not in text:
             text = text.replace(
                 "ProxyPass / http://127.0.0.1:8081/",
-                "ProxyPass /lab !\n    ProxyPass / http://127.0.0.1:8081/",
+                "    ProxyPass /lab/ !\n    ProxyPass /lab !\n    ProxyPass / http://127.0.0.1:8081/",
                 1,
             )
             changed = True
+        elif "ProxyPass /lab/ !" not in text and "ProxyPass /lab !" in text:
+            text = text.replace(
+                "ProxyPass /lab !",
+                "ProxyPass /lab/ !\n    ProxyPass /lab !",
+                1,
+            )
+            changed = True
+        dir_old = """    <Directory /opt/jm-lab/dist>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+        FallbackResource /index.html
+    </Directory>"""
+        dir_new = """    <Directory /opt/jm-lab/dist>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+        RewriteEngine On
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^ index.html [L]
+        FallbackResource /index.html
+    </Directory>"""
+        if dir_old in text:
+            text = text.replace(dir_old, dir_new)
+            changed = True
+        # Remove legacy broken vhost-level pair rewrite if present
+        text = text.replace(
+            "    RewriteCond %{REQUEST_URI} ^/lab/(EURUSD|GBPUSD|AUDNZD|EURCHF)/?$ [NC]\n    RewriteRule ^ /lab/index.html [L]\n",
+            "",
+        )
         if "ProxyPass /lab/api/" not in text:
             api_block = (
                 "    # JM Lab demo trading API → port 8001 (isolated from JM FX /fx/)\n"
