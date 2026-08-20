@@ -36,7 +36,7 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–5PM)',
+    asia: 'Asia / EMA_RSI (PH 8AM–8:30PM)',
     london: 'London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
@@ -528,7 +528,6 @@ export default function App() {
                   'manual_only',
                   'EMA_RSI_Scalp',
                   'Liquidity_Sweep_SMC',
-                  'London_Judas_Sweep',
                   'EMA_VWAP_Scalp',
                 ]
             ).map((name) => (
@@ -541,9 +540,7 @@ export default function App() {
                       ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
                       : name === 'Liquidity_Sweep_SMC'
                         ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                        : name === 'London_Judas_Sweep'
-                          ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                          : name === 'EMA_VWAP_Scalp'
+                        : name === 'EMA_VWAP_Scalp'
                             ? 'EMA_VWAP_Scalp (9/21 EMA + VWAP)'
                             : name}
               </option>
@@ -630,7 +627,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: AI_ML · London_Judas · EMA_RSI · SMC · VWAP · manual
+              Strategies: AI_ML · EMA_RSI · SMC · VWAP · manual
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||

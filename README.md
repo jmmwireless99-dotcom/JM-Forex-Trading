@@ -57,8 +57,10 @@ picks a classic child setup, then filters with Machine Learning:
 
 | Session (UTC) | Child under `AI_ML` |
 | --- | --- |
-| Asia 00–07 | `EMA_RSI_Scalp` |
-| London 07–11 | `London_Judas_Sweep` |
+| Asia / EMA_RSI | `00:00–12:30 UTC` · **PH 8:00AM–8:30PM** | `EMA_RSI_Scalp` |
+| Overlap / SMC | `12:31–17:59 UTC` · **PH 8:31PM–1:59AM** | `Liquidity_Sweep_SMC` |
+| New York | `18:00–19:59 UTC` · PH 2:00–3:59AM | `EMA_VWAP_Scalp` |
+| Off-hours | `20:00–23:59 UTC` · PH 4:00–7:59AM | Stand aside |
 | Overlap 13–18 | `Liquidity_Sweep_SMC` |
 | New York 18–20 | `EMA_VWAP_Scalp` |
 
