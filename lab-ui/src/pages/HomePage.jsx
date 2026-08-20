@@ -66,8 +66,17 @@ export default function HomePage() {
           </Link>
         </article>
         <article className="lab-card">
+          <h2>Live demo trading</h2>
+          <p>
+            Paper money with live EUR/USD, GBP/USD, and gold prices — separate lab backend, not JM FX.
+          </p>
+          <Link to="trade" className="lab-btn">
+            Open live demo
+          </Link>
+        </article>
+        <article className="lab-card">
           <h2>Pair sandbox</h2>
-          <p>Placeholder for EUR/USD, GBP/USD, and other pair experiments (lab backend TBD).</p>
+          <p>Placeholder for EUR/USD, GBP/USD, and other pair experiments.</p>
           <Link to="pairs" className="lab-btn lab-btn-ghost">
             Pair lab
           </Link>

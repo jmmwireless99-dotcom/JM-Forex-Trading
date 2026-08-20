@@ -17,6 +17,7 @@ export function Link({ to, className = '', children, ...props }) {
 export default function Nav({ page, setPage }) {
   const tabs = [
     { id: 'home', label: 'Home' },
+    { id: 'trade', label: 'Live demo' },
     { id: 'compare', label: 'Compare' },
     { id: 'snapshot', label: 'JM FX snapshot' },
     { id: 'pairs', label: 'Pair lab' },

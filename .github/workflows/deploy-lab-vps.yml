@@ -6,9 +6,12 @@ on:
     branches: [main]
     paths:
       - 'lab-ui/**'
+      - 'lab-backend/**'
       - 'scripts/deploy-lab-portal.sh'
+      - 'scripts/deploy-lab-backend.sh'
       - 'scripts/install-apache-lab-snippet.sh'
       - 'deploy/apache-lab-path.conf'
+      - 'deploy/jm-lab.service'
       - '.github/workflows/deploy-lab-vps.yml'
 
 jobs:
@@ -49,7 +52,7 @@ jobs:
             git fetch origin \"\${BRANCH}\"
             git checkout -B \"\${BRANCH}\" \"origin/\${BRANCH}\"
             git reset --hard \"origin/\${BRANCH}\"
-            chmod +x scripts/deploy-lab-portal.sh scripts/install-apache-lab-snippet.sh
+            chmod +x scripts/deploy-lab-portal.sh scripts/deploy-lab-backend.sh scripts/install-apache-lab-snippet.sh
             ./scripts/install-apache-lab-snippet.sh || true
             ./scripts/deploy-lab-portal.sh
           "
@@ -62,4 +65,6 @@ jobs:
         run: |
           code=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/")
           test "$code" = "200" || (echo "Lab HTTP $code" && exit 1)
-          echo "JM Lab OK"
+          api=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/api/health")
+          test "$api" = "200" || (echo "Lab API HTTP $api" && exit 1)
+          echo "JM Lab OK (UI + API)"

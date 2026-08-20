@@ -429,6 +429,88 @@ a {
   color: var(--lab-accent);
 }
 
+/* Live demo trading */
+.lab-trade-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.lab-trade-start {
+  max-width: 420px;
+}
+
+.lab-trade-start p {
+  color: var(--lab-muted);
+  margin: 0 0 1rem;
+}
+
+.lab-note {
+  color: var(--lab-ok);
+  font-size: 0.88rem;
+  margin: 0 0 0.75rem;
+}
+
+.lab-pos {
+  color: var(--lab-ok);
+}
+
+.lab-neg {
+  color: #fca5a5;
+}
+
+.lab-trade-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 1rem;
+}
+
+.lab-trade-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--lab-muted);
+}
+
+.lab-trade-controls input {
+  width: 5.5rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--lab-line);
+  border-radius: 6px;
+  color: var(--lab-text);
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+
+.lab-buy {
+  background: #059669;
+  color: #ecfdf5;
+}
+
+.lab-sell {
+  background: #dc2626;
+  color: #fef2f2;
+}
+
+.lab-trade-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--lab-line);
+  font-size: 0.9rem;
+}
+
+.lab-trade-row:last-child {
+  border-bottom: none;
+}
+
 @media (max-width: 640px) {
   .lab-hero h1 {
     font-size: 1.85rem;

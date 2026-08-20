@@ -5,9 +5,11 @@ import ComparePage from './pages/ComparePage.jsx'
 import SnapshotPage from './pages/SnapshotPage.jsx'
 import PairLabPage from './pages/PairLabPage.jsx'
 
+import TradePage from './pages/TradePage.jsx'
+
 function pageFromHash() {
   const raw = (window.location.hash || '#home').replace(/^#/, '')
-  if (['home', 'compare', 'snapshot', 'pairs'].includes(raw)) return raw
+  if (['home', 'compare', 'snapshot', 'pairs', 'trade'].includes(raw)) return raw
   return 'home'
 }
 
@@ -29,6 +31,7 @@ export default function App() {
   if (page === 'compare') body = <ComparePage />
   if (page === 'snapshot') body = <SnapshotPage />
   if (page === 'pairs') body = <PairLabPage />
+  if (page === 'trade') body = <TradePage />
 
   return (
     <div className="lab-app">

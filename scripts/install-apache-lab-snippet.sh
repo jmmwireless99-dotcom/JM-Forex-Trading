@@ -41,15 +41,28 @@ if marker in text:
     if vh_end != -1:
         text = text[: vh_end + len("</VirtualHost>")] + "\n"
     elif "Alias /lab /opt/jm-lab/dist" in text:
-        # Already inside vhost — ensure ProxyPass exclusion
+        # Already inside vhost — ensure ProxyPass exclusion + API proxy
+        changed = False
         if "ProxyPass /lab !" not in text:
             text = text.replace(
                 "ProxyPass / http://127.0.0.1:8081/",
                 "ProxyPass /lab !\n    ProxyPass / http://127.0.0.1:8081/",
                 1,
             )
+            changed = True
+        if "ProxyPass /lab/api/" not in text:
+            api_block = (
+                "    # JM Lab demo trading API → port 8001 (isolated from JM FX /fx/)\n"
+                "    ProxyPass /lab/api/ http://127.0.0.1:8001/api/\n"
+                "    ProxyPassReverse /lab/api/ http://127.0.0.1:8001/api/\n\n"
+            )
+            text = text.replace("    # JM Lab static /lab/", api_block + "    # JM Lab static /lab/", 1)
+            if "ProxyPass /lab/api/" not in text:
+                text = text.replace("    Alias /lab /opt/jm-lab/dist", api_block + "    Alias /lab /opt/jm-lab/dist", 1)
+            changed = True
+        if changed:
             path.write_text(text)
-            print("Added ProxyPass /lab ! exclusion")
+            print("Updated Lab Apache rules (API proxy + /lab exclusion)")
         else:
             print("Lab Apache rules already present in ${VHOST}")
         raise SystemExit(0)

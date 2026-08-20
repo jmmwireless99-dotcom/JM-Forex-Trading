@@ -9,6 +9,11 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
+      '/lab/api': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/lab\/api/, '/api'),
+      },
       '/fx/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

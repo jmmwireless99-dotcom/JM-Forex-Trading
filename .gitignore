@@ -19,6 +19,8 @@ data/
 node_modules/
 frontend/dist/
 lab-ui/dist/
+lab-backend/data/*.json
+lab-backend/.venv/
 *.log
 npm-debug.log*
 

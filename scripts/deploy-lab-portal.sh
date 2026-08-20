@@ -51,7 +51,7 @@ mkdir -p "${LAB_DIR}"
 cp -a dist/. "${LAB_DIR}/"
 chown -R www-data:www-data "$(dirname "$LAB_DIR")" 2>/dev/null || true
 
-echo "[4/4] Apache snippet (manual once if not yet installed)..."
+echo "[4/5] Apache snippet (manual once if not yet installed)..."
 SNIP="$ROOT/deploy/apache-lab-path.conf"
 if [[ -f "$SNIP" ]]; then
   echo "  Include ${SNIP} in your SSL vhost if /lab/ is not configured yet."
@@ -68,7 +68,14 @@ if [[ -f "$SNIP" ]]; then
   fi
 fi
 
+if [[ -x "$ROOT/scripts/deploy-lab-backend.sh" && -d "$ROOT/lab-backend" ]]; then
+  echo "[5/5] Lab demo trading API (port 8001)..."
+  SKIP_GIT_FETCH=1 BRANCH="${BRANCH}" bash "$ROOT/scripts/deploy-lab-backend.sh"
+else
+  echo "[5/5] Skipped lab-backend (not on this branch yet)."
+fi
+
 echo ""
 echo "OK — JM Lab static files deployed to ${LAB_DIR}"
 echo "    JM FX (/fx/) was NOT rebuilt and jm-forex.service was NOT restarted."
-echo "    Open: https://jmtechsolution.cloud/lab/"
+echo "    Open: https://jmtechsolution.cloud/lab/#trade"
