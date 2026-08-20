@@ -21,6 +21,8 @@ YAHOO = {
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
     "XAUUSD": "GC=F",
+    "AUDNZD": "AUDNZD=X",
+    "EURCHF": "EURCHF=X",
 }
 
 BINANCE = {
@@ -30,7 +32,8 @@ BINANCE = {
 }
 
 BINANCE_API = "https://data-api.binance.vision/api/v3"
-KRAKEN_PAIR = {"EURUSD": "EURUSD", "GBPUSD": "GBPUSD"}
+KRAKEN_PAIR = {"EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "EURCHF": "EURCHF"}
+YAHOO_ONLY = {"AUDNZD"}
 
 SUPPORTED = list(YAHOO.keys())
 
@@ -53,7 +56,13 @@ BINANCE_INTERVAL = {
 
 _QUOTE_CACHE: dict[str, dict[str, Any]] = {}
 _CANDLE_CACHE: dict[str, dict[str, Any]] = {}
-_FALLBACK_MID = {"EURUSD": 1.0850, "GBPUSD": 1.2650, "XAUUSD": 2650.0}
+_FALLBACK_MID = {
+    "EURUSD": 1.0850,
+    "GBPUSD": 1.2650,
+    "XAUUSD": 2650.0,
+    "AUDNZD": 1.0800,
+    "EURCHF": 0.9350,
+}
 
 _QUOTE_TTL = 18.0
 _CANDLE_TTL = 90.0
@@ -119,6 +128,8 @@ def _parse_yahoo_candles(payload: dict[str, Any], limit: int) -> list[dict[str, 
 
 
 def _binance_klines(symbol: str, interval: str, limit: int) -> list[dict[str, Any]]:
+    if symbol not in BINANCE:
+        raise ValueError(f"no binance symbol for {symbol}")
     bsym = BINANCE[symbol]
     b_int = BINANCE_INTERVAL.get(interval, interval)
     params = urllib.parse.urlencode(
@@ -170,6 +181,8 @@ def _kraken_klines(symbol: str, interval: str, limit: int) -> list[dict[str, Any
 
 
 def _binance_price(symbol: str) -> float:
+    if symbol not in BINANCE:
+        raise ValueError(f"no binance symbol for {symbol}")
     bsym = BINANCE[symbol]
     data = _http_json(f"{BINANCE_API}/ticker/price?symbol={bsym}")
     return float(data["price"])
@@ -202,14 +215,16 @@ def fetch_quote(symbol: str) -> dict[str, Any]:
         return {k: v for k, v in row.items() if not k.startswith("_")}
 
     mid: float | None = None
-    source = "binance"
+    source = "yahoo"
 
-    try:
-        mid = _binance_price(sym)
-    except Exception as e:
-        log.warning("binance quote %s: %s", sym, e)
+    if sym in BINANCE:
+        try:
+            mid = _binance_price(sym)
+            source = "binance"
+        except Exception as e:
+            log.warning("binance quote %s: %s", sym, e)
 
-    if mid is None:
+    if sym in YAHOO_ONLY or sym not in BINANCE:
         try:
             payload = _yahoo_chart(sym, "1m", "1d")
             results = (payload.get("chart") or {}).get("result") or []
@@ -224,6 +239,15 @@ def fetch_quote(symbol: str) -> dict[str, Any]:
                     source = "yahoo"
         except Exception as e:
             log.warning("yahoo quote %s: %s", sym, e)
+
+    if mid is None and sym in KRAKEN_PAIR:
+        try:
+            candles = _kraken_klines(sym, "5m", 1)
+            if candles:
+                mid = candles[-1]["close"]
+                source = "kraken"
+        except Exception as e:
+            log.warning("kraken quote %s: %s", sym, e)
 
     if mid is None:
         stale = _stale_quote(sym)
@@ -258,14 +282,16 @@ def fetch_candles(symbol: str, interval: str = "5m", limit: int = 120) -> dict[s
         return {k: v for k, v in cached.items() if not k.startswith("_")}
 
     candles: list[dict[str, Any]] = []
-    source = "binance"
+    source = "yahoo"
     errors: list[str] = []
 
-    try:
-        candles = _binance_klines(sym, y_int, limit)
-    except Exception as e:
-        errors.append(str(e))
-        log.warning("binance candles %s %s: %s", sym, y_int, e)
+    if sym in BINANCE:
+        try:
+            candles = _binance_klines(sym, y_int, limit)
+            source = "binance"
+        except Exception as e:
+            errors.append(str(e))
+            log.warning("binance candles %s %s: %s", sym, y_int, e)
 
     if not candles and sym in KRAKEN_PAIR:
         try:
@@ -276,13 +302,17 @@ def fetch_candles(symbol: str, interval: str = "5m", limit: int = 120) -> dict[s
             log.warning("kraken candles %s %s: %s", sym, y_int, e)
 
     if not candles:
-        try:
-            payload = _yahoo_chart(sym, y_int, _yahoo_range(y_int))
-            candles = _parse_yahoo_candles(payload, limit)
-            source = "yahoo"
-        except Exception as e:
-            errors.append(str(e))
-            log.warning("yahoo candles %s %s: %s", sym, y_int, e)
+        for attempt in range(2 if sym in YAHOO_ONLY else 1):
+            if attempt:
+                time.sleep(3.5)
+            try:
+                payload = _yahoo_chart(sym, y_int, _yahoo_range(y_int))
+                candles = _parse_yahoo_candles(payload, limit)
+                source = "yahoo"
+                break
+            except Exception as e:
+                errors.append(str(e))
+                log.warning("yahoo candles %s %s: %s", sym, y_int, e)
 
     if not candles and cached:
         stale = {k: v for k, v in cached.items() if not k.startswith("_")}

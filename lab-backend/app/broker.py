@@ -52,7 +52,7 @@ class LabBroker:
     """Minimal FX paper broker for lab experiments."""
 
     CONTRACT = 100_000  # standard FX lot
-    SPREAD_PIPS = {"EURUSD": 0.8, "GBPUSD": 1.0, "XAUUSD": 0.25}
+    SPREAD_PIPS = {"EURUSD": 0.8, "GBPUSD": 1.0, "XAUUSD": 0.25, "AUDNZD": 1.2, "EURCHF": 1.0}
 
     def __init__(self, deposit: float = 10_000.0, currency: str = "USD") -> None:
         self.deposit = round(float(deposit), 2)

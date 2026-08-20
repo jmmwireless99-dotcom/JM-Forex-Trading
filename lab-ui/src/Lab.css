@@ -511,6 +511,12 @@ a {
   border-bottom: none;
 }
 
+.lab-pair-hint {
+  font-size: 0.85rem;
+  margin: 0.65rem 0 0;
+  line-height: 1.45;
+}
+
 .lab-chart-panel {
   padding-bottom: 0.5rem;
 }

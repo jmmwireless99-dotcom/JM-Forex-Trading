@@ -32,7 +32,7 @@ export const BOT_ROWS = [
     session: 'Quiet hours (Asian)',
     blowUp: 'Very high',
     martingale: 'Often yes',
-    verdict: 'High blow-up risk — lab only with demo',
+    verdict: 'High blow-up risk — lab demo only',
     highlight: false,
   },
   {
@@ -49,29 +49,70 @@ export const BOT_ROWS = [
   },
 ]
 
-export const PAIR_EXPERIMENTS = [
+/** Lab live-demo pairs mapped to typical EA bot styles */
+export const PAIR_GUIDE = [
   {
     id: 'EURUSD',
     label: 'EUR/USD',
-    note: 'Tight spread · good scalper sandbox candidate',
-    status: 'planned',
+    botStyle: 'Best overall · Scalper · General EA',
+    spread: 'Very low (ECN ideal)',
+    session: 'London / NY — smooth trends',
+    labAuto: 'EMA+RSI (trend scalp)',
+    risk: 'Low–medium',
+    status: 'live',
+    note: '#1 liquidity worldwide. Lowest spread, hard to manipulate — default sandbox pair.',
   },
   {
     id: 'GBPUSD',
     label: 'GBP/USD',
-    note: 'Higher volatility · trend/breakout experiments',
-    status: 'planned',
+    botStyle: 'Trend follower · Breakout',
+    spread: 'Low–medium',
+    session: 'London open · NY volatility',
+    labAuto: 'EMA+RSI (faster moves)',
+    risk: 'Medium',
+    status: 'live',
+    note: 'Moves faster than EUR/USD — more opportunity but wider swings.',
   },
   {
     id: 'AUDNZD',
     label: 'AUD/NZD',
-    note: 'Mean-reverting · grid research only (demo)',
-    status: 'planned',
+    botStyle: 'Grid · Mean reversion · Range',
+    spread: 'Medium',
+    session: 'Asian · quiet hours',
+    labAuto: 'Manual / research (grid TBD)',
+    risk: 'High if martingale',
+    status: 'live',
+    note: 'Classic “ranging” cross — mean-reverting. Grid EAs popular here; demo only.',
+  },
+  {
+    id: 'EURCHF',
+    label: 'EUR/CHF',
+    botStyle: 'Grid · Asian session scalper',
+    spread: 'Medium',
+    session: 'Asian night · low volatility',
+    labAuto: 'Manual / research (grid TBD)',
+    risk: 'High if martingale',
+    status: 'live',
+    note: 'Historically stable range. Good for quiet-session bots — not for live grid without long demo.',
   },
   {
     id: 'XAUUSD',
-    label: 'XAUUSD (reference)',
-    note: 'Live on JM FX desk — read-only snapshot in Lab',
+    label: 'XAUUSD (Gold)',
+    botStyle: 'Trend · Session scalp',
+    spread: 'Higher',
+    session: 'JM FX Manila schedule',
+    labAuto: 'Lab demo + JM FX desk',
+    risk: 'Medium',
     status: 'live-ref',
+    note: 'Production JM FX desk at /fx/ — Lab has paper demo; real engine unchanged.',
   },
+]
+
+export const PAIR_EXPERIMENTS = PAIR_GUIDE
+
+export const LAB_TIPS = [
+  'Use ECN / raw-spread broker on live — bots die on wide spreads.',
+  'Run bots on VPS 24/7 — not on a laptop that sleeps.',
+  'Backtest 3–6 months demo before real money.',
+  'JM Lab = paper only. JM FX gold desk = separate production stack.',
 ]

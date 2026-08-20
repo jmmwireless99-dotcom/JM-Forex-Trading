@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import LabCandleChart from '../LabCandleChart.jsx'
+import { PAIR_GUIDE } from '../content/compare.js'
 import { labTradeApi, loadLabSession, saveLabSession } from '../api.js'
 
-const PAIRS = ['EURUSD', 'GBPUSD', 'XAUUSD']
+const PAIRS = PAIR_GUIDE.filter((p) => p.status === 'live' || p.status === 'live-ref').map((p) => p.id)
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
@@ -18,7 +19,15 @@ function fmtPrice(symbol, n) {
 
 export default function TradePage() {
   const [session, setSession] = useState(() => loadLabSession())
-  const [symbol, setSymbol] = useState('EURUSD')
+  const [symbol, setSymbol] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('jm_lab_trade_symbol')
+      if (saved && PAIRS.includes(saved)) return saved
+    } catch {
+      /* ignore */
+    }
+    return 'EURUSD'
+  })
   const [account, setAccount] = useState(null)
   const [auto, setAuto] = useState(null)
   const [ticks, setTicks] = useState({})
@@ -172,6 +181,7 @@ export default function TradePage() {
 
   const tick = ticks[symbol]
   const open = positions.filter((p) => p.status === 'OPEN')
+  const pairGuide = useMemo(() => PAIR_GUIDE.find((p) => p.id === symbol), [symbol])
 
   if (!session) {
     return (
@@ -184,7 +194,7 @@ export default function TradePage() {
         </header>
         <section className="lab-panel lab-trade-start">
           <h2>Start lab demo account</h2>
-          <p>$10,000 virtual balance · EUR/USD · GBP/USD · XAUUSD · chart + auto EMA+RSI</p>
+          <p>$10,000 virtual balance · majors + crosses · chart + auto EMA+RSI</p>
           <button type="button" className="lab-btn" disabled={busy} onClick={createDemo}>
             Create demo account
           </button>
@@ -234,18 +244,30 @@ export default function TradePage() {
 
       <section className="lab-panel lab-chart-panel">
         <div className="lab-pair-bar">
-          {PAIRS.map((p) => (
+          {PAIRS.map((id) => (
             <button
-              key={p}
+              key={id}
               type="button"
-              className={symbol === p ? 'on' : ''}
-              onClick={() => setSymbol(p)}
+              className={symbol === id ? 'on' : ''}
+              onClick={() => {
+                setSymbol(id)
+                try {
+                  sessionStorage.setItem('jm_lab_trade_symbol', id)
+                } catch {
+                  /* ignore */
+                }
+              }}
             >
-              {p}
+              {id}
             </button>
           ))}
         </div>
         <LabCandleChart symbol={symbol} livePrice={tick?.mid} positions={open} />
+        {pairGuide ? (
+          <p className="lab-muted lab-pair-hint">
+            <strong>{pairGuide.botStyle}</strong> · {pairGuide.note}
+          </p>
+        ) : null}
       </section>
 
       <section className="lab-panel">
