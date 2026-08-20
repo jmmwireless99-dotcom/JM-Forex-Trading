@@ -262,6 +262,12 @@ class PaperAccountRegistry:
                         continue
                     if row.entry is None:
                         continue
+                    opened = row.opened_at or row.closed_at
+                    if opened is not None:
+                        age_hours = (utcnow() - opened).total_seconds() / 3600.0
+                        # Only heal fresh restart rows — skip archived history restores
+                        if age_hours > 48:
+                            continue
                     mid = mids.get(row.symbol)
                     if mid is None:
                         continue
