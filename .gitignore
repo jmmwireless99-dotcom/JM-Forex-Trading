@@ -18,6 +18,7 @@ data/
 # Node
 node_modules/
 frontend/dist/
+lab-ui/dist/
 *.log
 npm-debug.log*
 
