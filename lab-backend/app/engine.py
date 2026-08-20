@@ -16,7 +16,7 @@ store = LabAccountStore(DATA_DIR / "lab_accounts.json")
 _ticks: dict[str, dict] = {}
 _running = False
 _candle_cache: dict[str, tuple[float, list]] = {}
-_AUTO_CHECK_EVERY = 30.0
+_AUTO_CHECK_EVERY = 60.0
 
 
 def get_ticks() -> dict[str, dict]:
@@ -74,7 +74,7 @@ async def tick_loop() -> None:
             store.persist()
         except Exception as e:
             log.warning("lab tick %s: %s", sym, e)
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(5.0)
 
 
 def stop_loop() -> None:

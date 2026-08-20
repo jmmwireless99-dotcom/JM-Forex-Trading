@@ -4,9 +4,12 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
+import logging
 
 from app.engine import get_ticks, store
 from app.feed import SUPPORTED, fetch_candles, fetch_quote
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -72,7 +75,8 @@ async def candles(symbol: str = "EURUSD", interval: str = "5", limit: int = 120)
     try:
         return fetch_candles(symbol, interval=interval, limit=min(limit, 500))
     except Exception as e:
-        raise HTTPException(502, str(e)) from e
+        log.warning("candles %s: %s", symbol, e)
+        raise HTTPException(503, "Chart data temporarily unavailable — retry in a minute") from e
 
 
 @router.post("/accounts")

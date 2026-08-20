@@ -47,6 +47,8 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
   const [rows, setRows] = useState([])
   const [status, setStatus] = useState('idle')
   const [err, setErr] = useState('')
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
 
   const openPos = useMemo(
     () => (positions || []).filter((p) => (p.status || 'OPEN').toUpperCase() === 'OPEN'),
@@ -55,25 +57,31 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
 
   useEffect(() => {
     let alive = true
+    setErr('')
     async function load() {
-      setStatus('loading')
+      if (!rowsRef.current.length) setStatus('loading')
       try {
-        const limit = range === '60' ? 300 : range === '15' ? 400 : 500
+        const limit = range === '60' ? 300 : range === '15' ? 300 : 400
         const data = await labTradeApi.candles(symbol, range, limit)
         if (!alive) return
         const candles = (data.candles || []).map(toChartCandle).filter((c) => Number.isFinite(c.time))
-        setRows(candles)
-        setErr('')
+        if (candles.length) setRows(candles)
+        setErr(data.stale ? 'Cached chart (live feed busy)' : '')
         setStatus('ready')
       } catch (e) {
         if (alive) {
-          setErr(e.message || String(e))
-          setStatus('error')
+          if (!rowsRef.current.length) {
+            setErr(e.message || String(e))
+            setStatus('error')
+          } else {
+            setErr('Using cached chart — refresh soon')
+            setStatus('ready')
+          }
         }
       }
     }
     load()
-    const id = setInterval(load, 45000)
+    const id = setInterval(load, 120000)
     return () => {
       alive = false
       clearInterval(id)
@@ -189,7 +197,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
           ))}
         </div>
       </div>
-      {err ? <p className="lab-error-inline">{err}</p> : null}
+      {err ? <p className="lab-error-inline lab-chart-note">{err}</p> : null}
       <div ref={hostRef} className="lab-chart-host" />
       <p className="lab-chart-legend lab-muted">
         {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars`}

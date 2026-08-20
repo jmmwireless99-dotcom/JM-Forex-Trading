@@ -563,6 +563,12 @@ a {
   margin: 0.35rem 0 0;
 }
 
+.lab-chart-note {
+  color: var(--lab-warn);
+  font-size: 0.82rem;
+  margin: 0 0 0.35rem;
+}
+
 .lab-auto-head {
   display: flex;
   align-items: center;
