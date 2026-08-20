@@ -73,12 +73,21 @@ def test_next_session_after_asia_is_overlap_at_831pm():
     assert nxt["minute_utc"] == 31
 
 
+def test_ema_rsi_starts_7am_manila():
+    # Monday 2026-07-20 — 6:59 AM Manila off-hours, 7:00 AM EMA_RSI
+    early = datetime(2026, 7, 19, 22, 59, tzinfo=timezone.utc)  # Sun UTC, Mon 6:59 AM PH
+    assert classify_full_sessions(early).label == "off_hours"
+    start = datetime(2026, 7, 19, 23, 0, tzinfo=timezone.utc)  # Sun UTC, Mon 7:00 AM PH
+    assert classify_full_sessions(start).label == "asia"
+    assert in_ema_rsi_ph_window(start) is True
+
+
 def test_friday_night_arms_monday_asia():
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 0
+    assert nxt["hour_utc"] == 23
 
 
 def test_weekend_avoided():

@@ -143,8 +143,8 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
-                "utc": "00:00-12:30",
-                "ph": "08:00-20:30",
+                "utc": "23:00-12:30",
+                "ph": "07:00-20:30",
                 "slot": "EMA_RSI (Asia desk)",
                 "session": "asia",
                 "strategies": "AI_ML → EMA_RSI_Scalp",
@@ -168,7 +168,7 @@ class AutoStrategyRouter:
             {
                 "days": "Mon-Fri",
                 "utc": "20:00-23:59",
-                "ph": "04:00-07:59",
+                "ph": "04:00-06:59",
                 "slot": "Off-hours",
                 "session": "off_hours",
                 "strategies": "Stand aside",

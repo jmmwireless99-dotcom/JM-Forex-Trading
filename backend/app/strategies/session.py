@@ -57,6 +57,12 @@ def ph_clock_minutes(ts: datetime) -> int:
     return _minutes(h, m)
 
 
+def ph_weekday(ts: datetime) -> int:
+    """Weekday in Manila (Mon=0) — gold desk follows PH calendar."""
+    ph = ts.astimezone(timezone.utc) + timedelta(hours=8)
+    return ph.weekday()
+
+
 def in_ema_rsi_ph_window(ts: datetime) -> bool:
     """EMA_RSI desk: Manila 7:00 AM – 8:30 PM inclusive."""
     start = _minutes(ASIA_PH_START_HOUR, ASIA_PH_START_MINUTE)
@@ -64,9 +70,21 @@ def in_ema_rsi_ph_window(ts: datetime) -> bool:
     return start <= ph_clock_minutes(ts) <= end
 
 
+def in_smc_ph_window(ts: datetime) -> bool:
+    """SMC desk: Manila 8:31 PM – 1:59 AM (AI auto-picks Liquidity_Sweep_SMC)."""
+    m = ph_clock_minutes(ts)
+    return m >= _minutes(20, 31) or m <= _minutes(1, 59)
+
+
+def in_vwap_ph_window(ts: datetime) -> bool:
+    """VWAP desk: Manila 2:00 AM – 3:59 AM."""
+    m = ph_clock_minutes(ts)
+    return _minutes(2, 0) <= m <= _minutes(3, 59)
+
+
 def in_ema_rsi_utc_window(ts: datetime) -> bool:
-    """Full desk map: UTC 00:00 – 12:30 (= 8:00 AM – 8:30 PM Manila)."""
-    return utc_clock_minutes(ts) <= _minutes(EMA_RSI_UTC_END_HOUR, EMA_RSI_UTC_END_MINUTE)
+    """Legacy UTC helper — prefer in_ema_rsi_ph_window."""
+    return in_ema_rsi_ph_window(ts)
 
 
 # Back-compat alias used by older imports
@@ -75,8 +93,7 @@ _ph_hour = ph_hour
 
 def classify_asia_desk(ts: datetime) -> SessionWindow:
     """Asia-only desk: EMA_RSI PH 07:00–20:30; flat outside (JM_ASIA_DESK_ONLY)."""
-    utc = ts.astimezone(timezone.utc)
-    if utc.weekday() >= 5:
+    if ph_weekday(ts) >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     if in_ema_rsi_ph_window(ts):
@@ -93,32 +110,29 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map aligned with strategy clocks (UTC).
+    """Full desk map — all times in Manila (UTC+8).
 
-    Asia / EMA_RSI  00:00–12:30 UTC  (PH 8:00 AM – 8:30 PM)
-    Overlap / SMC   12:31–17:59 UTC  (PH 8:31 PM – 1:59 AM)
-    New York / VWAP 18:00–19:59 UTC  (PH 2:00 AM – 3:59 AM)
-    Off-hours       20:00–23:59 UTC  (PH 4:00 AM – 7:59 AM)
+    EMA_RSI  07:00–20:30 — AI_ML → EMA_RSI_Scalp
+    SMC      20:31–01:59 — AI_ML → Liquidity_Sweep_SMC
+    VWAP     02:00–03:59 — AI_ML → EMA_VWAP_Scalp
+    Off      04:00–06:59 — stand aside (Judas removed)
     """
-    utc = ts.astimezone(timezone.utc)
-    if utc.weekday() >= 5:
+    if ph_weekday(ts) >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
-    mins = utc_clock_minutes(ts)
-
-    if mins <= _minutes(EMA_RSI_UTC_END_HOUR, EMA_RSI_UTC_END_MINUTE):
+    if in_ema_rsi_ph_window(ts):
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "EMA_RSI session (PH 8:00AM–8:30PM) — M5 EMA + RSI scalp",
+            "EMA_RSI session (PH 7:00AM–8:30PM) — M5 EMA + RSI scalp",
         )
-    if mins < _minutes(OVERLAP_UTC_END_HOUR, 0):
+    if in_smc_ph_window(ts):
         return SessionWindow(
             SessionTier.PRIME,
             "london_ny_overlap",
-            "London/NY overlap (PH 8:31PM–2:00AM) — SMC liquidity window",
+            "Evening overlap (PH 8:31PM–2:00AM) — SMC liquidity window",
         )
-    if mins < _minutes(NY_UTC_END_HOUR, 0):
+    if in_vwap_ph_window(ts):
         return SessionWindow(
             SessionTier.ALLOWED,
             "new_york",
@@ -127,7 +141,7 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
     return SessionWindow(
         SessionTier.AVOID,
         "off_hours",
-        "Off-hours (PH 4:00AM–8:00AM) — spreads widen, skip new entries",
+        "Off-hours (PH 4:00AM–7:00AM) — spreads widen, skip new entries",
     )
 
 
