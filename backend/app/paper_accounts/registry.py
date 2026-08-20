@@ -14,6 +14,7 @@ from pathlib import Path
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.trade_journal import TradeJournal
+from app.investment.users import hash_password, verify_password
 from app.models.domain import utcnow
 from app.risk.manager import RiskManager
 
@@ -103,6 +104,7 @@ class PaperAccount:
     risk: RiskManager
     follow_auto: bool = True
     is_desk: bool = False
+    password_hash: str | None = None
     created_at: datetime = field(default_factory=utcnow)
 
     def public_info(self) -> dict:
@@ -243,6 +245,35 @@ class PaperAccountRegistry:
     def persist(self) -> None:
         self.save()
 
+    def get_by_code(self, code: str) -> PaperAccount | None:
+        needle = (code or "").strip().upper()
+        if not needle:
+            return None
+        with self._lock:
+            for acc in self._accounts.values():
+                if not acc.is_desk and acc.code.upper() == needle:
+                    return acc
+        return None
+
+    def set_password(self, account_id: str, password: str) -> PaperAccount:
+        if len(password) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        with self._lock:
+            acc = self._accounts.get(account_id)
+            if acc is None or acc.is_desk:
+                raise KeyError("Account not found")
+            acc.password_hash = hash_password(password)
+            self._save()
+            return acc
+
+    def authenticate_by_code(self, code: str, password: str) -> PaperAccount | None:
+        acc = self.get_by_code(code)
+        if acc is None or not acc.password_hash:
+            return None
+        if not verify_password(password, acc.password_hash):
+            return None
+        return acc
+
     def reconcile_session_restarts(self, mids: dict[str, float]) -> int:
         """Heal session_restart closes that were saved with $0 PnL (missing exit)."""
         from app.models.domain import TradeStatus
@@ -307,6 +338,7 @@ class PaperAccountRegistry:
                         "created_at": acc.created_at.isoformat(),
                         "deposit": snap.deposit,
                         "balance": snap.balance,
+                        "password_hash": acc.password_hash,
                         "trades": [
                             t.model_dump(mode="json")
                             for t in acc.journal.list(500, include_rejected=True)
@@ -399,6 +431,7 @@ class PaperAccountRegistry:
                     risk=risk,
                     follow_auto=bool(row.get("follow_auto", True)),
                     is_desk=False,
+                    password_hash=row.get("password_hash"),
                     created_at=created_at,
                 )
                 self._accounts[acc.id] = acc

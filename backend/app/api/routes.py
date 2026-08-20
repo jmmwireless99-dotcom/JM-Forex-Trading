@@ -27,6 +27,11 @@ class CreateAccountBody(BaseModel):
     follow_auto: bool = True
 
 
+class AccountLoginBody(BaseModel):
+    code: str = Field(..., min_length=4, max_length=16)
+    password: str = Field(..., min_length=6, max_length=128)
+
+
 class StartRequest(BaseModel):
     strategy: str | None = None
 
@@ -360,6 +365,23 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
         deposit=body.deposit,
         follow_auto=body.follow_auto,
     )
+
+
+@router.post("/accounts/login")
+async def login_account(body: AccountLoginBody) -> dict:
+    """Sign in to an existing paper desk account with code + password."""
+    engine = get_engine()
+    acc = engine.accounts.authenticate_by_code(body.code, body.password)
+    if acc is None:
+        raise HTTPException(status_code=401, detail="Invalid account code or password")
+    return {
+        "ok": True,
+        "account_id": acc.id,
+        "token": acc.token,
+        "account_code": acc.code,
+        "account_label": acc.label,
+        "account": engine.account_payload(acc),
+    }
 
 
 @router.get("/accounts/me")

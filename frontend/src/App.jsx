@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, connectFeed, ensureAccountSession } from './api'
+import { api, connectFeed, ensureAccountSession, saveAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -109,6 +109,9 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const [loginCode, setLoginCode] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [showAccountLogin, setShowAccountLogin] = useState(false)
   const accountIdRef = useRef(null)
 
   useEffect(() => {
@@ -367,6 +370,26 @@ export default function App() {
 
   async function applyStrategy() {
     await run(async () => api.setStrategy(strategy))
+  }
+
+  async function signInPaperAccount(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.loginAccount(loginCode.trim(), loginPassword)
+      saveAccountSession({
+        id: res.account_id,
+        token: res.token,
+        code: res.account_code,
+        label: res.account_label,
+      })
+      window.location.reload()
+    } catch (err) {
+      setError(err.message || 'Invalid account code or password')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function autoTransferBySession() {
@@ -708,6 +731,41 @@ export default function App() {
               cannot see your capital, open trades, or history. Trade log is kept when you
               change deposit; open positions close into the log.
             </p>
+            <p className="meta">
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => setShowAccountLogin((v) => !v)}
+              >
+                {showAccountLogin ? 'Hide sign-in' : 'Sign in to existing account (code + password)'}
+              </button>
+            </p>
+            {showAccountLogin ? (
+              <form className="account-login-form" onSubmit={signInPaperAccount}>
+                <label>
+                  Account code
+                  <input
+                    value={loginCode}
+                    onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                    placeholder="3295D7"
+                    autoComplete="username"
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="demo12345"
+                    autoComplete="current-password"
+                  />
+                </label>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  Sign in
+                </button>
+              </form>
+            ) : null}
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
             {mode === 'paper' ? 'PAPER DEMO' : 'LIVE MT'}
