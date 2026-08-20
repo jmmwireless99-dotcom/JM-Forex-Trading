@@ -270,8 +270,9 @@ def _cross_candles(base: str, quote: str, interval: str, limit: int) -> list[dic
 
     if limit > 0:
         merged = merged[-limit:]
-    if len(merged) < 20:
-        raise RuntimeError(f"cross {base}/{quote} too few bars ({len(merged)})")
+    min_need = min(20, max(limit, 5))
+    if len(merged) < min_need:
+        raise RuntimeError(f"cross {base}/{quote} too few bars ({len(merged)}, need {min_need})")
     return merged
 
 
@@ -437,7 +438,10 @@ def fetch_candles(symbol: str, interval: str = "5m", limit: int = 120) -> dict[s
             errors.append(str(e))
             log.warning("cross candles %s: %s", sym, e)
 
-    if not candles and sym in BINANCE:
+    if not candles and sym in CROSS_PAIRS:
+        # Skip direct Yahoo for cross pairs — always rate limited; use stale if any
+        pass
+    elif not candles and sym in BINANCE:
         try:
             candles = _binance_klines(sym, y_int, limit)
             source = "binance"
@@ -453,7 +457,7 @@ def fetch_candles(symbol: str, interval: str = "5m", limit: int = 120) -> dict[s
             errors.append(str(e))
             log.warning("kraken candles %s %s: %s", sym, y_int, e)
 
-    if not candles:
+    if not candles and sym not in CROSS_PAIRS:
         try:
             payload = _yahoo_chart(sym, y_int, _yahoo_range(y_int))
             candles = _parse_yahoo_candles(payload, limit)
