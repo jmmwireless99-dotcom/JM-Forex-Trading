@@ -49,7 +49,7 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "AI_ML",
             "name": "AI & Machine Learning",
-            "sessions": ["Asia", "London/NY overlap", "New York"],
+            "sessions": ["Asia (PH 8AM–8:30PM)", "London/NY overlap", "New York"],
             "session_slots": ["asia", "london_ny_overlap", "new_york"],
             "timeframe": "M5",
             "signal_tf": "M5",
@@ -59,7 +59,7 @@ def strategy_catalog() -> list[dict]:
                 "win-probability filter (scikit-learn)."
             ),
             "entry_rules": [
-                "Asia → EMA_RSI_Scalp child · London 07–11 stand aside · Overlap → SMC · NY → VWAP.",
+                "Asia → EMA_RSI until 8:30 PM Manila · 8:31 PM → SMC overlap · NY → VWAP.",
                 "Child must print a valid setup on M5 close.",
                 "ML scores TAKE / CAUTION / SKIP from labeled trade history.",
                 "SKIP is blocked inside AI_ML (no order sent).",
@@ -81,8 +81,8 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
-            "sessions": ["Asia", "New York"],
-            "session_slots": ["asia", "new_york"],
+            "sessions": ["Asia (PH 8AM–8:30PM)"],
+            "session_slots": ["asia"],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -187,9 +187,8 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "AI_ML — session child (EMA_RSI/SMC/VWAP) + AI & Machine Learning filter",
-        "London 07–11 UTC — stand aside (Judas removed)",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
+        "EMA_RSI_Scalp — PH 8AM–8:30PM · EMA200 + RSI · 1:2 Asia scalp",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
-        "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
+        "Liquidity_Sweep_SMC — PH 8:31PM–2AM overlap · sweep + FVG/OB",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

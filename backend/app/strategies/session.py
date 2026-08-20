@@ -19,9 +19,17 @@ class SessionWindow:
     reason: str
 
 
-# Asia M3/M5 scalp desk — Philippines local hours
-ASIA_PH_START = 7
-ASIA_PH_END = 17  # exclusive → until 5:00PM
+# Philippines desk — EMA_RSI runs through 8:30 PM Manila (UTC+8)
+ASIA_PH_START_HOUR = 7
+ASIA_PH_START_MINUTE = 0
+ASIA_PH_END_HOUR = 20
+ASIA_PH_END_MINUTE = 30  # inclusive → until 8:30 PM Manila
+
+# UTC mirrors (Manila = UTC+8): 00:00 UTC = 8:00 AM PH … 12:30 UTC = 8:30 PM PH
+EMA_RSI_UTC_END_HOUR = 12
+EMA_RSI_UTC_END_MINUTE = 30
+OVERLAP_UTC_END_HOUR = 18  # exclusive — 8:31 PM PH through 1:59 AM PH
+NY_UTC_END_HOUR = 20  # exclusive — 2:00 AM through 3:59 AM PH
 
 
 def ph_hour(utc: datetime) -> int:
@@ -29,87 +37,97 @@ def ph_hour(utc: datetime) -> int:
     return (utc.hour + 8) % 24
 
 
+def ph_clock(utc: datetime) -> tuple[int, int]:
+    """Return (hour, minute) in Manila time."""
+    ph = utc.astimezone(timezone.utc) + timedelta(hours=8)
+    return ph.hour, ph.minute
+
+
+def _minutes(hour: int, minute: int = 0) -> int:
+    return hour * 60 + minute
+
+
+def utc_clock_minutes(ts: datetime) -> int:
+    utc = ts.astimezone(timezone.utc)
+    return _minutes(utc.hour, utc.minute)
+
+
+def ph_clock_minutes(ts: datetime) -> int:
+    h, m = ph_clock(ts)
+    return _minutes(h, m)
+
+
+def in_ema_rsi_ph_window(ts: datetime) -> bool:
+    """EMA_RSI desk: Manila 7:00 AM – 8:30 PM inclusive."""
+    start = _minutes(ASIA_PH_START_HOUR, ASIA_PH_START_MINUTE)
+    end = _minutes(ASIA_PH_END_HOUR, ASIA_PH_END_MINUTE)
+    return start <= ph_clock_minutes(ts) <= end
+
+
+def in_ema_rsi_utc_window(ts: datetime) -> bool:
+    """Full desk map: UTC 00:00 – 12:30 (= 8:00 AM – 8:30 PM Manila)."""
+    return utc_clock_minutes(ts) <= _minutes(EMA_RSI_UTC_END_HOUR, EMA_RSI_UTC_END_MINUTE)
+
+
 # Back-compat alias used by older imports
 _ph_hour = ph_hour
 
 
 def classify_asia_desk(ts: datetime) -> SessionWindow:
-    """Asia-only desk: scalp PH 07:00–17:00; flat outside (JM_ASIA_DESK_ONLY)."""
+    """Asia-only desk: EMA_RSI PH 07:00–20:30; flat outside (JM_ASIA_DESK_ONLY)."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
-    ph = ph_hour(utc)
-    if ASIA_PH_START <= ph < ASIA_PH_END:
+    if in_ema_rsi_ph_window(ts):
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–5:00PM) — M5 Support/Resistance",
+            "EMA_RSI desk (PH 7:00AM–8:30PM) — M5 EMA + RSI scalp",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "outside_asia_desk",
-        "Outside Asia desk hours — next window PH 7:00AM–5:00PM",
+        "Outside EMA_RSI desk — next window PH 7:00AM–8:30PM",
     )
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia 00:00–06:59 — EMA_RSI
-    London 07:00–10:59 — stand aside (Judas removed)
-    London wind-down 11:00–11:59 — no new entries
-    London close 12:00–12:59 — kill pending limits
-    Overlap 13:00–17:59 — SMC
-    New York 18:00–19:59 — EMA_VWAP
-    Off-hours / weekend — stand aside
+    Asia / EMA_RSI  00:00–12:30 UTC  (PH 8:00 AM – 8:30 PM)
+    Overlap / SMC   12:31–17:59 UTC  (PH 8:31 PM – 1:59 AM)
+    New York / VWAP 18:00–19:59 UTC  (PH 2:00 AM – 3:59 AM)
+    Off-hours       20:00–23:59 UTC  (PH 4:00 AM – 7:59 AM)
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
-    hour = utc.hour
+    mins = utc_clock_minutes(ts)
 
-    if 0 <= hour < 7:
+    if mins <= _minutes(EMA_RSI_UTC_END_HOUR, EMA_RSI_UTC_END_MINUTE):
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
+            "EMA_RSI session (PH 8:00AM–8:30PM) — M5 EMA + RSI scalp",
         )
-    if 7 <= hour < 11:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london",
-            "London session (UTC 07:00–10:59) — stand aside",
-        )
-    if 11 <= hour < 12:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_wind_down",
-            "London wind-down (UTC 11:00–11:59) — no new entries before kill",
-        )
-    if 12 <= hour < 13:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_close",
-            "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
-        )
-    if 13 <= hour < 18:
+    if mins < _minutes(OVERLAP_UTC_END_HOUR, 0):
         return SessionWindow(
             SessionTier.PRIME,
             "london_ny_overlap",
-            "London/NY overlap — best XAUUSD liquidity (SMC window)",
+            "London/NY overlap (PH 8:31PM–2:00AM) — SMC liquidity window",
         )
-    if 18 <= hour < 20:
+    if mins < _minutes(NY_UTC_END_HOUR, 0):
         return SessionWindow(
             SessionTier.ALLOWED,
             "new_york",
-            "New York session — USD-driven gold continuation",
+            "New York session (PH 2:00AM–4:00AM) — EMA_VWAP continuation",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "off_hours",
-        "Off-hours — spreads widen, skip new entries",
+        "Off-hours (PH 4:00AM–8:00AM) — spreads widen, skip new entries",
     )
 
 
@@ -140,16 +158,18 @@ def next_session_hint(ts: datetime) -> dict:
     """
     utc = ts.astimezone(timezone.utc)
     current = classify_session(utc)
-    for add in range(1, 73):
-        probe = utc + timedelta(hours=add)
+    for add in range(1, 72 * 60 + 1):
+        probe = utc + timedelta(minutes=add)
         nxt = classify_session(probe)
         if nxt.label != current.label and nxt.tier != SessionTier.AVOID:
+            probe_utc = probe.astimezone(timezone.utc)
             return {
                 "from_session": current.label,
                 "session": nxt.label,
                 "tier": nxt.tier.value,
-                "hour_utc": probe.hour,
-                "strategy": _recommended_for_label(nxt.label, probe.hour),
+                "hour_utc": probe_utc.hour,
+                "minute_utc": probe_utc.minute,
+                "strategy": _recommended_for_label(nxt.label, probe_utc.hour),
                 "reason": _recommend_reason(nxt.label),
             }
     return {
