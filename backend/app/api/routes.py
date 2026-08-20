@@ -94,7 +94,7 @@ async def db_strategies(active_only: bool = False) -> dict:
 
 @router.get("/london")
 async def london_desk() -> dict:
-    """London Judas session board: Asian range + window + pending kill."""
+    """London session board: Asian range + window (Judas removed — stand aside)."""
     from app.engine.london_engine import LondonEngine
     from app.strategies.london_session import (
         LONDON_ENTRY_END_UTC,
@@ -111,12 +111,13 @@ async def london_desk() -> dict:
         pending = [o.model_dump(mode="json") for o in engine.paper.pending_orders()]
     return {
         "ok": True,
-        "strategy": "London_Judas_Sweep",
+        "strategy": None,
+        "stand_aside": True,
         "windows": {
             "asia_utc": "00:00–06:00",
             "london_entry_utc": f"{LONDON_OPEN_UTC.strftime('%H:%M')}–{LONDON_ENTRY_END_UTC.strftime('%H:%M')}",
             "kill_pending_utc": PENDING_KILL_UTC.strftime("%H:%M"),
-            "ph_note": "London 07–16 UTC ≈ 15:00–00:00 PH",
+            "ph_note": "London 07–11 UTC ≈ 15:00–19:00 PH — stand aside",
         },
         "in_entry_window": snap.in_entry_window,
         "past_kill": snap.past_kill,
@@ -124,8 +125,8 @@ async def london_desk() -> dict:
         "pending_note": snap.pending_note,
         "pending_orders": pending,
         "active_strategy": engine.status().active_strategy,
-        "checklist": getattr(engine.strategy, "last_checklist", []),
-        "last_block_reason": getattr(engine.strategy, "last_block_reason", None),
+        "checklist": snap.checklist,
+        "last_block_reason": snap.last_block,
     }
 
 
@@ -260,7 +261,7 @@ async def desk() -> dict:
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
         "recommended_asia": "AI_ML → EMA_RSI_Scalp",
-        "recommended_london": "AI_ML → London_Judas_Sweep",
+        "recommended_london": "Stand aside",
         "recommended_overlap": "AI_ML → Liquidity_Sweep_SMC",
         "recommended_ny": "AI_ML → EMA_VWAP_Scalp",
         "recommended_sr_scalp": "AI_ML → Liquidity_Sweep_SMC",
@@ -268,7 +269,7 @@ async def desk() -> dict:
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
             "AI & Machine Learning filter on every auto entry",
-            "London Judas: Asian High/Low + ChoCH + FVG 50% limit",
+            "London 07–11 UTC — stand aside (Judas removed)",
             "EMA 200 / 20 / 50 + RSI 14",
             "Engulfing + pin bar confirmation",
             "Spread > 30 pips ($0.30) blocked · UK/EUR news −15m",

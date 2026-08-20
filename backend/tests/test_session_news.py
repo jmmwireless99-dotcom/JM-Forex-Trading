@@ -21,13 +21,13 @@ def test_asia_ph_daytime():
     assert session_allows_entry(ts) is False
 
 
-def test_london_judas_window():
-    # 08:00 UTC — primary Judas sweep/entry (must NOT be Asia)
+def test_london_stand_aside_window():
+    # 08:00 UTC — London hours, no strategy (Judas removed)
     ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
+    assert window.tier == SessionTier.AVOID
     assert window.label == "london"
-    assert session_allows_entry(ts) is True
+    assert session_allows_entry(ts) is False
 
 
 def test_london_wind_down_before_kill():
@@ -60,10 +60,10 @@ def test_asia_desk_only_blocks_after_5pm():
     assert classify_full_sessions(ts).label == "london_close"
 
 
-def test_next_session_after_asia_is_london():
+def test_next_session_after_asia_is_overlap():
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
     nxt = next_session_hint(ts)
-    assert nxt["session"] == "london"
+    assert nxt["session"] == "london_ny_overlap"
     assert nxt["strategy"] == "AI_ML"
 
 
