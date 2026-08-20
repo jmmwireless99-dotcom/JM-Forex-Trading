@@ -6,20 +6,36 @@ const JM_FX_API = (import.meta.env.VITE_JM_API || '/fx/api').replace(/\/$/, '')
 const SESSION_KEY = 'jm_lab_trade_session'
 const SUITE_KEY = 'jm_lab_pair_suite'
 
-export function loadLabSession() {
+let _activePair = null
+
+export function setLabSessionPair(pair) {
+  _activePair = pair ? String(pair).toUpperCase() : null
+}
+
+export function getLabSessionPair() {
+  return _activePair
+}
+
+function sessionStorageKey(pair) {
+  const sym = pair ?? _activePair
+  return sym ? `${SESSION_KEY}_${sym}` : SESSION_KEY
+}
+
+export function loadLabSession(pair) {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    return JSON.parse(localStorage.getItem(sessionStorageKey(pair)) || 'null')
   } catch {
     return null
   }
 }
 
-export function saveLabSession(session) {
+export function saveLabSession(session, pair) {
+  const key = sessionStorageKey(pair)
   if (!session) {
-    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(key)
     return
   }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  localStorage.setItem(key, JSON.stringify(session))
 }
 
 export function loadPairSuite() {
@@ -70,6 +86,19 @@ async function fxRequest(path) {
   const res = await fetch(`${JM_FX_API}${path}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
+}
+
+export async function ensurePairAccount(symbol) {
+  const sym = String(symbol).toUpperCase()
+  const res = await labTradeApi.createPairSuite(10000, true)
+  const row = (res.accounts || []).find((a) => a.symbol === sym)
+  if (!row) throw new Error(`No demo account for ${sym}`)
+  return {
+    account_id: row.account_id,
+    token: row.token,
+    code: row.code,
+    symbol: sym,
+  }
 }
 
 export const labTradeApi = {

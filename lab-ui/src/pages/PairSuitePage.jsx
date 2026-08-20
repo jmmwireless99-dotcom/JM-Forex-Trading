@@ -131,17 +131,7 @@ export default function PairSuitePage() {
   }
 
   function openInTrade(acc) {
-    saveLabSession({
-      account_id: acc.account_id,
-      token: acc.token,
-      code: acc.code,
-    })
-    try {
-      sessionStorage.setItem('jm_lab_trade_symbol', acc.symbol)
-    } catch {
-      /* ignore */
-    }
-    window.location.hash = 'trade'
+    window.open(`/lab/${acc.symbol}`, '_blank', 'noopener,noreferrer')
   }
 
   function resetSuite() {

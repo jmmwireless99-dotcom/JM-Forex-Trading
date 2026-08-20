@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import LabCandleChart from '../LabCandleChart.jsx'
 import { PAIR_GUIDE, PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
-import { labTradeApi, loadLabSession, saveLabSession } from '../api.js'
+import { labTradeApi, loadLabSession, saveLabSession, ensurePairAccount, setLabSessionPair } from '../api.js'
+import { PAIR_URL_SYMBOLS, pairTradePath } from '../routing.js'
 
 const PAIRS = PAIR_GUIDE.filter((p) => p.status === 'live' || p.status === 'live-ref').map((p) => p.id)
 
@@ -17,9 +18,12 @@ function fmtPrice(symbol, n) {
   return Number(n || 0).toFixed(d)
 }
 
-export default function TradePage() {
-  const [session, setSession] = useState(() => loadLabSession())
+export default function TradePage({ fixedPair = null }) {
+  const lockedPair = fixedPair ? String(fixedPair).toUpperCase() : null
+
+  const [session, setSession] = useState(() => loadLabSession(lockedPair))
   const [symbol, setSymbol] = useState(() => {
+    if (lockedPair) return lockedPair
     try {
       const saved = sessionStorage.getItem('jm_lab_trade_symbol')
       if (saved && PAIRS.includes(saved)) return saved
@@ -28,6 +32,7 @@ export default function TradePage() {
     }
     return 'EURUSD'
   })
+  const [booting, setBooting] = useState(false)
   const [account, setAccount] = useState(null)
   const [auto, setAuto] = useState(null)
   const [ticks, setTicks] = useState({})
@@ -40,14 +45,41 @@ export default function TradePage() {
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
 
+  useEffect(() => {
+    if (lockedPair) setLabSessionPair(lockedPair)
+  }, [lockedPair])
+
+  useEffect(() => {
+    if (!lockedPair || session || booting) return undefined
+    let alive = true
+    ;(async () => {
+      setBooting(true)
+      setError('')
+      try {
+        const s = await ensurePairAccount(lockedPair)
+        if (!alive) return
+        saveLabSession(s, lockedPair)
+        setSession(s)
+        setNote(`${lockedPair} demo ready · auto ON · account ${s.code}`)
+      } catch (e) {
+        if (alive) setError(e.message || String(e))
+      } finally {
+        if (alive) setBooting(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [lockedPair, session, booting])
+
   const refresh = useCallback(async () => {
     if (!session) return
     const [acc, pos, tr, tk, au] = await Promise.all([
-      labTradeApi.account(),
-      labTradeApi.positions(),
-      labTradeApi.trades(),
+      labTradeApi.account(session),
+      labTradeApi.positions(session),
+      labTradeApi.trades(session),
       labTradeApi.ticks(),
-      labTradeApi.auto(),
+      labTradeApi.auto(session),
     ])
     setAccount(acc)
     setAuto(au)
@@ -80,16 +112,22 @@ export default function TradePage() {
     setBusy(true)
     setError('')
     try {
-      const res = await labTradeApi.createAccount(10000, 'Lab live demo')
-      const s = {
-        account_id: res.account.account_id,
-        token: res.token,
-        code: res.account.code,
+      let s
+      if (lockedPair) {
+        s = await ensurePairAccount(lockedPair)
+      } else {
+        const res = await labTradeApi.createAccount(10000, 'Lab live demo')
+        s = {
+          account_id: res.account.account_id,
+          token: res.token,
+          code: res.account.code,
+        }
+        setAccount(res.account)
+        setNote(res.message || 'Demo account ready')
       }
-      saveLabSession(s)
+      saveLabSession(s, lockedPair)
       setSession(s)
-      setAccount(res.account)
-      setNote(res.message || 'Demo account ready')
+      if (lockedPair) setNote(`${lockedPair} demo account ${s.code} ready`)
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -98,7 +136,7 @@ export default function TradePage() {
   }
 
   function logout() {
-    saveLabSession(null)
+    saveLabSession(null, lockedPair)
     setSession(null)
     setAccount(null)
     setAuto(null)
@@ -163,14 +201,17 @@ export default function TradePage() {
     setError('')
     try {
       const p = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
-      const res = await labTradeApi.setAuto({
-        enabled: on,
-        symbol,
-        strategy: p.strategy,
-        lots: Number(lots),
-        sl_pips: Number(slPips),
-        tp_pips: Number(tpPips),
-      })
+      const res = await labTradeApi.setAuto(
+        {
+          enabled: on,
+          symbol,
+          strategy: p.strategy,
+          lots: Number(lots),
+          sl_pips: Number(slPips),
+          tp_pips: Number(tpPips),
+        },
+        session,
+      )
       setAuto(res.auto)
       const name = res.strategy_info?.name || STRATEGY_INFO[p.strategy]?.name || p.strategy
       setNote(on ? `Auto ON · ${symbol} · ${name}` : 'Auto trading OFF')
@@ -203,17 +244,29 @@ export default function TradePage() {
     return (
       <div className="lab-page">
         <header className="lab-page-head">
-          <h1>Live demo trading</h1>
+          <h1>{lockedPair ? `${lockedPair} live demo` : 'Live demo trading'}</h1>
           <p className="lab-muted">
             Paper money · live market prices · separate from JM FX gold desk.
           </p>
         </header>
         <section className="lab-panel lab-trade-start">
-          <h2>Start lab demo account</h2>
-          <p>$10,000 virtual balance · majors + crosses · chart + auto EMA+RSI</p>
-          <button type="button" className="lab-btn" disabled={busy} onClick={createDemo}>
-            Create demo account
-          </button>
+          {booting ? (
+            <>
+              <h2>Setting up {lockedPair}…</h2>
+              <p className="lab-muted">Creating demo account and starting auto-trader…</p>
+            </>
+          ) : (
+            <>
+              <h2>{lockedPair ? `Start ${lockedPair} demo` : 'Start lab demo account'}</h2>
+              <p>
+                $10,000 virtual balance · chart + auto strategy
+                {lockedPair ? ` · dedicated ${lockedPair} account` : ''}
+              </p>
+              <button type="button" className="lab-btn" disabled={busy} onClick={createDemo}>
+                {lockedPair ? `Connect ${lockedPair} account` : 'Create demo account'}
+              </button>
+            </>
+          )}
           {error ? <p className="lab-error-inline">{error}</p> : null}
         </section>
       </div>
@@ -224,14 +277,21 @@ export default function TradePage() {
     <div className="lab-page">
       <header className="lab-page-head lab-trade-head">
         <div>
-          <h1>Live demo trading</h1>
+          <h1>{lockedPair ? `${lockedPair} live demo` : 'Live demo trading'}</h1>
           <p className="lab-muted">
             Account <strong>{session.code}</strong> · paper only · max 1 open position
+            {lockedPair ? ` · ${lockedPair} only` : ''}
           </p>
         </div>
-        <button type="button" className="lab-btn lab-btn-ghost" onClick={logout}>
-          New account
-        </button>
+        {!lockedPair ? (
+          <button type="button" className="lab-btn lab-btn-ghost" onClick={logout}>
+            New account
+          </button>
+        ) : (
+          <button type="button" className="lab-btn lab-btn-ghost" onClick={logout}>
+            Reset session
+          </button>
+        )}
       </header>
 
       {error ? <div className="lab-error-box">{error}</div> : null}
@@ -259,26 +319,37 @@ export default function TradePage() {
       </div>
 
       <section className="lab-panel lab-chart-panel">
-        <div className="lab-pair-bar">
-          {PAIRS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              className={symbol === id ? 'on' : ''}
-              onClick={() => {
-                setSymbol(id)
-                applyPairPreset(id)
-                try {
-                  sessionStorage.setItem('jm_lab_trade_symbol', id)
-                } catch {
-                  /* ignore */
-                }
-              }}
-            >
-              {id}
-            </button>
-          ))}
-        </div>
+        {lockedPair ? (
+          <div className="lab-pair-bar lab-pair-bar-links">
+            <span className="lab-muted">Open other pairs in new tab:</span>
+            {PAIR_URL_SYMBOLS.filter((id) => id !== lockedPair).map((id) => (
+              <a key={id} href={pairTradePath(id)} target="_blank" rel="noopener noreferrer">
+                {id}
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div className="lab-pair-bar">
+            {PAIRS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={symbol === id ? 'on' : ''}
+                onClick={() => {
+                  setSymbol(id)
+                  applyPairPreset(id)
+                  try {
+                    sessionStorage.setItem('jm_lab_trade_symbol', id)
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+        )}
         <LabCandleChart symbol={symbol} livePrice={tick?.mid} positions={open} />
         {pairGuide ? (
           <p className="lab-muted lab-pair-hint">

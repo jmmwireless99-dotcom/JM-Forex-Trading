@@ -616,6 +616,76 @@ a {
   font-size: 0.95rem;
 }
 
+.lab-pair-nav-title {
+  font-weight: 600;
+  color: var(--lab-accent);
+  font-size: 0.95rem;
+}
+
+.lab-pair-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.lab-pair-nav-links a {
+  border: 1px solid var(--lab-line);
+  background: transparent;
+  color: var(--lab-muted);
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.lab-pair-nav-links a.on {
+  border-color: var(--lab-accent);
+  color: var(--lab-text);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.lab-pair-nav-links a:hover {
+  color: var(--lab-text);
+  border-color: var(--lab-accent-dim);
+}
+
+.lab-pair-bar-links {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lab-pair-bar-links a {
+  border: 1px solid var(--lab-line);
+  color: var(--lab-accent);
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.lab-pair-bar-links a:hover {
+  border-color: var(--lab-accent);
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.lab-pair-url-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.lab-card-wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 720px) {
+  .lab-pair-url-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .lab-suite-list {
   margin: 0.75rem 0 1rem;
   padding-left: 1.2rem;
