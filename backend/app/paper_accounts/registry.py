@@ -107,6 +107,21 @@ class PaperAccount:
     password_hash: str | None = None
     created_at: datetime = field(default_factory=utcnow)
 
+    def _effective_daily_pnl(self) -> float:
+        """Journal-backed PnL when broker positions were not restored from disk."""
+        snap = self.broker.snapshot()
+        if abs(snap.daily_pnl) >= 0.01:
+            return snap.daily_pnl
+        from app.models.domain import TradeStatus
+
+        closed = [t for t in self.journal.list(500) if t.status == TradeStatus.CLOSED]
+        journal_net = sum(float(t.realized_pnl or 0) for t in closed)
+        unrealized = sum(p.unrealized_pnl for p in self.broker.open_positions())
+        derived = round(journal_net + unrealized, 2)
+        if derived != 0:
+            return derived
+        return round(snap.equity - snap.deposit, 2)
+
     def public_info(self) -> dict:
         snap = self.broker.snapshot()
         return {
@@ -119,12 +134,14 @@ class PaperAccount:
             "balance": snap.balance,
             "equity": snap.equity,
             "open_positions": snap.open_positions,
+            "daily_pnl": self._effective_daily_pnl(),
             "trades_logged": self.journal.summary().get("total", 0),
         }
 
     def snapshot_payload(self) -> dict:
         """Account snapshot dict tagged with identity for API / WS clients."""
         snap = self.broker.snapshot().model_dump(mode="json")
+        snap["daily_pnl"] = self._effective_daily_pnl()
         return {
             **snap,
             "account_id": self.id,
