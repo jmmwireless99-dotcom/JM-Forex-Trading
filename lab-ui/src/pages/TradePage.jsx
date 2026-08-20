@@ -50,27 +50,28 @@ export default function TradePage({ fixedPair = null }) {
   }, [lockedPair])
 
   useEffect(() => {
-    if (!lockedPair || session || booting) return undefined
-    let alive = true
+    if (!lockedPair || session) return undefined
+
+    let cancelled = false
+    setBooting(true)
+    setError('')
     ;(async () => {
-      setBooting(true)
-      setError('')
       try {
         const s = await ensurePairAccount(lockedPair)
-        if (!alive) return
+        if (cancelled) return
         saveLabSession(s, lockedPair)
         setSession(s)
         setNote(`${lockedPair} demo ready · auto ON · account ${s.code}`)
       } catch (e) {
-        if (alive) setError(e.message || String(e))
+        if (!cancelled) setError(e.message || String(e))
       } finally {
-        if (alive) setBooting(false)
+        if (!cancelled) setBooting(false)
       }
     })()
     return () => {
-      alive = false
+      cancelled = true
     }
-  }, [lockedPair, session, booting])
+  }, [lockedPair, session])
 
   const refresh = useCallback(async () => {
     if (!session) return

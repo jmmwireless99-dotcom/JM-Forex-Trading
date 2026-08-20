@@ -90,8 +90,29 @@ async function fxRequest(path) {
 
 export async function ensurePairAccount(symbol) {
   const sym = String(symbol).toUpperCase()
+  const suite = loadPairSuite()
+  const cached = suite?.accounts?.find((a) => a.symbol === sym)
+  if (cached?.account_id && cached?.token) {
+    return {
+      account_id: cached.account_id,
+      token: cached.token,
+      code: cached.code,
+      symbol: sym,
+    }
+  }
   const res = await labTradeApi.createPairSuite(10000, true)
-  const row = (res.accounts || []).find((a) => a.symbol === sym)
+  const accounts = (res.accounts || []).map((a) => ({
+    symbol: a.symbol,
+    account_id: a.account_id,
+    code: a.code,
+    token: a.token,
+    label: a.label,
+    strategy: a.strategy,
+  }))
+  if (accounts.length) {
+    savePairSuite({ accounts, created_at: new Date().toISOString() })
+  }
+  const row = accounts.find((a) => a.symbol === sym)
   if (!row) throw new Error(`No demo account for ${sym}`)
   return {
     account_id: row.account_id,
