@@ -8,6 +8,7 @@ import logging
 
 from app.engine import get_ticks, store
 from app.feed import SUPPORTED, fetch_candles, fetch_quote
+from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_info
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +69,12 @@ async def ticks() -> dict:
                 pass
         return {"ticks": out}
     return {"ticks": live}
+
+
+@router.get("/strategies")
+async def list_strategies() -> dict:
+    pairs = {sym: preset_for(sym) for sym in SUPPORTED}
+    return {"strategies": STRATEGIES, "pair_presets": pairs}
 
 
 @router.get("/candles")
@@ -183,6 +190,7 @@ async def get_auto(
 ) -> dict:
     acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
     a = acc.auto
+    info = strategy_info(a.strategy)
     return {
         "enabled": a.enabled,
         "symbol": a.symbol,
@@ -190,6 +198,9 @@ async def get_auto(
         "sl_pips": a.sl_pips,
         "tp_pips": a.tp_pips,
         "strategy": a.strategy,
+        "strategy_name": info.get("name"),
+        "strategy_description": info.get("description"),
+        "pair_preset": preset_for(a.symbol),
         "last_signal_at": a.last_signal_at,
         "last_block_reason": a.last_block_reason,
         "recent_signals": list(a.signals),
@@ -211,6 +222,16 @@ async def set_auto(
         if sym not in SUPPORTED:
             raise HTTPException(400, f"Unsupported symbol: {sym}")
         a.symbol = sym
+        # Apply pair-specific strategy preset when symbol changes
+        p = preset_for(sym)
+        a.strategy = p["strategy"]
+        if body.lots is None:
+            a.lots = p["lots"]
+        if body.sl_pips is None:
+            a.sl_pips = p["sl_pips"]
+        if body.tp_pips is None:
+            a.tp_pips = p["tp_pips"]
+        a.last_bar_time = 0
     if body.lots is not None:
         a.lots = body.lots
     if body.sl_pips is not None:
@@ -218,6 +239,13 @@ async def set_auto(
     if body.tp_pips is not None:
         a.tp_pips = body.tp_pips
     if body.strategy:
-        a.strategy = body.strategy
+        a.strategy = body.strategy.upper()
+    info = strategy_info(a.strategy)
     store.persist()
-    return {"ok": True, "auto": acc.auto.to_dict(), "account": acc.snapshot()}
+    return {
+        "ok": True,
+        "auto": acc.auto.to_dict(),
+        "strategy_info": info,
+        "pair_preset": preset_for(a.symbol),
+        "account": acc.snapshot(),
+    }

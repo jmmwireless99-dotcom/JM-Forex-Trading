@@ -75,6 +75,7 @@ export const labTradeApi = {
   closePosition: (id) =>
     labRequest(`/positions/${encodeURIComponent(id)}/close`, { method: 'POST' }),
   auto: () => labRequest('/auto'),
+  strategies: () => labRequest('/strategies'),
   setAuto: (body) =>
     labRequest('/auto', {
       method: 'POST',

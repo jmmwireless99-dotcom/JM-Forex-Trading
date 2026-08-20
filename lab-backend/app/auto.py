@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
-from app.strategy import LabSignal, evaluate_ema_rsi
+from app.strategy import evaluate_strategy
 
 if TYPE_CHECKING:
     from app.accounts import LabAccount
@@ -50,7 +50,7 @@ def try_auto_fill(
         return None
     auto.last_bar_time = bar_time
 
-    signal, block = evaluate_ema_rsi(closed, symbol=sym)
+    signal, block = evaluate_strategy(auto.strategy, closed, symbol=sym)
     if signal is None:
         auto.last_block_reason = block
         return None

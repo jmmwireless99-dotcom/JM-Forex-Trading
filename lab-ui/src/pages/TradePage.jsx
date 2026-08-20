@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import LabCandleChart from '../LabCandleChart.jsx'
-import { PAIR_GUIDE } from '../content/compare.js'
+import { PAIR_GUIDE, PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
 import { labTradeApi, loadLabSession, saveLabSession } from '../api.js'
 
 const PAIRS = PAIR_GUIDE.filter((p) => p.status === 'live' || p.status === 'live-ref').map((p) => p.id)
@@ -162,15 +162,18 @@ export default function TradePage() {
     setBusy(true)
     setError('')
     try {
+      const p = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
       const res = await labTradeApi.setAuto({
         enabled: on,
         symbol,
+        strategy: p.strategy,
         lots: Number(lots),
         sl_pips: Number(slPips),
         tp_pips: Number(tpPips),
       })
       setAuto(res.auto)
-      setNote(on ? `Auto EMA+RSI ON · ${symbol}` : 'Auto trading OFF')
+      const name = res.strategy_info?.name || STRATEGY_INFO[p.strategy]?.name || p.strategy
+      setNote(on ? `Auto ON · ${symbol} · ${name}` : 'Auto trading OFF')
       await refresh()
     } catch (e) {
       setError(e.message || String(e))
@@ -182,6 +185,19 @@ export default function TradePage() {
   const tick = ticks[symbol]
   const open = positions.filter((p) => p.status === 'OPEN')
   const pairGuide = useMemo(() => PAIR_GUIDE.find((p) => p.id === symbol), [symbol])
+  const pairPreset = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
+  const stratInfo = STRATEGY_INFO[auto?.strategy || pairPreset.strategy] || {}
+
+  function applyPairPreset(id) {
+    const p = PAIR_PRESETS[id] || PAIR_PRESETS.EURUSD
+    setLots(String(p.lots))
+    setSlPips(String(p.sl_pips))
+    setTpPips(String(p.tp_pips))
+  }
+
+  useEffect(() => {
+    applyPairPreset(symbol)
+  }, [symbol])
 
   if (!session) {
     return (
@@ -251,6 +267,7 @@ export default function TradePage() {
               className={symbol === id ? 'on' : ''}
               onClick={() => {
                 setSymbol(id)
+                applyPairPreset(id)
                 try {
                   sessionStorage.setItem('jm_lab_trade_symbol', id)
                 } catch {
@@ -272,13 +289,18 @@ export default function TradePage() {
 
       <section className="lab-panel">
         <div className="lab-auto-head">
-          <h2>Auto EMA+RSI</h2>
+          <h2>Auto · {auto?.strategy_name || stratInfo.name || pairPreset.label}</h2>
           <span className={`lab-auto-pill ${auto?.enabled ? 'on' : ''}`}>
             {auto?.enabled ? 'Running' : 'Off'}
           </span>
         </div>
         <p className="lab-muted lab-auto-desc">
-          M5 EMA 20/50 + RSI 14 (JM FX style). Auto-fills on new bar when flat.
+          {auto?.strategy_description || stratInfo.description || pairPreset.label}
+          {' · '}
+          Auto-fills on new M5 bar when flat · max 1 position.
+        </p>
+        <p className="lab-muted lab-auto-pair-tag">
+          Pair preset: <strong>{symbol}</strong> → {pairPreset.label}
         </p>
         {auto?.last_block_reason ? (
           <p className="lab-block-reason">{auto.last_block_reason}</p>
