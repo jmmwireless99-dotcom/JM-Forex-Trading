@@ -283,6 +283,32 @@ export default function InvestmentDashboard({ focusReferral = false }) {
       )}
 
       <section className="invest-panel">
+        <h2>Buong buwan — daily earnings chart</h2>
+        {!account?.earnings_month_chart?.length ? (
+          <p className="invest-empty">Walang earnings chart pa — mag cash in para magsimula.</p>
+        ) : (
+          <div className="invest-earn-chart" role="img" aria-label="Daily earnings this month">
+            {account.earnings_month_chart.map((row) => {
+              const max = Math.max(
+                ...account.earnings_month_chart.map((r) => Number(r.earning) || 0),
+                0.01,
+              )
+              const pct = Math.max(4, (Number(row.earning) / max) * 100)
+              return (
+                <div key={row.date} className="invest-earn-bar-wrap" title={`${fmtDate(row.date)}: +$${money(row.earning)}`}>
+                  <div
+                    className={`invest-earn-bar${Number(row.earning) > 0 ? '' : ' zero'}`}
+                    style={{ height: `${pct}%` }}
+                  />
+                  <span className="invest-earn-bar-label">{new Date(row.date).getDate()}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="invest-panel">
         <h2>Daily earnings</h2>
         {!account?.recent_earnings?.length ? (
           <p className="invest-empty">No earnings yet — cash in to start earning.</p>
@@ -308,6 +334,7 @@ export default function InvestmentDashboard({ focusReferral = false }) {
                 ))}
               </tbody>
             </table>
+            <p className="invest-meta">Naka-save ang earnings history — hindi nabubura sa deploy.</p>
           </div>
         )}
       </section>
