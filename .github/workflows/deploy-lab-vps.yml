@@ -2,6 +2,11 @@ name: Deploy JM Lab to VPS
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Git branch to deploy
+        required: false
+        default: cursor/lab-demo-trading-c11c
   push:
     branches: [main]
     paths:
@@ -24,7 +29,7 @@ jobs:
           USER: ${{ secrets.JM_VPS_USER }}
           PASSWORD: ${{ secrets.JM_VPS_SSH_PASSWORD }}
           KEY: ${{ secrets.JM_VPS_SSH_KEY }}
-          BRANCH: main
+          BRANCH: ${{ github.event.inputs.branch || 'cursor/lab-demo-trading-c11c' }}
         run: |
           set -euo pipefail
           if [[ -z "${USER:-}" ]]; then
