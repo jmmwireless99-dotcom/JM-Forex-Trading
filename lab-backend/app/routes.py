@@ -61,15 +61,42 @@ async def symbols() -> dict:
     return {"symbols": SUPPORTED}
 
 
+@router.get("/quote")
+async def quote(symbol: str = "EURUSD") -> dict:
+    sym = symbol.upper()
+    if sym not in SUPPORTED:
+        raise HTTPException(400, f"Unsupported symbol: {sym}")
+    try:
+        q = fetch_quote(sym)
+    except Exception as e:
+        log.warning("quote %s: %s", sym, e)
+        cached = get_ticks().get(sym)
+        if cached:
+            return {**cached, "stale": True}
+        raise HTTPException(503, "Live quote unavailable") from e
+    return q
+
+
 @router.get("/ticks")
-async def ticks() -> dict:
+async def ticks(symbol: str | None = None) -> dict:
+    sym = symbol.upper() if symbol else None
+    if sym and sym not in SUPPORTED:
+        raise HTTPException(400, f"Unsupported symbol: {symbol}")
     live = get_ticks()
+    if sym:
+        row = live.get(sym)
+        if not row:
+            try:
+                row = fetch_quote(sym)
+            except Exception as e:
+                raise HTTPException(503, "Live quote unavailable") from e
+        return {"tick": row}
     if not live:
         # cold start
         out = {}
-        for sym in SUPPORTED:
+        for s in SUPPORTED:
             try:
-                out[sym] = fetch_quote(sym)
+                out[s] = fetch_quote(s)
             except Exception:
                 pass
         return {"ticks": out}

@@ -686,6 +686,15 @@ a {
   }
 }
 
+.lab-live-dot {
+  color: var(--lab-ok);
+  font-size: 0.78rem;
+}
+
+.lab-live-price {
+  font-variant-numeric: tabular-nums;
+}
+
 .lab-suite-list {
   margin: 0.75rem 0 1rem;
   padding-left: 1.2rem;

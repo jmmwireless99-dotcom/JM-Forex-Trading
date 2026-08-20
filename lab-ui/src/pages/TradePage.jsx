@@ -75,39 +75,53 @@ export default function TradePage({ fixedPair = null }) {
 
   const refresh = useCallback(async () => {
     if (!session) return
-    const [acc, pos, tr, tk, au] = await Promise.all([
+    const [acc, pos, tr, au] = await Promise.all([
       labTradeApi.account(session),
       labTradeApi.positions(session),
       labTradeApi.trades(session),
-      labTradeApi.ticks(),
       labTradeApi.auto(session),
     ])
     setAccount(acc)
     setAuto(au)
     setPositions(pos.positions || [])
     setTrades(tr.trades || [])
-    setTicks(tk.ticks || {})
   }, [session])
+
+  const refreshTick = useCallback(async () => {
+    try {
+      const res = await labTradeApi.ticks(symbol)
+      const row = res.tick || res.ticks?.[symbol]
+      if (row?.mid != null) {
+        setTicks((prev) => ({ ...prev, [symbol]: row }))
+      }
+    } catch {
+      /* keep last tick */
+    }
+  }, [symbol])
 
   useEffect(() => {
     if (!session) return undefined
     let alive = true
     ;(async () => {
       try {
-        await refresh()
+        await Promise.all([refresh(), refreshTick()])
         if (alive) setError('')
       } catch (e) {
         if (alive) setError(e.message || String(e))
       }
     })()
-    const id = setInterval(() => {
+    const tickId = setInterval(() => {
+      refreshTick().catch(() => {})
+    }, 1000)
+    const accId = setInterval(() => {
       refresh().catch(() => {})
-    }, 4000)
+    }, 2000)
     return () => {
       alive = false
-      clearInterval(id)
+      clearInterval(tickId)
+      clearInterval(accId)
     }
-  }, [session, refresh])
+  }, [session, refresh, refreshTick])
 
   async function createDemo() {
     setBusy(true)
@@ -315,7 +329,7 @@ export default function TradePage({ fixedPair = null }) {
         </article>
         <article className="lab-stat">
           <span className="lab-stat-label">{symbol} live</span>
-          <strong>{tick ? fmtPrice(symbol, tick.mid) : '—'}</strong>
+          <strong className="lab-live-price">{tick ? fmtPrice(symbol, tick.mid) : '—'}</strong>
         </article>
       </div>
 

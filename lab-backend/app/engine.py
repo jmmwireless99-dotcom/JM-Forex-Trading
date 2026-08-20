@@ -17,18 +17,30 @@ _ticks: dict[str, dict] = {}
 _running = False
 _candle_cache: dict[str, tuple[float, list]] = {}
 _AUTO_CHECK_EVERY = 60.0
+_TICK_EVERY = 2.0
 
 
 def get_ticks() -> dict[str, dict]:
     return dict(_ticks)
 
 
-def _auto_symbols() -> set[str]:
+def _active_symbols() -> set[str]:
+    """Pairs with auto-trading or open positions — refresh these every tick loop."""
     out: set[str] = set()
     for acc in store.all_accounts():
         if acc.auto.enabled:
             out.add(acc.auto.symbol.upper())
+        for p in acc.broker.open_positions():
+            out.add(p.symbol.upper())
     return out
+
+
+async def _refresh_symbol(sym: str) -> None:
+    q = await asyncio.to_thread(fetch_quote, sym)
+    _ticks[sym] = q
+    for acc in store.all_accounts():
+        acc.broker.update_tick(sym, q["mid"])
+    await _maybe_run_auto(sym, q["mid"])
 
 
 async def _maybe_run_auto(sym: str, mid: float) -> None:
@@ -51,41 +63,29 @@ async def _maybe_run_auto(sym: str, mid: float) -> None:
     for acc in store.all_accounts():
         if not acc.auto.enabled or acc.auto.symbol.upper() != sym:
             continue
-        acc.broker.update_tick(sym, mid)
         if try_auto_fill(acc, candles, mid):
             changed = True
     if changed:
         store.persist()
 
 
-def _tick_cycle() -> list[str]:
-    auto_syms = sorted(_auto_symbols())
-    if not auto_syms:
-        return list(SUPPORTED)
-    rest = [s for s in SUPPORTED if s not in auto_syms]
-    return auto_syms + rest
-
-
 async def tick_loop() -> None:
     global _running
     _running = True
-    idx = 0
-    cycle = _tick_cycle()
+    idle_idx = 0
     while _running:
-        if idx % max(len(cycle), 1) == 0:
-            cycle = _tick_cycle()
-        sym = cycle[idx % len(cycle)]
-        idx += 1
+        active = _active_symbols()
         try:
-            q = await asyncio.to_thread(fetch_quote, sym)
-            _ticks[sym] = q
-            for acc in store.all_accounts():
-                acc.broker.update_tick(sym, q["mid"])
-            await _maybe_run_auto(sym, q["mid"])
+            if active:
+                await asyncio.gather(*[_refresh_symbol(sym) for sym in sorted(active)])
+            else:
+                sym = SUPPORTED[idle_idx % len(SUPPORTED)]
+                idle_idx += 1
+                await _refresh_symbol(sym)
             store.persist()
         except Exception as e:
-            log.warning("lab tick %s: %s", sym, e)
-        await asyncio.sleep(5.0)
+            log.warning("lab tick loop: %s", e)
+        await asyncio.sleep(_TICK_EVERY if active else 5.0)
 
 
 def stop_loop() -> None:

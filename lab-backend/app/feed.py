@@ -67,7 +67,7 @@ _FALLBACK_MID = {
     "EURCHF": 0.9350,
 }
 
-_QUOTE_TTL = 18.0
+_QUOTE_TTL = 8.0
 _CANDLE_TTL = 90.0
 _CROSS_CANDLE_TTL = 120.0
 ER_API = "https://open.er-api.com/v6/latest/USD"

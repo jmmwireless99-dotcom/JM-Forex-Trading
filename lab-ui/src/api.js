@@ -125,7 +125,11 @@ export async function ensurePairAccount(symbol) {
 export const labTradeApi = {
   health: () => labRequest('/health'),
   symbols: () => labRequest('/symbols'),
-  ticks: () => labRequest('/ticks'),
+  ticks: (symbol) =>
+    symbol
+      ? labRequest(`/ticks?symbol=${encodeURIComponent(symbol)}`)
+      : labRequest('/ticks'),
+  quote: (symbol) => labRequest(`/quote?symbol=${encodeURIComponent(symbol)}`),
   candles: (symbol, interval = '5', limit = 120) =>
     labRequest(`/candles?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`),
   createAccount: (deposit = 10000, label = 'Lab demo') =>

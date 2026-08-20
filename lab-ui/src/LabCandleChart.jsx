@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createChart } from 'lightweight-charts'
+import { createChart, LineStyle } from 'lightweight-charts'
 import { labTradeApi } from './api.js'
 
 const RANGES = [
@@ -17,6 +17,18 @@ function toChartCandle(c) {
     low: Number(c.low),
     close: Number(c.close),
   }
+}
+
+function priceFormat(symbol) {
+  if (symbol === 'XAUUSD') {
+    return { type: 'price', precision: 2, minMove: 0.01 }
+  }
+  return { type: 'price', precision: 5, minMove: 0.00001 }
+}
+
+function fmtLive(symbol, n) {
+  const d = symbol === 'XAUUSD' ? 2 : 5
+  return Number(n).toFixed(d)
 }
 
 function emaSeries(closes, period) {
@@ -42,11 +54,14 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
   const ema20Ref = useRef(null)
   const ema50Ref = useRef(null)
   const priceLinesRef = useRef([])
+  const liveLineRef = useRef(null)
+  const displayRowsRef = useRef([])
 
   const [range, setRange] = useState('5')
   const [rows, setRows] = useState([])
   const [status, setStatus] = useState('idle')
   const [err, setErr] = useState('')
+  const [liveAt, setLiveAt] = useState(null)
   const rowsRef = useRef(rows)
   rowsRef.current = rows
 
@@ -65,7 +80,10 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
         const data = await labTradeApi.candles(symbol, range, limit)
         if (!alive) return
         const candles = (data.candles || []).map(toChartCandle).filter((c) => Number.isFinite(c.time))
-        if (candles.length) setRows(candles)
+        if (candles.length) {
+          setRows(candles)
+          displayRowsRef.current = candles
+        }
         setErr(data.stale ? 'Cached chart (live feed busy)' : '')
         setStatus('ready')
       } catch (e) {
@@ -81,7 +99,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       }
     }
     load()
-    const id = setInterval(load, 120000)
+    const id = setInterval(load, range === '5' ? 60000 : 120000)
     return () => {
       alive = false
       clearInterval(id)
@@ -90,6 +108,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
 
   useEffect(() => {
     if (!hostRef.current) return undefined
+    const pf = priceFormat(symbol)
     const chart = createChart(hostRef.current, {
       layout: { background: { color: 'transparent' }, textColor: '#c5b8e8' },
       grid: {
@@ -108,13 +127,27 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       wickDownColor: '#f87171',
       priceLineVisible: true,
       lastValueVisible: true,
+      priceFormat: pf,
     })
-    const ema20 = chart.addLineSeries({ color: '#a78bfa', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-    const ema50 = chart.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+    const ema20 = chart.addLineSeries({
+      color: '#a78bfa',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: pf,
+    })
+    const ema50 = chart.addLineSeries({
+      color: '#fbbf24',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      priceFormat: pf,
+    })
     chartRef.current = chart
     seriesRef.current = series
     ema20Ref.current = ema20
     ema50Ref.current = ema50
+    liveLineRef.current = null
 
     const ro = new ResizeObserver(() => {
       if (hostRef.current) chart.applyOptions({ width: hostRef.current.clientWidth, height: hostRef.current.clientHeight })
@@ -125,9 +158,12 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       ro.disconnect()
       chart.remove()
       chartRef.current = null
+      seriesRef.current = null
+      liveLineRef.current = null
     }
-  }, [])
+  }, [symbol])
 
+  // Historical candles + EMAs
   useEffect(() => {
     const chart = chartRef.current
     const series = seriesRef.current
@@ -135,22 +171,71 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
     const ema50 = ema50Ref.current
     if (!chart || !series || !rows.length) return
 
-    let display = [...rows]
-    const lp = Number(livePrice)
-    if (Number.isFinite(lp) && lp > 0 && display.length) {
-      const last = { ...display[display.length - 1] }
-      last.close = lp
-      last.high = Math.max(last.high, lp)
-      last.low = Math.min(last.low, lp)
-      display[display.length - 1] = last
-    }
-
-    series.setData(display)
-    const closes = display.map((r) => r.close)
+    displayRowsRef.current = [...rows]
+    series.setData(rows)
+    const closes = rows.map((r) => r.close)
     const e20 = emaSeries(closes, 20)
     const e50 = emaSeries(closes, 50)
-    ema20.setData(display.map((r, i) => (e20[i] != null ? { time: r.time, value: e20[i] } : null)).filter(Boolean))
-    ema50.setData(display.map((r, i) => (e50[i] != null ? { time: r.time, value: e50[i] } : null)).filter(Boolean))
+    ema20.setData(rows.map((r, i) => (e20[i] != null ? { time: r.time, value: e20[i] } : null)).filter(Boolean))
+    ema50.setData(rows.map((r, i) => (e50[i] != null ? { time: r.time, value: e50[i] } : null)).filter(Boolean))
+    chart.timeScale().scrollToRealTime()
+  }, [rows])
+
+  // Live forming bar + LIVE price line (updates every tick)
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const px = Number(livePrice)
+    if (!Number.isFinite(px) || px <= 0) return
+
+    setLiveAt(Date.now())
+    const title = `LIVE ${fmtLive(symbol, px)}`
+    if (!liveLineRef.current) {
+      liveLineRef.current = series.createPriceLine({
+        price: px,
+        color: '#ffffff',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title,
+      })
+    } else {
+      try {
+        liveLineRef.current.applyOptions({ price: px, title })
+      } catch {
+        liveLineRef.current = series.createPriceLine({
+          price: px,
+          color: '#ffffff',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title,
+        })
+      }
+    }
+
+    const hist = displayRowsRef.current
+    if (!hist.length) return
+    const last = hist[hist.length - 1]
+    const updated = {
+      time: last.time,
+      open: last.open,
+      high: Math.max(Number(last.high), px),
+      low: Math.min(Number(last.low), px),
+      close: px,
+    }
+    try {
+      series.update(updated)
+      displayRowsRef.current = [...hist.slice(0, -1), updated]
+    } catch {
+      /* mid-reset */
+    }
+  }, [livePrice, symbol])
+
+  // Entry / SL / TP lines
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
 
     for (const pl of priceLinesRef.current) {
       try {
@@ -162,14 +247,15 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
     priceLinesRef.current = []
     for (const p of openPos) {
       if (p.symbol !== symbol) continue
-      const entry = series.createPriceLine({
-        price: Number(p.entry_price),
-        color: p.side === 'BUY' ? '#6ee7b7' : '#f87171',
-        lineWidth: 1,
-        lineStyle: 2,
-        title: `${p.side} entry`,
-      })
-      priceLinesRef.current.push(entry)
+      priceLinesRef.current.push(
+        series.createPriceLine({
+          price: Number(p.entry_price),
+          color: p.side === 'BUY' ? '#6ee7b7' : '#f87171',
+          lineWidth: 1,
+          lineStyle: 2,
+          title: `${p.side} entry`,
+        }),
+      )
       if (p.stop_loss != null) {
         priceLinesRef.current.push(
           series.createPriceLine({ price: Number(p.stop_loss), color: '#f87171', lineWidth: 1, title: 'SL' }),
@@ -181,14 +267,15 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
         )
       }
     }
-
-    chart.timeScale().scrollToRealTime()
-  }, [rows, livePrice, openPos, symbol])
+  }, [openPos, symbol])
 
   return (
     <div className="lab-chart-wrap">
       <div className="lab-chart-head">
-        <span className="lab-muted">{symbol} candles</span>
+        <span className="lab-muted">
+          {symbol} candles
+          {liveAt ? <span className="lab-live-dot"> · live</span> : null}
+        </span>
         <div className="lab-chart-ranges">
           {RANGES.map((r) => (
             <button key={r.id} type="button" className={range === r.id ? 'on' : ''} onClick={() => setRange(r.id)}>
@@ -200,7 +287,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       {err ? <p className="lab-error-inline lab-chart-note">{err}</p> : null}
       <div ref={hostRef} className="lab-chart-host" />
       <p className="lab-chart-legend lab-muted">
-        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars`}
+        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars · tick ~2s`}
       </p>
     </div>
   )
