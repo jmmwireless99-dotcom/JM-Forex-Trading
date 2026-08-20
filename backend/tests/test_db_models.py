@@ -17,10 +17,10 @@ def test_seed_specs_match_prompt():
         "EMA_RSI_Scalp",
         "EMA_VWAP_Scalp",
         "Liquidity_Sweep_SMC",
-        "London_Judas_Sweep",
     }
     aiml = next(s for s in SEED_STRATEGIES if s["name"] == "AI_ML")
     assert aiml["parameters"]["session_children"]["asia"] == "EMA_RSI_Scalp"
+    assert "london" not in aiml["parameters"]["session_children"]
     ema = next(s for s in SEED_STRATEGIES if s["name"] == "EMA_RSI_Scalp")
     assert ema["parameters"]["ema_trend"] == 200
     assert ema["parameters"]["rsi_buy_zone"] == [38, 52]
@@ -29,8 +29,6 @@ def test_seed_specs_match_prompt():
     assert "SWEEP" in smc["parameters"]["entry_zones"]
     assert smc["parameters"]["sweep_valid_bars"] == 18
     assert "ASIAN_HIGH" in smc["parameters"]["liquidity"]
-    london = next(s for s in SEED_STRATEGIES if s["name"] == "London_Judas_Sweep")
-    assert london["parameters"]["kill_pending_utc"] == "12:00"
 
 
 def test_enums_cover_gemini_spec():
