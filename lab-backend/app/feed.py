@@ -211,68 +211,98 @@ def _yahoo_leg_candles(leg: str, y_interval: str, limit: int) -> list[dict[str, 
     return candles
 
 
+def _merge_cross_ohlc(leg_a: list[dict[str, Any]], leg_b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge two USD legs into a cross pair (A/B), with nearest-bar alignment."""
+    if not leg_a or not leg_b:
+        return []
+    by_b = {int(c["time"]): c for c in leg_b}
+    b_sorted = sorted(leg_b, key=lambda c: int(c["time"]))
+    tolerance = 300  # 5m bars may differ by one bucket between feeds
+    merged: list[dict[str, Any]] = []
+    for a in leg_a:
+        t = int(a["time"])
+        b = by_b.get(t)
+        if b is None and b_sorted:
+            nearest = min(b_sorted, key=lambda row: abs(int(row["time"]) - t))
+            if abs(int(nearest["time"]) - t) <= tolerance:
+                b = nearest
+        if not b:
+            continue
+        bn_o, bn_h, bn_l, bn_c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+        if min(bn_o, bn_h, bn_l, bn_c) <= 0:
+            continue
+        merged.append(
+            {
+                "time": t,
+                "open": float(a["open"]) / bn_o,
+                "high": max(float(a["high"]) / bn_l, float(a["low"]) / bn_h),
+                "low": min(float(a["low"]) / bn_h, float(a["high"]) / bn_l),
+                "close": float(a["close"]) / bn_c,
+            }
+        )
+    return merged
+
+
+def _spot_cross_ohlc(leg_a: list[dict[str, Any]], quote_usd: float) -> list[dict[str, Any]]:
+    if quote_usd <= 0:
+        return []
+    return [
+        {
+            "time": int(a["time"]),
+            "open": float(a["open"]) / quote_usd,
+            "high": float(a["high"]) / quote_usd,
+            "low": float(a["low"]) / quote_usd,
+            "close": float(a["close"]) / quote_usd,
+        }
+        for a in leg_a
+    ]
+
+
 def _cross_candles(base: str, quote: str, interval: str, limit: int) -> list[dict[str, Any]]:
     """Build cross rate candles e.g. AUD/NZD = AUD/USD ÷ NZD/USD."""
     y_int = INTERVAL_MAP.get(str(interval), interval)
+    need = limit + 10
 
     if base == "AUDUSD" and base in KRAKEN_PAIR:
-        leg_a = _kraken_klines("AUDUSD", y_int, limit + 10)
+        leg_a = _kraken_klines("AUDUSD", y_int, need)
     elif base in BINANCE:
-        leg_a = _binance_klines(base, y_int, limit + 10)
+        leg_a = _binance_klines(base, y_int, need)
     else:
         raise RuntimeError(f"no feed for cross leg {base}")
 
-    leg_b: list[dict[str, Any]] = []
-    nzd_spot: float | None = None
+    if not leg_a:
+        raise RuntimeError(f"cross leg {base} returned no bars")
 
+    min_need = min(20, max(limit, 5))
+    merged: list[dict[str, Any]] = []
+
+    # Prefer Yahoo NZD history when cached; skip live Yahoo on cross charts (429-prone).
     if quote in YAHOO_LEG:
+        cache_key = f"_leg:{quote}:{y_int}:{need}"
+        cached_leg = _CANDLE_CACHE.get(cache_key)
+        if cached_leg and cached_leg.get("candles"):
+            merged = _merge_cross_ohlc(leg_a, list(cached_leg["candles"]))
+
+    if len(merged) < min_need and quote == "NZDUSD":
         try:
-            leg_b = _yahoo_leg_candles(quote, y_int, limit + 10)
+            merged = _spot_cross_ohlc(leg_a, _nzdusd_spot())
+        except Exception as e:
+            log.warning("cross spot fallback %s/%s: %s", base, quote, e)
+
+    if len(merged) < min_need and quote in YAHOO_LEG:
+        try:
+            leg_b = _yahoo_leg_candles(quote, y_int, need)
+            merged = _merge_cross_ohlc(leg_a, leg_b)
         except Exception as e:
             log.warning("yahoo leg %s fallback to spot: %s", quote, e)
+            if quote == "NZDUSD":
+                merged = _spot_cross_ohlc(leg_a, _nzdusd_spot())
 
-    if not leg_b and quote == "NZDUSD":
-        nzd_spot = _nzdusd_spot()
-
-    if leg_b:
-        by_b = {int(c["time"]): c for c in leg_b}
-        merged: list[dict[str, Any]] = []
-        for a in leg_a:
-            t = int(a["time"])
-            b = by_b.get(t)
-            if not b:
-                continue
-            bn_o, bn_h, bn_l, bn_c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
-            if min(bn_o, bn_h, bn_l, bn_c) <= 0:
-                continue
-            merged.append(
-                {
-                    "time": t,
-                    "open": float(a["open"]) / bn_o,
-                    "high": max(float(a["high"]) / bn_l, float(a["low"]) / bn_h),
-                    "low": min(float(a["low"]) / bn_h, float(a["high"]) / bn_l),
-                    "close": float(a["close"]) / bn_c,
-                }
-            )
-    elif nzd_spot is not None:
-        merged = [
-            {
-                "time": int(a["time"]),
-                "open": float(a["open"]) / nzd_spot,
-                "high": float(a["high"]) / nzd_spot,
-                "low": float(a["low"]) / nzd_spot,
-                "close": float(a["close"]) / nzd_spot,
-            }
-            for a in leg_a
-        ]
-    else:
-        raise RuntimeError(f"no feed for cross leg {quote}")
+    if len(merged) < min_need:
+        raise RuntimeError(f"cross {base}/{quote} too few bars ({len(merged)}, need {min_need})")
 
     if limit > 0:
         merged = merged[-limit:]
-    min_need = min(20, max(limit, 5))
-    if len(merged) < min_need:
-        raise RuntimeError(f"cross {base}/{quote} too few bars ({len(merged)}, need {min_need})")
     return merged
 
 
