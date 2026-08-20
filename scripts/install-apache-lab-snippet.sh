@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time: add JM Lab Apache snippet to the JM TECH SSL vhost (safe — does not edit /fx/ rules).
+# One-time: add JM Lab Apache rules INSIDE the SSL vhost (before catch-all ProxyPass /).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,7 +11,6 @@ if [[ ! -f "$SNIP" ]]; then
   exit 1
 fi
 
-# Find vhost that already serves /fx/
 VHOST=""
 for f in /etc/apache2/sites-enabled/*.conf; do
   [[ -f "$f" ]] || continue
@@ -22,23 +21,58 @@ for f in /etc/apache2/sites-enabled/*.conf; do
 done
 
 if [[ -z "$VHOST" ]]; then
-  echo "Could not find Apache vhost with /fx/ — add manually:"
-  echo "  Include contents of $SNIP"
+  echo "Could not find Apache vhost with /fx/"
   exit 1
 fi
 
-if grep -q "$MARKER" "$VHOST" 2>/dev/null; then
-  echo "Already installed in $VHOST"
-else
-  echo "Installing lab snippet into $VHOST"
-  sudo cp -a "$VHOST" "${VHOST}.bak-jm-lab-$(date +%Y%m%d)"
-  {
-    echo ""
-    echo "$MARKER"
-    cat "$SNIP"
-  } | sudo tee -a "$VHOST" >/dev/null
-fi
+sudo cp -a "$VHOST" "${VHOST}.bak-jm-lab-$(date +%Y%m%d%H%M)"
+
+python3 << PY
+from pathlib import Path
+path = Path("${VHOST}")
+text = path.read_text()
+marker = "${MARKER}"
+
+# Remove old snippet appended outside VirtualHost (legacy bug)
+if marker in text:
+    idx = text.index(marker)
+    # If marker is after </VirtualHost>, strip trailing orphan block
+    vh_end = text.rfind("</VirtualHost>", 0, idx)
+    if vh_end != -1:
+        text = text[: vh_end + len("</VirtualHost>")] + "\n"
+    elif "Alias /lab /opt/jm-lab/dist" in text:
+        # Already inside vhost — ensure ProxyPass exclusion
+        if "ProxyPass /lab !" not in text:
+            text = text.replace(
+                "ProxyPass / http://127.0.0.1:8081/",
+                "ProxyPass /lab !\n    ProxyPass / http://127.0.0.1:8081/",
+                1,
+            )
+            path.write_text(text)
+            print("Added ProxyPass /lab ! exclusion")
+        else:
+            print("Lab Apache rules already present in ${VHOST}")
+        raise SystemExit(0)
+
+snippet = Path("${SNIP}").read_text()
+# Insert before JM TECH catch-all proxy (8081 portal)
+anchors = [
+    "    # JM TECH SOLUTION portal + API + phone pay (:8081, BASE_PATH empty)",
+    "    ProxyPass / http://127.0.0.1:8081/",
+]
+inserted = False
+for anchor in anchors:
+    if anchor in text and "Alias /lab /opt/jm-lab/dist" not in text.split(anchor)[0]:
+        text = text.replace(anchor, snippet + "\n" + anchor, 1)
+        inserted = True
+        break
+if not inserted:
+    raise SystemExit("Could not find insertion point in ${VHOST}")
+
+path.write_text(text)
+print("Installed JM Lab snippet inside ${VHOST}")
+PY
 
 sudo apache2ctl configtest
 sudo systemctl reload apache2
-echo "Apache reloaded — /lab/ should be live after deploy-lab-portal.sh"
+echo "Apache reloaded — /lab/ ready after deploy-lab-portal.sh"
