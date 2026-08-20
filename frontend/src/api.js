@@ -74,6 +74,11 @@ export const api = {
     ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
+  loginAccount: (code, password) =>
+    request('/accounts/login', {
+      method: 'POST',
+      body: JSON.stringify({ code, password }),
+    }),
   accountMe: () => request('/accounts/me'),
   account: () => request('/account'),
   capitalPreview: (amount) =>

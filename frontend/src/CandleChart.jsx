@@ -7,7 +7,8 @@ const RANGE_OPTS = [
   { id: 'm5', label: 'M5', hint: '5m · ~5 days' },
   { id: 'm15', label: 'M15', hint: '15m · ~5 days' },
   { id: 'h1', label: 'H1', hint: '1h · ~1 month' },
-  { id: '1m', label: '1M Daily', hint: '1 day / bar' },
+  { id: '1m', label: '1M Daily', hint: '1 day / bar · ~1 month' },
+  { id: '2m', label: '2M Daily', hint: '1 day / bar · ~2 months' },
 ]
 
 const RANGE_ALIASES = {
@@ -168,6 +169,7 @@ function rangeFetchSpec(range) {
   if (range === 'm15') return { interval: '15', limit: 1000, days: 5, dayMarks: true }
   if (range === 'h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
   if (range === '1m') return { interval: '1d', limit: 45, days: 31, dayMarks: true }
+  if (range === '2m') return { interval: '1d', limit: 70, days: 62, dayMarks: true }
   return null
 }
 

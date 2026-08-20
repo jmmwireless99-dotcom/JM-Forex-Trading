@@ -43,7 +43,6 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # Classic child under the AI_ML umbrella (session → setup engine)
 _CHILD_BY_SESSION = {
     "asia": "EMA_RSI_Scalp",
-    "london": "London_Judas_Sweep",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
     "new_york": "EMA_VWAP_Scalp",
 }
@@ -60,7 +59,7 @@ class AutoStrategyRouter:
         # Auto-follow always parks on AI_ML when the session is tradeable.
         self.session_map: dict[str, str | None] = {
             "asia": "AI_ML",
-            "london": "AI_ML",
+            "london": None,
             "london_close": None,
             "london_wind_down": None,
             "london_ny_overlap": "AI_ML",
@@ -144,40 +143,16 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
-                "utc": "00:00-06:59",
-                "ph": "08:00-14:59",
-                "slot": "Asia",
+                "utc": "23:00-12:30",
+                "ph": "07:00-20:30",
+                "slot": "EMA_RSI (Asia desk)",
                 "session": "asia",
                 "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
-                "utc": "07:00-10:59",
-                "ph": "15:00-18:59",
-                "slot": "London",
-                "session": "london",
-                "strategies": "AI_ML → London_Judas_Sweep",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "11:00-11:59",
-                "ph": "19:00-19:59",
-                "slot": "London wind-down",
-                "session": "london_wind_down",
-                "strategies": "Stand aside",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "12:00-12:59",
-                "ph": "20:00-20:59",
-                "slot": "London close",
-                "session": "london_close",
-                "strategies": "Stand aside",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "13:00-17:59",
-                "ph": "21:00-01:59",
+                "utc": "12:31-17:59",
+                "ph": "20:31-01:59",
                 "slot": "London/NY overlap",
                 "session": "london_ny_overlap",
                 "strategies": "AI_ML → Liquidity_Sweep_SMC",
@@ -193,7 +168,7 @@ class AutoStrategyRouter:
             {
                 "days": "Mon-Fri",
                 "utc": "20:00-23:59",
-                "ph": "04:00-07:59",
+                "ph": "04:00-06:59",
                 "slot": "Off-hours",
                 "session": "off_hours",
                 "strategies": "Stand aside",

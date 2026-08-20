@@ -5,6 +5,12 @@ import { api } from './api'
 /** Private saved layout — opens only when YOU are logged into TradingView. */
 const USER_CHART_URL = 'https://www.tradingview.com/chart/Bhih3eRv/'
 
+function sliceLastDays(rows, days) {
+  if (!rows.length) return rows
+  const cutoff = rows[rows.length - 1].time - days * 86400
+  return rows.filter((r) => r.time >= cutoff)
+}
+
 /**
  * Live gold market chart (COMEX GC=F via backend Yahoo feed).
  * TradingView embeds are unreliable (spinner / null OHLC); this always shows candles.
@@ -18,6 +24,12 @@ export default function TradingViewGoldChart({ interval = '5' }) {
   const [error, setError] = useState('')
   const [tf, setTf] = useState(String(interval))
   const [reloadKey, setReloadKey] = useState(0)
+
+  const tfSpec = (() => {
+    if (tf === '1d') return { interval: '1d', limit: 45 }
+    if (tf === '2m') return { interval: '1d', limit: 70 }
+    return { interval: tf, limit: 400 }
+  })()
 
   useEffect(() => {
     if (!hostRef.current) return undefined
@@ -73,15 +85,20 @@ export default function TradingViewGoldChart({ interval = '5' }) {
     let alive = true
     async function load() {
       try {
-        const data = await api.goldCandles({ interval: tf, limit: 400 })
+        const data = await api.goldCandles({
+          interval: tfSpec.interval,
+          limit: tfSpec.limit,
+        })
         if (!alive) return
-        const rows = (data.candles || []).map((c) => ({
+        let rows = (data.candles || []).map((c) => ({
           time: Number(c.time),
           open: Number(c.open),
           high: Number(c.high),
           low: Number(c.low),
           close: Number(c.close),
         }))
+        if (tf === '2m') rows = sliceLastDays(rows, 62)
+        if (tf === '1d') rows = sliceLastDays(rows, 31)
         if (!rows.length) throw new Error('No candles returned')
         seriesRef.current?.setData(rows)
         chartRef.current?.timeScale().scrollToRealTime()
@@ -100,7 +117,7 @@ export default function TradingViewGoldChart({ interval = '5' }) {
       alive = false
       clearInterval(id)
     }
-  }, [tf, reloadKey])
+  }, [tf, reloadKey, tfSpec.interval, tfSpec.limit])
 
   const price = meta?.price
   const priceLabel =
@@ -120,14 +137,21 @@ export default function TradingViewGoldChart({ interval = '5' }) {
         </span>
       </div>
       <div className="tv-symbol-bar">
-        {['1', '5', '15', '60'].map((v) => (
+        {[
+          { id: '1', label: '1m' },
+          { id: '5', label: '5m' },
+          { id: '15', label: '15m' },
+          { id: '60', label: '1h' },
+          { id: '1d', label: '1M' },
+          { id: '2m', label: '2M' },
+        ].map(({ id, label }) => (
           <button
-            key={v}
+            key={id}
             type="button"
-            className={tf === v ? 'on' : ''}
-            onClick={() => setTf(v)}
+            className={tf === id ? 'on' : ''}
+            onClick={() => setTf(id)}
           >
-            {v === '60' ? '1h' : `${v}m`}
+            {label}
           </button>
         ))}
         <a

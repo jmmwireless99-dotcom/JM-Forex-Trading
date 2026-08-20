@@ -49,8 +49,8 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "AI_ML",
             "name": "AI & Machine Learning",
-            "sessions": ["Asia", "London", "London/NY overlap", "New York"],
-            "session_slots": ["asia", "london", "london_ny_overlap", "new_york"],
+            "sessions": ["Asia (PH 7AM–8:30PM)", "London/NY overlap", "New York"],
+            "session_slots": ["asia", "london_ny_overlap", "new_york"],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -59,7 +59,7 @@ def strategy_catalog() -> list[dict]:
                 "win-probability filter (scikit-learn)."
             ),
             "entry_rules": [
-                "Asia → EMA_RSI_Scalp child · London → Judas · Overlap → SMC · NY → VWAP.",
+                "Asia → EMA_RSI until 8:30 PM Manila · 8:31 PM → SMC overlap · NY → VWAP.",
                 "Child must print a valid setup on M5 close.",
                 "ML scores TAKE / CAUTION / SKIP from labeled trade history.",
                 "SKIP is blocked inside AI_ML (no order sent).",
@@ -79,45 +79,10 @@ def strategy_catalog() -> list[dict]:
             "reward_r": None,
         },
         {
-            "id": "London_Judas_Sweep",
-            "name": "London Judas Sweep",
-            "sessions": ["London"],
-            "session_slots": ["london"],
-            "timeframe": "M5",
-            "signal_tf": "M5",
-            "chart_tf": "M1",
-            "summary": (
-                "London Judas Swing: Asian range trap → liquidity sweep → "
-                "ChoCH → FVG 50% limit entry."
-            ),
-            "entry_rules": [
-                "Build Asian box 00:00–06:00 UTC (high / low / mid).",
-                "Active London strategy window 07:00–10:59 UTC (ends 11:00; wind-down then kill).",
-                "Sweep: wick beyond Asia H/L by 50–350 pips ($0.50–$3.50), then reject inside.",
-                "Remember the sweep — ChoCH/displacement + FVG can form on later M5 bars.",
-                "Require ChoCH or displacement back through Asia mid after the sweep.",
-                "Place LIMIT at bearish/bullish FVG 50% equilibrium (mid).",
-                "Cancel pending limits at 12:00 UTC (kill switch).",
-            ],
-            "entry_flow": [
-                "Sweep Asia H/L (remembered) → later ChoCH/displacement → FVG 50% LIMIT.",
-                "SELL after Asia high sweep; BUY after Asia low sweep.",
-                "SL beyond sweep wick + 80 pip ($0.80) buffer; TP Asia opposite side or 3R.",
-            ],
-            "parameters": _seed_params("London_Judas_Sweep"),
-            "safety": [
-                "Block if spread > 40 pips ($0.40 on XAUUSD).",
-                "UK/EUR high-impact news blackout −15 minutes.",
-                "Only fires once per session per FVG level.",
-            ],
-            "order_type": "LIMIT",
-            "reward_r": 3.0,
-        },
-        {
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
-            "sessions": ["Asia", "New York"],
-            "session_slots": ["asia", "new_york"],
+            "sessions": ["Asia (PH 7AM–8:30PM)"],
+            "session_slots": ["asia"],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -131,7 +96,7 @@ def strategy_catalog() -> list[dict]:
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
-                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
+                "Cooldown spacing ≥4 M5 bars; no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
@@ -221,10 +186,9 @@ def strategy_catalog() -> list[dict]:
 def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
-        "AI_ML — session child (EMA_RSI/Judas/SMC/VWAP) + AI & Machine Learning filter",
-        "London_Judas_Sweep — Asia box · $0.50–$3.50 sweep · later FVG50 LIMIT · kill 12:00",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
+        "AI_ML — session child (EMA_RSI/SMC/VWAP) + AI & Machine Learning filter",
+        "EMA_RSI_Scalp — PH 7AM–8:30PM · EMA200 + RSI · 1:2 Asia scalp",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
-        "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
+        "Liquidity_Sweep_SMC — PH 8:31PM–2AM overlap · sweep + FVG/OB",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

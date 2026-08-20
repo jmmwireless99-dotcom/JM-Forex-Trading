@@ -17,7 +17,7 @@ SEED_STRATEGIES: list[dict] = [
         "timeframe": "M5",
         "description": (
             "AI & Machine Learning stack: session child setup "
-            "(EMA_RSI / Judas / SMC / VWAP) + sklearn win-probability filter"
+            "(EMA_RSI / SMC / VWAP) + sklearn win-probability filter"
         ),
         "parameters": {
             "engine": "AI & Machine Learning",
@@ -25,7 +25,6 @@ SEED_STRATEGIES: list[dict] = [
             "batch_model": "LogisticRegression",
             "session_children": {
                 "asia": "EMA_RSI_Scalp",
-                "london": "London_Judas_Sweep",
                 "london_ny_overlap": "Liquidity_Sweep_SMC",
                 "new_york": "EMA_VWAP_Scalp",
             },
@@ -60,7 +59,7 @@ SEED_STRATEGIES: list[dict] = [
         "parameters": {
             "ema_fast": 9,
             "ema_slow": 21,
-            "reward_r": 2.0,
+            "reward_r": 2.5,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -78,26 +77,6 @@ SEED_STRATEGIES: list[dict] = [
             "sweep_lookback_bars": 36,
             "sweep_valid_bars": 18,
             "max_trades_per_day": 4,
-            "chart_tf": "M1",
-            "signal_tf": "M5",
-        },
-    },
-    {
-        "name": "London_Judas_Sweep",
-        "timeframe": "M5",
-        "description": "London Judas Swing: Asia 00-06 range · sweep 07-09 · FVG50 limit · kill 12:00 UTC",
-        "parameters": {
-            "asia_utc": ["00:00", "06:00"],
-            "london_entry_utc": ["07:00", "11:00"],
-            "sweep_window_utc": ["07:00", "09:00"],
-            "kill_pending_utc": "12:00",
-            "min_sweep_pips": 50,
-            "max_sweep_pips": 350,
-            "sl_buffer_pips": 80,
-            "max_spread_pips": 40,
-            "pip_size": 0.01,
-            "entry": "FVG_50_LIMIT",
-            "reward_r": 3.0,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
