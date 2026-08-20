@@ -287,7 +287,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       {err ? <p className="lab-error-inline lab-chart-note">{err}</p> : null}
       <div ref={hostRef} className="lab-chart-host" />
       <p className="lab-chart-legend lab-muted">
-        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars · tick ~2s`}
+        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars · real-time tick`}
       </p>
     </div>
   )

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.accounts import LabAccountStore
 from app.auto import try_auto_fill
-from app.feed import SUPPORTED, fetch_candles, fetch_quote
+from app.feed import SUPPORTED, fetch_candles, fetch_quote_live
 
 log = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ _ticks: dict[str, dict] = {}
 _running = False
 _candle_cache: dict[str, tuple[float, list]] = {}
 _AUTO_CHECK_EVERY = 60.0
-_TICK_EVERY = 2.0
+_TICK_EVERY = 1.0
 
 
 def get_ticks() -> dict[str, dict]:
@@ -36,7 +36,7 @@ def _active_symbols() -> set[str]:
 
 
 async def _refresh_symbol(sym: str) -> None:
-    q = await asyncio.to_thread(fetch_quote, sym)
+    q = await asyncio.to_thread(fetch_quote_live, sym)
     _ticks[sym] = q
     for acc in store.all_accounts():
         acc.broker.update_tick(sym, q["mid"])

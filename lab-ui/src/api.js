@@ -129,7 +129,8 @@ export const labTradeApi = {
     symbol
       ? labRequest(`/ticks?symbol=${encodeURIComponent(symbol)}`)
       : labRequest('/ticks'),
-  quote: (symbol) => labRequest(`/quote?symbol=${encodeURIComponent(symbol)}`),
+  quote: (symbol, fresh = false) =>
+    labRequest(`/quote?symbol=${encodeURIComponent(symbol)}${fresh ? '&fresh=1' : ''}`),
   candles: (symbol, interval = '5', limit = 120) =>
     labRequest(`/candles?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`),
   createAccount: (deposit = 10000, label = 'Lab demo') =>

@@ -68,6 +68,7 @@ _FALLBACK_MID = {
 }
 
 _QUOTE_TTL = 8.0
+_LIVE_QUOTE_TTL = 0.35  # UI streaming — micro-cache only
 _CANDLE_TTL = 90.0
 _CROSS_CANDLE_TTL = 120.0
 ER_API = "https://open.er-api.com/v6/latest/USD"
@@ -306,6 +307,72 @@ def _cross_candles(base: str, quote: str, interval: str, limit: int) -> list[dic
     return merged
 
 
+def _kraken_last(symbol: str) -> float:
+    """Kraken last trade price (real-time tick, not M5 close)."""
+    pair = KRAKEN_PAIR.get(symbol)
+    if not pair:
+        raise ValueError(f"kraken ticker unsupported: {symbol}")
+    data = _http_json(f"https://api.kraken.com/0/public/Ticker?pair={pair}", timeout=6)
+    result = data.get("result") or {}
+    keys = [k for k in result if k != "last"]
+    if not keys:
+        raise RuntimeError(f"kraken ticker empty for {pair}")
+    return float(result[keys[0]]["c"][0])
+
+
+def _live_mid(symbol: str) -> tuple[float, str]:
+    """Fast last-price lookup for chart streaming."""
+    sym = symbol.upper()
+    if sym in BINANCE:
+        return _binance_price(sym), "binance"
+    if sym in CROSS_PAIRS:
+        base, quote = CROSS_PAIRS[sym]
+        if base in KRAKEN_PAIR:
+            a = _kraken_last(base)
+        elif base in BINANCE:
+            a = _binance_price(base)
+        else:
+            raise RuntimeError(f"no live leg for {base}")
+        if quote == "NZDUSD":
+            q = _nzdusd_spot()
+        elif quote in KRAKEN_PAIR:
+            q = _kraken_last(quote)
+        else:
+            raise RuntimeError(f"no live leg for {quote}")
+        if q <= 0:
+            raise RuntimeError(f"invalid quote leg {quote}")
+        return float(a) / float(q), "cross-live"
+    if sym in KRAKEN_PAIR:
+        return _kraken_last(sym), "kraken"
+    raise RuntimeError(f"no live feed for {sym}")
+
+
+def fetch_quote_live(symbol: str) -> dict[str, Any]:
+    """Real-time tick for UI — Kraken/Binance last trade, ~350ms cache."""
+    sym = symbol.upper()
+    if sym not in YAHOO:
+        raise ValueError(f"Unsupported symbol: {symbol}")
+
+    cache_key = f"live:{sym}"
+    row = _QUOTE_CACHE.get(cache_key)
+    if row and time.monotonic() - row["_mono"] < _LIVE_QUOTE_TTL:
+        return {k: v for k, v in row.items() if not k.startswith("_")}
+
+    mid, source = _live_mid(sym)
+    out = {
+        "symbol": sym,
+        "mid": float(mid),
+        "source": source,
+        "live": True,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "_mono": time.monotonic(),
+    }
+    _QUOTE_CACHE[cache_key] = out
+    _QUOTE_CACHE[sym] = {**out, "_mono": time.monotonic()}
+    _FALLBACK_MID[sym] = float(mid)
+    return {k: v for k, v in out.items() if not k.startswith("_")}
+
+
 def _kraken_klines(symbol: str, interval: str, limit: int) -> list[dict[str, Any]]:
     pair = KRAKEN_PAIR.get(symbol)
     if not pair:
@@ -379,21 +446,8 @@ def fetch_quote(symbol: str) -> dict[str, Any]:
 
     if mid is None and sym in CROSS_PAIRS:
         try:
-            base, quote = CROSS_PAIRS[sym]
-            if base in KRAKEN_PAIR:
-                a = _kraken_klines(base, "5m", 1)[-1]["close"]
-            else:
-                a = _binance_price(base)
-            if quote in YAHOO_LEG:
-                try:
-                    q = _yahoo_leg_candles(quote, "5m", 1)[-1]["close"]
-                except Exception:
-                    q = _nzdusd_spot()
-            else:
-                q = _kraken_klines(quote, "5m", 1)[-1]["close"]
-            if q > 0:
-                mid = float(a) / float(q)
-                source = "cross"
+            mid, source = _live_mid(sym)
+            source = "cross"
         except Exception as e:
             log.warning("cross quote %s: %s", sym, e)
 
@@ -415,10 +469,8 @@ def fetch_quote(symbol: str) -> dict[str, Any]:
 
     if mid is None and sym in KRAKEN_PAIR:
         try:
-            candles = _kraken_klines(sym, "5m", 1)
-            if candles:
-                mid = candles[-1]["close"]
-                source = "kraken"
+            mid = _kraken_last(sym)
+            source = "kraken"
         except Exception as e:
             log.warning("kraken quote %s: %s", sym, e)
 

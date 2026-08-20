@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.engine import get_ticks, store
-from app.feed import SUPPORTED, fetch_candles, fetch_quote
+from app.feed import SUPPORTED, fetch_candles, fetch_quote, fetch_quote_live
 from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_info
 
 log = logging.getLogger(__name__)
@@ -62,14 +62,14 @@ async def symbols() -> dict:
 
 
 @router.get("/quote")
-async def quote(symbol: str = "EURUSD") -> dict:
+async def quote(symbol: str = "EURUSD", fresh: bool = False) -> dict:
     sym = symbol.upper()
     if sym not in SUPPORTED:
         raise HTTPException(400, f"Unsupported symbol: {sym}")
     try:
-        q = fetch_quote(sym)
+        q = fetch_quote_live(sym) if fresh else fetch_quote(sym)
     except Exception as e:
-        log.warning("quote %s: %s", sym, e)
+        log.warning("quote %s fresh=%s: %s", sym, fresh, e)
         cached = get_ticks().get(sym)
         if cached:
             return {**cached, "stale": True}
@@ -78,12 +78,21 @@ async def quote(symbol: str = "EURUSD") -> dict:
 
 
 @router.get("/ticks")
-async def ticks(symbol: str | None = None) -> dict:
+async def ticks(symbol: str | None = None, fresh: bool = False) -> dict:
     sym = symbol.upper() if symbol else None
     if sym and sym not in SUPPORTED:
         raise HTTPException(400, f"Unsupported symbol: {symbol}")
     live = get_ticks()
     if sym:
+        if fresh:
+            try:
+                row = fetch_quote_live(sym)
+            except Exception as e:
+                row = live.get(sym)
+                if not row:
+                    raise HTTPException(503, "Live quote unavailable") from e
+                row = {**row, "stale": True}
+            return {"tick": row}
         row = live.get(sym)
         if not row:
             try:

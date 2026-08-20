@@ -89,8 +89,7 @@ export default function TradePage({ fixedPair = null }) {
 
   const refreshTick = useCallback(async () => {
     try {
-      const res = await labTradeApi.ticks(symbol)
-      const row = res.tick || res.ticks?.[symbol]
+      const row = await labTradeApi.quote(symbol, true)
       if (row?.mid != null) {
         setTicks((prev) => ({ ...prev, [symbol]: row }))
       }
@@ -112,10 +111,10 @@ export default function TradePage({ fixedPair = null }) {
     })()
     const tickId = setInterval(() => {
       refreshTick().catch(() => {})
-    }, 1000)
+    }, 400)
     const accId = setInterval(() => {
       refresh().catch(() => {})
-    }, 2000)
+    }, 1500)
     return () => {
       alive = false
       clearInterval(tickId)
