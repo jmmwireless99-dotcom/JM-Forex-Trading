@@ -24,6 +24,15 @@ class OrderBody(BaseModel):
     take_profit: float | None = None
 
 
+class AutoBody(BaseModel):
+    enabled: bool | None = None
+    symbol: str | None = None
+    lots: float | None = Field(None, ge=0.01, le=50)
+    sl_pips: float | None = Field(None, ge=1, le=500)
+    tp_pips: float | None = Field(None, ge=1, le=500)
+    strategy: str = "EMA_RSI"
+
+
 def _auth(account_id: str | None, token: str | None):
     if not account_id:
         raise HTTPException(400, "Missing X-JM-Lab-Account-Id")
@@ -161,3 +170,50 @@ async def close_position(
         raise HTTPException(404, "Position not found")
     store.persist()
     return {"ok": True, "position": closed.to_dict(), "account": acc.snapshot()}
+
+
+@router.get("/auto")
+async def get_auto(
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    a = acc.auto
+    return {
+        "enabled": a.enabled,
+        "symbol": a.symbol,
+        "lots": a.lots,
+        "sl_pips": a.sl_pips,
+        "tp_pips": a.tp_pips,
+        "strategy": a.strategy,
+        "last_signal_at": a.last_signal_at,
+        "last_block_reason": a.last_block_reason,
+        "recent_signals": list(a.signals),
+    }
+
+
+@router.post("/auto")
+async def set_auto(
+    body: AutoBody,
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    a = acc.auto
+    if body.enabled is not None:
+        a.enabled = body.enabled
+    if body.symbol is not None:
+        sym = body.symbol.upper()
+        if sym not in SUPPORTED:
+            raise HTTPException(400, f"Unsupported symbol: {sym}")
+        a.symbol = sym
+    if body.lots is not None:
+        a.lots = body.lots
+    if body.sl_pips is not None:
+        a.sl_pips = body.sl_pips
+    if body.tp_pips is not None:
+        a.tp_pips = body.tp_pips
+    if body.strategy:
+        a.strategy = body.strategy
+    store.persist()
+    return {"ok": True, "auto": acc.auto.to_dict(), "account": acc.snapshot()}

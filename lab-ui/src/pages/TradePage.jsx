@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import LabCandleChart from '../LabCandleChart.jsx'
 import { labTradeApi, loadLabSession, saveLabSession } from '../api.js'
 
 const PAIRS = ['EURUSD', 'GBPUSD', 'XAUUSD']
@@ -19,6 +20,7 @@ export default function TradePage() {
   const [session, setSession] = useState(() => loadLabSession())
   const [symbol, setSymbol] = useState('EURUSD')
   const [account, setAccount] = useState(null)
+  const [auto, setAuto] = useState(null)
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
   const [trades, setTrades] = useState([])
@@ -31,13 +33,15 @@ export default function TradePage() {
 
   const refresh = useCallback(async () => {
     if (!session) return
-    const [acc, pos, tr, tk] = await Promise.all([
+    const [acc, pos, tr, tk, au] = await Promise.all([
       labTradeApi.account(),
       labTradeApi.positions(),
       labTradeApi.trades(),
       labTradeApi.ticks(),
+      labTradeApi.auto(),
     ])
     setAccount(acc)
+    setAuto(au)
     setPositions(pos.positions || [])
     setTrades(tr.trades || [])
     setTicks(tk.ticks || {})
@@ -88,6 +92,7 @@ export default function TradePage() {
     saveLabSession(null)
     setSession(null)
     setAccount(null)
+    setAuto(null)
     setPositions([])
     setTrades([])
   }
@@ -144,6 +149,27 @@ export default function TradePage() {
     }
   }
 
+  async function toggleAuto(on) {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await labTradeApi.setAuto({
+        enabled: on,
+        symbol,
+        lots: Number(lots),
+        sl_pips: Number(slPips),
+        tp_pips: Number(tpPips),
+      })
+      setAuto(res.auto)
+      setNote(on ? `Auto EMA+RSI ON · ${symbol}` : 'Auto trading OFF')
+      await refresh()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const tick = ticks[symbol]
   const open = positions.filter((p) => p.status === 'OPEN')
 
@@ -158,7 +184,7 @@ export default function TradePage() {
         </header>
         <section className="lab-panel lab-trade-start">
           <h2>Start lab demo account</h2>
-          <p>$10,000 virtual balance · EUR/USD · GBP/USD · XAUUSD</p>
+          <p>$10,000 virtual balance · EUR/USD · GBP/USD · XAUUSD · chart + auto EMA+RSI</p>
           <button type="button" className="lab-btn" disabled={busy} onClick={createDemo}>
             Create demo account
           </button>
@@ -206,7 +232,7 @@ export default function TradePage() {
         </article>
       </div>
 
-      <section className="lab-panel">
+      <section className="lab-panel lab-chart-panel">
         <div className="lab-pair-bar">
           {PAIRS.map((p) => (
             <button
@@ -219,7 +245,22 @@ export default function TradePage() {
             </button>
           ))}
         </div>
+        <LabCandleChart symbol={symbol} livePrice={tick?.mid} positions={open} />
+      </section>
 
+      <section className="lab-panel">
+        <div className="lab-auto-head">
+          <h2>Auto EMA+RSI</h2>
+          <span className={`lab-auto-pill ${auto?.enabled ? 'on' : ''}`}>
+            {auto?.enabled ? 'Running' : 'Off'}
+          </span>
+        </div>
+        <p className="lab-muted lab-auto-desc">
+          M5 EMA 20/50 + RSI 14 (JM FX style). Auto-fills on new bar when flat.
+        </p>
+        {auto?.last_block_reason ? (
+          <p className="lab-block-reason">{auto.last_block_reason}</p>
+        ) : null}
         <div className="lab-trade-controls">
           <label>
             Lots
@@ -233,6 +274,34 @@ export default function TradePage() {
             TP (pips)
             <input type="number" step="1" min="0" value={tpPips} onChange={(e) => setTpPips(e.target.value)} />
           </label>
+          {!auto?.enabled ? (
+            <button type="button" className="lab-btn" disabled={busy} onClick={() => toggleAuto(true)}>
+              Start auto
+            </button>
+          ) : (
+            <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => toggleAuto(false)}>
+              Stop auto
+            </button>
+          )}
+        </div>
+        {(auto?.recent_signals || []).length > 0 ? (
+          <div className="lab-auto-signals">
+            <h3>Auto signals</h3>
+            {auto.recent_signals.slice(0, 5).map((s) => (
+              <div key={`${s.at}-${s.side}`} className="lab-trade-row">
+                <span>
+                  {s.side} {s.symbol} · {s.reason}
+                </span>
+                <span className="lab-muted">{s.at ? new Date(s.at).toLocaleString() : ''}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="lab-panel">
+        <h2>Manual trade</h2>
+        <div className="lab-trade-controls">
           <button type="button" className="lab-btn lab-buy" disabled={busy || open.length > 0} onClick={() => order('BUY')}>
             Buy
           </button>

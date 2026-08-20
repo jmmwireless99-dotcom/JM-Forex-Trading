@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.auto_config import AutoConfig
 from app.broker import LabBroker
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class LabAccount:
     token: str
     label: str
     broker: LabBroker
+    auto: AutoConfig = field(default_factory=AutoConfig)
     created_at: str = field(default_factory=lambda: _now().isoformat())
 
     def snapshot(self) -> dict[str, Any]:
@@ -40,6 +42,7 @@ class LabAccount:
             "daily_pnl": self.broker.daily_pnl(),
             "open_positions": len(self.broker.open_positions()),
             "paper": True,
+            "auto": self.auto.to_dict(),
         }
 
 
@@ -101,6 +104,7 @@ class LabAccountStore:
                     "label": acc.label,
                     "created_at": acc.created_at,
                     "broker": acc.broker.to_dict(),
+                    "auto": acc.auto.to_dict(),
                 }
             )
         tmp = self.path.with_suffix(".tmp")
@@ -124,6 +128,7 @@ class LabAccountStore:
                     token=row["token"],
                     label=row.get("label") or "Lab demo",
                     broker=broker,
+                    auto=AutoConfig.from_dict(row.get("auto")),
                     created_at=row.get("created_at") or _now().isoformat(),
                 )
                 self._accounts[acc.account_id] = acc
