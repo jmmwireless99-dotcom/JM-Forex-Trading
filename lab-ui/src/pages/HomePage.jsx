@@ -51,6 +51,19 @@ export default function HomePage() {
       </section>
 
       <section className="lab-card-grid">
+        <article className="lab-card lab-card-wide">
+          <h2>Per-pair demo URLs</h2>
+          <p>
+            Buksan bawat pair sa hiwalay na tab — may sariling account at auto-trader bawat isa.
+          </p>
+          <div className="lab-pair-url-grid">
+            {['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF'].map((id) => (
+              <a key={id} href={`/lab/${id}`} className="lab-btn lab-btn-ghost" target="_blank" rel="noopener noreferrer">
+                /lab/{id}
+              </a>
+            ))}
+          </div>
+        </article>
         <article className="lab-card">
           <h2>Bot comparison</h2>
           <p>JM FX gold stack vs generic Scalper, Grid, and Trend EAs — side by side.</p>
@@ -66,8 +79,17 @@ export default function HomePage() {
           </Link>
         </article>
         <article className="lab-card">
+          <h2>Live demo trading</h2>
+          <p>
+            Paper money with live EUR/USD, GBP/USD, and gold prices — separate lab backend, not JM FX.
+          </p>
+          <Link to="trade" className="lab-btn">
+            Open live demo
+          </Link>
+        </article>
+        <article className="lab-card">
           <h2>Pair sandbox</h2>
-          <p>Placeholder for EUR/USD, GBP/USD, and other pair experiments (lab backend TBD).</p>
+          <p>Placeholder for EUR/USD, GBP/USD, and other pair experiments.</p>
           <Link to="pairs" className="lab-btn lab-btn-ghost">
             Pair lab
           </Link>

@@ -1,96 +1,70 @@
-import { useState } from 'react'
-import { PAIR_EXPERIMENTS } from '../content/compare.js'
-
-const NOTES_KEY = 'jm_lab_pair_notes'
-
-function loadNotes() {
-  try {
-    return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}')
-  } catch {
-    return {}
-  }
-}
+import { PAIR_GUIDE, LAB_TIPS } from '../content/compare.js'
 
 export default function PairLabPage() {
-  const [selected, setSelected] = useState('EURUSD')
-  const [notes, setNotes] = useState(loadNotes)
-  const [draft, setDraft] = useState(notes.EURUSD || '')
-
-  const pair = PAIR_EXPERIMENTS.find((p) => p.id === selected) || PAIR_EXPERIMENTS[0]
-
-  function selectPair(id) {
-    setSelected(id)
-    setDraft(notes[id] || '')
-  }
-
-  function saveNote() {
-    const next = { ...notes, [selected]: draft }
-    setNotes(next)
-    try {
-      localStorage.setItem(NOTES_KEY, JSON.stringify(next))
-    } catch {
-      /* ignore */
-    }
-  }
-
   return (
     <div className="lab-page">
       <header className="lab-page-head">
-        <h1>Pair sandbox</h1>
+        <h1>Pair lab — automation guide</h1>
         <p className="lab-muted">
-          Future home for EUR/USD and other pair bots. No connection to JM FX engine yet.
+          Which forex pair fits which EA style. Paper trade on{' '}
+          <a href="#trade" className="lab-link">
+            Live demo
+          </a>{' '}
+          — separate from JM FX gold.
         </p>
       </header>
 
-      <div className="lab-pair-bar">
-        {PAIR_EXPERIMENTS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={selected === p.id ? 'on' : ''}
-            onClick={() => selectPair(p.id)}
-          >
-            {p.label}
-          </button>
+      <div className="lab-card-grid">
+        {PAIR_GUIDE.map((p) => (
+          <article key={p.id} className="lab-card">
+            <div className="lab-pair-head">
+              <h2>{p.label}</h2>
+              <span className={`lab-tag lab-tag-${p.status}`}>{p.status}</span>
+            </div>
+            <p>
+              <strong>Bot style:</strong> {p.botStyle}
+            </p>
+            <p className="lab-muted">
+              Spread: {p.spread} · Session: {p.session}
+            </p>
+            <p className="lab-muted">Lab auto: {p.labAuto} · Risk: {p.risk}</p>
+            <p>{p.note}</p>
+            {p.id !== 'XAUUSD' ? (
+              <a
+                href="#trade"
+                className="lab-btn"
+                onClick={(e) => {
+                  e.preventDefault()
+                  try {
+                    sessionStorage.setItem('jm_lab_trade_symbol', p.id)
+                  } catch {
+                    /* ignore */
+                  }
+                  window.location.hash = 'trade'
+                }}
+              >
+                Demo trade {p.label}
+              </a>
+            ) : (
+              <a href="/fx/" className="lab-btn lab-btn-ghost">
+                JM FX gold desk ↗
+              </a>
+            )}
+          </article>
         ))}
       </div>
 
-      <section className="lab-panel">
-        <div className="lab-pair-head">
-          <h2>{pair.label}</h2>
-          <span className={`lab-tag lab-tag-${pair.status}`}>{pair.status}</span>
-        </div>
-        <p>{pair.note}</p>
-
-        {pair.id === 'XAUUSD' ? (
-          <div className="lab-callout lab-callout-sm">
-            Gold is traded on the production JM FX desk. Use{' '}
-            <a href="/fx/" className="lab-link">
-              Trading Desk
-            </a>{' '}
-            or the Lab snapshot page for live data.
-          </div>
-        ) : (
-          <div className="lab-placeholder-chart" aria-hidden="true">
-            <p>Chart + strategy engine — coming in lab backend v1</p>
-            <p className="lab-muted">Planned: ECN spread check · demo paper · separate service</p>
-          </div>
-        )}
+      <section className="lab-callout">
+        <h2>Before you run any EA bot (live)</h2>
+        <ul>
+          {LAB_TIPS.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
       </section>
 
-      <section className="lab-panel">
-        <h2>Experiment notes (local)</h2>
-        <p className="lab-muted">Saved in this browser only — not synced to JM FX.</p>
-        <textarea
-          className="lab-notes"
-          rows={5}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Backtest results, spread observations, broker notes…"
-        />
-        <button type="button" className="lab-btn" onClick={saveNote}>
-          Save note
-        </button>
+      <section className="lab-disclaimer">
+        <strong>Disclaimer:</strong> Grid/martingale can wipe accounts. Lab is educational paper money only.
       </section>
     </div>
   )
