@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, connectFeed, ensureAccountSession } from './api'
+import { api, connectFeed, ensureAccountSession, saveAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -36,7 +36,7 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–5PM)',
+    asia: 'Asia / EMA_RSI (PH 7AM–8:30PM)',
     london: 'London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
@@ -109,6 +109,9 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const [loginCode, setLoginCode] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [showAccountLogin, setShowAccountLogin] = useState(false)
   const accountIdRef = useRef(null)
 
   useEffect(() => {
@@ -369,6 +372,26 @@ export default function App() {
     await run(async () => api.setStrategy(strategy))
   }
 
+  async function signInPaperAccount(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.loginAccount(loginCode.trim(), loginPassword)
+      saveAccountSession({
+        id: res.account_id,
+        token: res.token,
+        code: res.account_code,
+        label: res.account_label,
+      })
+      window.location.reload()
+    } catch (err) {
+      setError(err.message || 'Invalid account code or password')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function autoTransferBySession() {
     await run(async () => {
       const res = await api.autoTransfer()
@@ -505,7 +528,6 @@ export default function App() {
                   'manual_only',
                   'EMA_RSI_Scalp',
                   'Liquidity_Sweep_SMC',
-                  'London_Judas_Sweep',
                   'EMA_VWAP_Scalp',
                 ]
             ).map((name) => (
@@ -518,9 +540,7 @@ export default function App() {
                       ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
                       : name === 'Liquidity_Sweep_SMC'
                         ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                        : name === 'London_Judas_Sweep'
-                          ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                          : name === 'EMA_VWAP_Scalp'
+                        : name === 'EMA_VWAP_Scalp'
                             ? 'EMA_VWAP_Scalp (9/21 EMA + VWAP)'
                             : name}
               </option>
@@ -607,7 +627,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: AI_ML · London_Judas · EMA_RSI · SMC · VWAP · manual
+              Strategies: AI_ML · EMA_RSI · SMC · VWAP · manual
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
@@ -708,6 +728,41 @@ export default function App() {
               cannot see your capital, open trades, or history. Trade log is kept when you
               change deposit; open positions close into the log.
             </p>
+            <p className="meta">
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => setShowAccountLogin((v) => !v)}
+              >
+                {showAccountLogin ? 'Hide sign-in' : 'Sign in to existing account (code + password)'}
+              </button>
+            </p>
+            {showAccountLogin ? (
+              <form className="account-login-form" onSubmit={signInPaperAccount}>
+                <label>
+                  Account code
+                  <input
+                    value={loginCode}
+                    onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                    placeholder="3295D7"
+                    autoComplete="username"
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="demo12345"
+                    autoComplete="current-password"
+                  />
+                </label>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  Sign in
+                </button>
+              </form>
+            ) : null}
           </div>
           <span className={`badge ${account.paper !== false && mode === 'paper' ? 'badge-live' : ''}`}>
             {mode === 'paper' ? 'PAPER DEMO' : 'LIVE MT'}
@@ -1164,7 +1219,11 @@ export default function App() {
                   {trades.map((t) => (
                     <tr key={t.id || t.ticket}>
                       <td className="meta">
-                        {t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}
+                        {(() => {
+                          const raw =
+                            t.status === 'CLOSED' && t.closed_at ? t.closed_at : t.opened_at
+                          return raw ? new Date(raw).toLocaleString() : '—'
+                        })()}
                       </td>
                       <td>
                         <span

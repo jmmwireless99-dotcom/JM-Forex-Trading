@@ -14,6 +14,7 @@ from pathlib import Path
 from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.trade_journal import TradeJournal
+from app.investment.users import hash_password, verify_password
 from app.models.domain import utcnow
 from app.risk.manager import RiskManager
 
@@ -24,6 +25,18 @@ DESK_LABEL = "Internal desk"
 
 def _short_code() -> str:
     return secrets.token_hex(3).upper()  # 6 chars
+
+
+def _parse_stored_dt(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _contract_size(symbol: str) -> float:
@@ -103,7 +116,23 @@ class PaperAccount:
     risk: RiskManager
     follow_auto: bool = True
     is_desk: bool = False
+    password_hash: str | None = None
     created_at: datetime = field(default_factory=utcnow)
+
+    def _effective_daily_pnl(self) -> float:
+        """Journal-backed PnL when broker positions were not restored from disk."""
+        snap = self.broker.snapshot()
+        if abs(snap.daily_pnl) >= 0.01:
+            return snap.daily_pnl
+        from app.models.domain import TradeStatus
+
+        closed = [t for t in self.journal.list(500) if t.status == TradeStatus.CLOSED]
+        journal_net = sum(float(t.realized_pnl or 0) for t in closed)
+        unrealized = sum(p.unrealized_pnl for p in self.broker.open_positions())
+        derived = round(journal_net + unrealized, 2)
+        if derived != 0:
+            return derived
+        return round(snap.equity - snap.deposit, 2)
 
     def public_info(self) -> dict:
         snap = self.broker.snapshot()
@@ -117,12 +146,14 @@ class PaperAccount:
             "balance": snap.balance,
             "equity": snap.equity,
             "open_positions": snap.open_positions,
+            "daily_pnl": self._effective_daily_pnl(),
             "trades_logged": self.journal.summary().get("total", 0),
         }
 
     def snapshot_payload(self) -> dict:
         """Account snapshot dict tagged with identity for API / WS clients."""
         snap = self.broker.snapshot().model_dump(mode="json")
+        snap["daily_pnl"] = self._effective_daily_pnl()
         return {
             **snap,
             "account_id": self.id,
@@ -243,6 +274,35 @@ class PaperAccountRegistry:
     def persist(self) -> None:
         self.save()
 
+    def get_by_code(self, code: str) -> PaperAccount | None:
+        needle = (code or "").strip().upper()
+        if not needle:
+            return None
+        with self._lock:
+            for acc in self._accounts.values():
+                if not acc.is_desk and acc.code.upper() == needle:
+                    return acc
+        return None
+
+    def set_password(self, account_id: str, password: str) -> PaperAccount:
+        if len(password) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        with self._lock:
+            acc = self._accounts.get(account_id)
+            if acc is None or acc.is_desk:
+                raise KeyError("Account not found")
+            acc.password_hash = hash_password(password)
+            self._save()
+            return acc
+
+    def authenticate_by_code(self, code: str, password: str) -> PaperAccount | None:
+        acc = self.get_by_code(code)
+        if acc is None or not acc.password_hash:
+            return None
+        if not verify_password(password, acc.password_hash):
+            return None
+        return acc
+
     def reconcile_session_restarts(self, mids: dict[str, float]) -> int:
         """Heal session_restart closes that were saved with $0 PnL (missing exit)."""
         from app.models.domain import TradeStatus
@@ -307,6 +367,7 @@ class PaperAccountRegistry:
                         "created_at": acc.created_at.isoformat(),
                         "deposit": snap.deposit,
                         "balance": snap.balance,
+                        "password_hash": acc.password_hash,
                         "trades": [
                             t.model_dump(mode="json")
                             for t in acc.journal.list(500, include_rejected=True)
@@ -376,6 +437,8 @@ class PaperAccountRegistry:
                             realized_pnl=float(t.get("realized_pnl") or 0),
                             mode=t.get("mode") or "paper",
                             reject_reason=t.get("reject_reason"),
+                            opened_at=_parse_stored_dt(t.get("opened_at")),
+                            closed_at=_parse_stored_dt(t.get("closed_at")),
                         )
                         journal._trades.append(row_log)
                         journal._by_ticket[row_log.ticket] = row_log
@@ -399,6 +462,7 @@ class PaperAccountRegistry:
                     risk=risk,
                     follow_auto=bool(row.get("follow_auto", True)),
                     is_desk=False,
+                    password_hash=row.get("password_hash"),
                     created_at=created_at,
                 )
                 self._accounts[acc.id] = acc

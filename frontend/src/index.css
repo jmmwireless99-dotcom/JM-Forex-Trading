@@ -240,6 +240,40 @@ select {
   margin-bottom: 0.85rem;
 }
 
+.account-login-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.account-login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.account-login-form input {
+  min-width: 140px;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  color: var(--mint);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+
 .capital-calc {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
