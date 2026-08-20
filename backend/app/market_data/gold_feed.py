@@ -57,12 +57,14 @@ _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _CACHE_TTL_SEC = 20.0
 
 
-def _yahoo_range_for_interval(interval: str) -> str:
+def _yahoo_range_for_interval(interval: str, limit: int = 300) -> str:
     if interval in {"1m", "5m", "15m"}:
         return "5d"
     if interval in {"30m", "60m", "1h"}:
         return "1mo"
     if interval in {"1d", "1wk"}:
+        if limit > 45:
+            return "6mo"
         return "1mo"
     return "3mo"
 
@@ -76,7 +78,7 @@ def _http_json(url: str, timeout: float = 12) -> Any:
 
 
 def _from_yahoo(symbol: str, y_interval: str, limit: int) -> dict[str, Any]:
-    y_range = _yahoo_range_for_interval(y_interval)
+    y_range = _yahoo_range_for_interval(y_interval, limit)
     params = urllib.parse.urlencode({"interval": y_interval, "range": y_range})
     urls = [
         f"{YAHOO_CHART.format(symbol=urllib.parse.quote(symbol))}?{params}",

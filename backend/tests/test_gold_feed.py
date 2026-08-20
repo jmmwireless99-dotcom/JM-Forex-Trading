@@ -9,7 +9,8 @@ def test_interval_map_defaults():
     assert INTERVAL_MAP["1d"] == "1d"
     assert _yahoo_range_for_interval("5m") == "5d"
     assert _yahoo_range_for_interval("60m") == "1mo"
-    assert _yahoo_range_for_interval("1d") == "1mo"
+    assert _yahoo_range_for_interval("1d", limit=45) == "1mo"
+    assert _yahoo_range_for_interval("1d", limit=70) == "6mo"
 
 
 def test_fetch_gold_candles_live():
