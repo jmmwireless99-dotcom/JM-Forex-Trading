@@ -20,6 +20,11 @@ class CreateAccountBody(BaseModel):
     label: str = Field("Lab demo", max_length=80)
 
 
+class PairSuiteBody(BaseModel):
+    deposit: float = Field(10_000.0, ge=50, le=1_000_000)
+    start_auto: bool = True
+
+
 class OrderBody(BaseModel):
     symbol: str = "EURUSD"
     side: str  # BUY | SELL
@@ -94,6 +99,22 @@ async def create_account(body: CreateAccountBody) -> dict:
         "account": acc.snapshot(),
         "token": acc.token,
         "message": f"Lab demo account {acc.code} created with ${body.deposit:,.2f}",
+    }
+
+
+@router.post("/accounts/pair-suite")
+async def create_pair_suite(body: PairSuiteBody) -> dict:
+    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF) for parallel dry-run."""
+    rows = store.bootstrap_pair_suite(deposit=body.deposit, start_auto=body.start_auto)
+    accounts = []
+    for row in rows:
+        acc = store.get(row["account_id"])
+        if acc:
+            accounts.append({**row, "account": acc.snapshot(), "pair_preset": preset_for(row["symbol"])})
+    return {
+        "ok": True,
+        "message": f"Pair suite ready — {len(accounts)} accounts (one per pair)",
+        "accounts": accounts,
     }
 
 

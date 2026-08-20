@@ -12,8 +12,12 @@ from typing import Any
 
 from app.auto_config import AutoConfig
 from app.broker import LabBroker
+from app.pair_strategies import preset_for
 
 log = logging.getLogger(__name__)
+
+SUITE_LABEL_PREFIX = "Pair suite · "
+PAIR_SUITE_SYMBOLS = ("EURUSD", "GBPUSD", "AUDNZD", "EURCHF")
 
 
 def _now() -> datetime:
@@ -92,6 +96,50 @@ class LabAccountStore:
 
     def all_accounts(self) -> list[LabAccount]:
         return list(self._accounts.values())
+
+    def find_suite_account(self, symbol: str) -> LabAccount | None:
+        label = f"{SUITE_LABEL_PREFIX}{symbol.upper()}"
+        for acc in self._accounts.values():
+            if acc.label == label:
+                return acc
+        return None
+
+    def bootstrap_pair_suite(
+        self,
+        *,
+        deposit: float = 10_000.0,
+        start_auto: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Create one paper account per major pair for parallel dry-run testing."""
+        rows: list[dict[str, Any]] = []
+        for sym in PAIR_SUITE_SYMBOLS:
+            acc = self.find_suite_account(sym)
+            if acc is None:
+                acc = self.create(deposit=deposit, label=f"{SUITE_LABEL_PREFIX}{sym}")
+            preset = preset_for(sym)
+            acc.auto.symbol = sym
+            acc.auto.strategy = preset["strategy"]
+            acc.auto.lots = float(preset["lots"])
+            acc.auto.sl_pips = float(preset["sl_pips"])
+            acc.auto.tp_pips = float(preset["tp_pips"])
+            if start_auto:
+                acc.auto.enabled = True
+                acc.auto.last_bar_time = 0
+                acc.auto.last_block_reason = None
+            rows.append(
+                {
+                    "symbol": sym,
+                    "account_id": acc.account_id,
+                    "code": acc.code,
+                    "token": acc.token,
+                    "label": acc.label,
+                    "strategy": acc.auto.strategy,
+                    "auto_enabled": acc.auto.enabled,
+                    "deposit": acc.broker.deposit,
+                }
+            )
+        self.persist()
+        return rows
 
     def persist(self) -> None:
         rows = []

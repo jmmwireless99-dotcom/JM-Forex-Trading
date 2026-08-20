@@ -4,6 +4,7 @@ const LAB_API = (import.meta.env.VITE_LAB_API || '/lab/api').replace(/\/$/, '')
 const JM_FX_API = (import.meta.env.VITE_JM_API || '/fx/api').replace(/\/$/, '')
 
 const SESSION_KEY = 'jm_lab_trade_session'
+const SUITE_KEY = 'jm_lab_pair_suite'
 
 export function loadLabSession() {
   try {
@@ -21,15 +22,35 @@ export function saveLabSession(session) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
 
+export function loadPairSuite() {
+  try {
+    return JSON.parse(localStorage.getItem(SUITE_KEY) || 'null')
+  } catch {
+    return null
+  }
+}
+
+export function savePairSuite(suite) {
+  if (!suite) {
+    localStorage.removeItem(SUITE_KEY)
+    return
+  }
+  localStorage.setItem(SUITE_KEY, JSON.stringify(suite))
+}
+
 async function labRequest(path, options = {}) {
-  const session = loadLabSession()
+  return labRequestAs(null, path, options)
+}
+
+async function labRequestAs(session, path, options = {}) {
+  const active = session || loadLabSession()
   const headers = {
     Accept: 'application/json',
     ...(options.headers || {}),
   }
-  if (session?.account_id && session?.token) {
-    headers['X-JM-Lab-Account-Id'] = session.account_id
-    headers['X-JM-Lab-Account-Token'] = session.token
+  if (active?.account_id && active?.token) {
+    headers['X-JM-Lab-Account-Id'] = active.account_id
+    headers['X-JM-Lab-Account-Token'] = active.token
   }
   const res = await fetch(`${LAB_API}${path}`, { ...options, headers })
   if (!res.ok) {
@@ -63,9 +84,16 @@ export const labTradeApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deposit, label }),
     }),
-  account: () => labRequest('/account'),
-  positions: () => labRequest('/positions'),
-  trades: () => labRequest('/trades'),
+  createPairSuite: (deposit = 10000, startAuto = true) =>
+    labRequest('/accounts/pair-suite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deposit, start_auto: startAuto }),
+    }),
+  account: (session) => labRequestAs(session, '/account'),
+  positions: (session) => labRequestAs(session, '/positions'),
+  trades: (session) => labRequestAs(session, '/trades'),
+  auto: (session) => labRequestAs(session, '/auto'),
   marketOrder: (body) =>
     labRequest('/orders/market', {
       method: 'POST',
@@ -74,14 +102,14 @@ export const labTradeApi = {
     }),
   closePosition: (id) =>
     labRequest(`/positions/${encodeURIComponent(id)}/close`, { method: 'POST' }),
-  auto: () => labRequest('/auto'),
-  strategies: () => labRequest('/strategies'),
-  setAuto: (body) =>
-    labRequest('/auto', {
+  setAuto: (body, session) =>
+    labRequestAs(session, '/auto', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  setAutoFor: (session, body) => labTradeApi.setAuto(body, session),
+  strategies: () => labRequest('/strategies'),
 }
 
 export const labApi = {

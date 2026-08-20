@@ -58,12 +58,23 @@ async def _maybe_run_auto(sym: str, mid: float) -> None:
         store.persist()
 
 
+def _tick_cycle() -> list[str]:
+    auto_syms = sorted(_auto_symbols())
+    if not auto_syms:
+        return list(SUPPORTED)
+    rest = [s for s in SUPPORTED if s not in auto_syms]
+    return auto_syms + rest
+
+
 async def tick_loop() -> None:
     global _running
     _running = True
     idx = 0
+    cycle = _tick_cycle()
     while _running:
-        sym = SUPPORTED[idx % len(SUPPORTED)]
+        if idx % max(len(cycle), 1) == 0:
+            cycle = _tick_cycle()
+        sym = cycle[idx % len(cycle)]
         idx += 1
         try:
             q = await asyncio.to_thread(fetch_quote, sym)

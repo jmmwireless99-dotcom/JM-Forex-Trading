@@ -616,7 +616,81 @@ a {
   font-size: 0.95rem;
 }
 
+.lab-suite-list {
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--lab-muted);
+  font-size: 0.9rem;
+}
+
+.lab-suite-list li {
+  margin: 0.35rem 0;
+}
+
+.lab-suite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.lab-suite-tip {
+  font-size: 0.85rem;
+  margin: 0 0 1rem;
+}
+
+.lab-suite-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.lab-suite-card {
+  margin: 0;
+}
+
+.lab-suite-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.lab-suite-card-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.lab-suite-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.75rem 0;
+}
+
+.lab-suite-stats .lab-stat-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--lab-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lab-suite-open {
+  font-size: 0.88rem;
+  margin: 0.35rem 0;
+}
+
+.lab-suite-signal {
+  font-size: 0.82rem;
+  margin: 0.35rem 0 0.65rem;
+}
+
 @media (max-width: 640px) {
+  .lab-suite-grid {
+    grid-template-columns: 1fr;
+  }
+
   .lab-hero h1 {
     font-size: 1.85rem;
   }
