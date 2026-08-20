@@ -47,7 +47,7 @@ async def test_strategies_and_status(client):
     assert "EMA_RSI_Scalp" in names
     assert "EMA_VWAP_Scalp" in names
     assert "Liquidity_Sweep_SMC" in names
-    assert "London_Judas_Sweep" in names
+    assert "London_Judas_Sweep" not in names
 
     res = await client.get("/api/status")
     assert res.status_code == 200
@@ -64,18 +64,15 @@ async def test_desk_endpoint(client):
     data = res.json()
     assert data["mode"] == "scalp_desk"
     assert data["recommended_strategy"] == "AI_ML"
-    assert data["recommended_london"] == "AI_ML → London_Judas_Sweep"
+    assert data["recommended_london"] == "Stand aside"
     assert data["recommended_asia"] == "AI_ML → EMA_RSI_Scalp"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
-    assert len(data["strategy_details"]) == 6
+    assert len(data["strategy_details"]) == 5
     aiml = next(s for s in data["strategy_details"] if s["id"] == "AI_ML")
     assert "Machine Learning" in aiml["name"]
-    london = next(s for s in data["strategy_details"] if s["id"] == "London_Judas_Sweep")
-    assert london["order_type"] == "LIMIT"
-    assert len(london["entry_rules"]) >= 4
 
 
 @pytest.mark.asyncio
@@ -231,10 +228,6 @@ async def test_apply_strategy_switches(client):
     body = res.json()
     assert body["active_strategy"] == "Liquidity_Sweep_SMC"
 
-    res = await client.post("/api/strategies/active", json={"name": "London_Judas_Sweep"})
-    assert res.status_code == 200
-    assert res.json()["active_strategy"] == "London_Judas_Sweep"
-
     res = await client.post("/api/strategies/active", json={"name": "manual_only"})
     assert res.status_code == 200
     body = res.json()
@@ -259,7 +252,6 @@ async def test_auto_transfer_session_follow(client):
         "AI_ML",
         "EMA_RSI_Scalp",
         "EMA_VWAP_Scalp",
-        "London_Judas_Sweep",
         "Liquidity_Sweep_SMC",
     }
     assert body["active_strategy"] == body["to"]

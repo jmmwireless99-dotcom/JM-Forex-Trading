@@ -43,7 +43,6 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # Classic child under the AI_ML umbrella (session → setup engine)
 _CHILD_BY_SESSION = {
     "asia": "EMA_RSI_Scalp",
-    "london": "London_Judas_Sweep",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
     "new_york": "EMA_VWAP_Scalp",
 }
@@ -60,7 +59,7 @@ class AutoStrategyRouter:
         # Auto-follow always parks on AI_ML when the session is tradeable.
         self.session_map: dict[str, str | None] = {
             "asia": "AI_ML",
-            "london": "AI_ML",
+            "london": None,
             "london_close": None,
             "london_wind_down": None,
             "london_ny_overlap": "AI_ML",
@@ -156,7 +155,7 @@ class AutoStrategyRouter:
                 "ph": "15:00-18:59",
                 "slot": "London",
                 "session": "london",
-                "strategies": "AI_ML → London_Judas_Sweep",
+                "strategies": "Stand aside",
             },
             {
                 "days": "Mon-Fri",

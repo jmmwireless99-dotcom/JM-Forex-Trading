@@ -56,10 +56,10 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia 00:00–06:59 — build Asia box + EMA_RSI
-    London 07:00–10:59 — Judas sweep/entry (strategy window ends 11:00)
-    London wind-down 11:00–11:59 — no new Judas entries (pre-kill)
-    London close 12:00–12:59 — kill pending, no new entries
+    Asia 00:00–06:59 — EMA_RSI
+    London 07:00–10:59 — stand aside (Judas removed)
+    London wind-down 11:00–11:59 — no new entries
+    London close 12:00–12:59 — kill pending limits
     Overlap 13:00–17:59 — SMC
     New York 18:00–19:59 — EMA_VWAP
     Off-hours / weekend — stand aside
@@ -78,17 +78,15 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         )
     if 7 <= hour < 11:
         return SessionWindow(
-            SessionTier.ALLOWED,
+            SessionTier.AVOID,
             "london",
-            "London Judas window (UTC 07:00–10:59) — sweep + ChoCH (+ FVG or market)",
+            "London session (UTC 07:00–10:59) — stand aside",
         )
     if 11 <= hour < 12:
-        # Keep wind-down, but still tradeable for AI_ML/Judas late fills that
-        # already confirmed structure before 11:00 UTC (router parks AI_ML).
         return SessionWindow(
             SessionTier.AVOID,
             "london_wind_down",
-            "London wind-down (UTC 11:00–11:59) — no new Judas entries before kill",
+            "London wind-down (UTC 11:00–11:59) — no new entries before kill",
         )
     if 12 <= hour < 13:
         return SessionWindow(
@@ -165,14 +163,12 @@ def next_session_hint(ts: datetime) -> dict:
 
 _SESSION_STRATEGY = {
     "asia": "AI_ML",
-    "london": "AI_ML",
     "london_ny_overlap": "AI_ML",
     "new_york": "AI_ML",
 }
 
 _SESSION_CHILD = {
     "asia": "EMA_RSI_Scalp",
-    "london": "London_Judas_Sweep",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
     "new_york": "EMA_VWAP_Scalp",
 }
