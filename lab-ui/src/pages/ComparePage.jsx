@@ -1,4 +1,4 @@
-import { BOT_ROWS } from '../data/compare.js'
+import { BOT_ROWS } from '../content/compare.js'
 
 export default function ComparePage() {
   return (

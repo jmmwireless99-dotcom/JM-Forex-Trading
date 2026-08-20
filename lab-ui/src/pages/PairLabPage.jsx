@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PAIR_EXPERIMENTS } from '../data/compare.js'
+import { PAIR_EXPERIMENTS } from '../content/compare.js'
 
 const NOTES_KEY = 'jm_lab_pair_notes'
 
