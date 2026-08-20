@@ -382,6 +382,10 @@ class TradingEngine:
                 self._last_session_slot = rec.get("session")
         self.running = True
         self._started_at = time.time()
+        if not self.using_mt():
+            mids = dict(self.market.last_mids())
+            if mids:
+                self.accounts.reconcile_session_restarts(mids)
         self._task = asyncio.create_task(self._loop())
         await self._emit("engine", self.status().model_dump(mode="json"))
         if self.auto_enabled:
@@ -396,6 +400,18 @@ class TradingEngine:
             except asyncio.CancelledError:
                 pass
             self._task = None
+        if not self.using_mt():
+            async with self._lock:
+                for acct in self.accounts.all():
+                    for pos in list(acct.broker.open_positions()):
+                        closed = acct.broker.close_position(
+                            pos.id, reason="session_restart"
+                        )
+                        if closed:
+                            acct.risk.record_realized_pnl(closed.realized_pnl)
+                            acct.journal.record_close(closed)
+                    acct.journal.update_open_pnl(acct.broker.open_positions())
+                self.accounts.save()
         await self._emit("engine", self.status().model_dump(mode="json"))
 
     def set_strategy(self, name: str) -> None:
