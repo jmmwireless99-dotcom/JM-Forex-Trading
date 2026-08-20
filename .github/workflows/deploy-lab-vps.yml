@@ -1,0 +1,65 @@
+name: Deploy JM Lab to VPS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lab-ui/**'
+      - 'scripts/deploy-lab-portal.sh'
+      - 'scripts/install-apache-lab-snippet.sh'
+      - 'deploy/apache-lab-path.conf'
+      - '.github/workflows/deploy-lab-vps.yml'
+
+jobs:
+  deploy-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy lab UI over SSH (does not touch JM FX)
+        env:
+          HOST: ${{ secrets.JM_VPS_HOST || '72.62.73.235' }}
+          USER: ${{ secrets.JM_VPS_USER }}
+          PASSWORD: ${{ secrets.JM_VPS_SSH_PASSWORD }}
+          KEY: ${{ secrets.JM_VPS_SSH_KEY }}
+          BRANCH: main
+        run: |
+          set -euo pipefail
+          if [[ -z "${USER:-}" ]]; then
+            echo "Add GitHub secret JM_VPS_USER"
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          if [[ -n "${KEY:-}" ]]; then
+            KEY_FILE="$(mktemp)"
+            printf '%s\n' "$KEY" > "$KEY_FILE"
+            chmod 600 "$KEY_FILE"
+            SSH_OPTS+=(-i "$KEY_FILE")
+            SSH=(ssh "${SSH_OPTS[@]}" "${USER}@${HOST}")
+          elif [[ -n "${PASSWORD:-}" ]]; then
+            SSH=(sshpass -p "$PASSWORD" ssh "${SSH_OPTS[@]}" -o PreferredAuthentications=password -o PubkeyAuthentication=no "${USER}@${HOST}")
+          else
+            echo "Add JM_VPS_SSH_PASSWORD or JM_VPS_SSH_KEY"
+            exit 1
+          fi
+          "${SSH[@]}" "set -euo pipefail
+            cd /opt/jm-forex-trading
+            export BRANCH='${BRANCH}'
+            git fetch origin \"\${BRANCH}\"
+            git checkout -B \"\${BRANCH}\" \"origin/\${BRANCH}\"
+            git reset --hard \"origin/\${BRANCH}\"
+            chmod +x scripts/deploy-lab-portal.sh scripts/install-apache-lab-snippet.sh
+            ./scripts/install-apache-lab-snippet.sh || true
+            ./scripts/deploy-lab-portal.sh
+          "
+      - name: Smoke check JM FX still OK
+        run: |
+          curl -fsS "https://jmtechsolution.cloud/fx/api/health"
+          curl -fsS "https://jmtechsolution.cloud/fx/api/status" | python3 -c \
+            "import sys,json;d=json.load(sys.stdin);assert d.get('running'),'engine down';print('JM FX OK', d.get('active_strategy'))"
+      - name: Smoke check JM Lab
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://jmtechsolution.cloud/lab/")
+          test "$code" = "200" || (echo "Lab HTTP $code" && exit 1)
+          echo "JM Lab OK"
