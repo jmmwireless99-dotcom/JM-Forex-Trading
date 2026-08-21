@@ -161,6 +161,24 @@ export default function PairSuitePage() {
     window.open(`/lab/${acc.symbol}`, '_blank', 'noopener,noreferrer')
   }
 
+  async function clearAllLogs() {
+    if (!suite?.accounts?.length) return
+    if (!window.confirm('Clear trade logs, signals, and open positions for all 5 pairs? Balance resets to $10,000 each.')) {
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const res = await labTradeApi.clearPairSuiteLogs()
+      setNote(res.message || 'All pair logs cleared')
+      await refresh()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function resetSuite() {
     savePairSuite(null)
     setSuite(null)
@@ -230,6 +248,9 @@ export default function PairSuitePage() {
           </button>
           <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => toggleAll(false)}>
             Stop all
+          </button>
+          <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={clearAllLogs}>
+            Clear all logs
           </button>
           <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={resetSuite}>
             Reset local

@@ -142,6 +142,27 @@ class LabAccountStore:
         self.persist()
         return rows
 
+    def clear_pair_suite_logs(self) -> list[dict[str, Any]]:
+        """Clear trade/signal logs for all 5 pair-suite accounts."""
+        cleared: list[dict[str, Any]] = []
+        for sym in PAIR_SUITE_SYMBOLS:
+            acc = self.find_suite_account(sym)
+            if acc is None:
+                continue
+            acc.broker.clear_logs()
+            acc.auto.clear_logs()
+            cleared.append(
+                {
+                    "symbol": sym,
+                    "code": acc.code,
+                    "account_id": acc.account_id,
+                    "balance": acc.broker.balance,
+                    "open_positions": 0,
+                }
+            )
+        self.persist()
+        return cleared
+
     def persist(self) -> None:
         rows = []
         for acc in self._accounts.values():

@@ -154,6 +154,35 @@ async def create_pair_suite(body: PairSuiteBody) -> dict:
     }
 
 
+@router.post("/accounts/pair-suite/clear-logs")
+async def clear_pair_suite_logs() -> dict:
+    """Clear trade log + auto signals for all 5 pair-suite paper accounts."""
+    rows = store.clear_pair_suite_logs()
+    if not rows:
+        raise HTTPException(404, "No pair suite accounts found — create suite first")
+    return {
+        "ok": True,
+        "message": f"Cleared logs for {len(rows)} pair-suite accounts",
+        "accounts": rows,
+    }
+
+
+@router.post("/account/clear-logs")
+async def clear_account_logs(
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    acc.broker.clear_logs()
+    acc.auto.clear_logs()
+    store.persist()
+    return {
+        "ok": True,
+        "message": "Trade and signal logs cleared",
+        "account": acc.snapshot(),
+    }
+
+
 @router.get("/account")
 async def get_account(
     x_jm_lab_account_id: str | None = Header(None),

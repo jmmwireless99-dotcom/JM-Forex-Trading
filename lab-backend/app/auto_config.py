@@ -52,3 +52,10 @@ class AutoConfig:
             last_block_reason=data.get("last_block_reason"),
             signals=sigs,
         )
+
+    def clear_logs(self) -> None:
+        self.signals.clear()
+        self.last_signal_at = None
+        self.last_block_reason = None
+        self.last_bar_time = 0
+        self.last_loss_bar_time = 0

@@ -72,6 +72,12 @@ class LabBroker:
     def open_positions(self) -> list[Position]:
         return [p for p in self.positions if p.status == "OPEN"]
 
+    def clear_logs(self) -> None:
+        """Reset trade log, positions, and balance to deposit (paper demo fresh start)."""
+        self.trades.clear()
+        self.positions.clear()
+        self.balance = round(float(self.deposit), 2)
+
     def _pip(self, symbol: str) -> float:
         return 0.01 if symbol == "XAUUSD" else 0.0001
 
