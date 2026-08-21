@@ -44,6 +44,10 @@ export default function TradePage({ fixedPair = null }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
+  const [editSl, setEditSl] = useState('')
+  const [editTp, setEditTp] = useState('')
+  const [editSlPips, setEditSlPips] = useState('')
+  const [editTpPips, setEditTpPips] = useState('')
 
   useEffect(() => {
     if (lockedPair) setLabSessionPair(lockedPair)
@@ -162,6 +166,33 @@ export default function TradePage({ fixedPair = null }) {
     return sym === 'XAUUSD' ? 0.01 : 0.0001
   }
 
+  function pipsFromEntryPrice(sym, side, entry, price, kind) {
+    const pip = pipSize(sym)
+    const e = Number(entry)
+    const p = Number(price)
+    if (!Number.isFinite(e) || !Number.isFinite(p)) return null
+    let dist
+    if (kind === 'sl') {
+      dist = side === 'BUY' ? e - p : p - e
+    } else {
+      dist = side === 'BUY' ? p - e : e - p
+    }
+    if (dist < 0) return null
+    return Math.round(dist / pip)
+  }
+
+  function pricesFromEntryPips(sym, side, entry, slPips, tpPips) {
+    const pip = pipSize(sym)
+    const e = Number(entry)
+    const sl = Number(slPips) * pip
+    const tp = Number(tpPips) * pip
+    if (!Number.isFinite(e)) return null
+    if (side === 'BUY') {
+      return { stop_loss: e - sl, take_profit: e + tp }
+    }
+    return { stop_loss: e + sl, take_profit: e - tp }
+  }
+
   function levels(side, mid) {
     const pip = pipSize(symbol)
     const sl = Number(slPips) * pip
@@ -210,6 +241,44 @@ export default function TradePage({ fixedPair = null }) {
     }
   }
 
+  const handleUpdateStops = useCallback(
+    async (positionId, body) => {
+      if (!session) return
+      await labTradeApi.updatePositionStops(positionId, body, session)
+      await refresh()
+    },
+    [session, refresh],
+  )
+
+  async function saveStops(positionId, p) {
+    setBusy(true)
+    setError('')
+    try {
+      const sl = editSl.trim() === '' ? null : Number(editSl)
+      const tp = editTp.trim() === '' ? null : Number(editTp)
+      const slP = editSlPips.trim() === '' ? null : Number(editSlPips)
+      const tpP = editTpPips.trim() === '' ? null : Number(editTpPips)
+      const body = {}
+      if (sl != null && Number.isFinite(sl)) body.stop_loss = sl
+      if (tp != null && Number.isFinite(tp)) body.take_profit = tp
+      if (!Object.keys(body).length && slP != null && tpP != null && p) {
+        const lv = pricesFromEntryPips(p.symbol, p.side, p.entry_price, slP, tpP)
+        if (lv) {
+          body.stop_loss = lv.stop_loss
+          body.take_profit = lv.take_profit
+        }
+      }
+      if (!Object.keys(body).length) throw new Error('Enter SL/TP price or pips')
+      await labTradeApi.updatePositionStops(positionId, body, session)
+      setNote('SL / TP updated')
+      await refresh()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function toggleAuto(on) {
     setBusy(true)
     setError('')
@@ -238,7 +307,6 @@ export default function TradePage({ fixedPair = null }) {
   }
 
   const tick = ticks[symbol]
-  const open = positions.filter((p) => p.status === 'OPEN')
   const pairGuide = useMemo(() => PAIR_GUIDE.find((p) => p.id === symbol), [symbol])
   const pairPreset = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
   const stratInfo = STRATEGY_INFO[auto?.strategy || pairPreset.strategy] || {}
@@ -253,6 +321,27 @@ export default function TradePage({ fixedPair = null }) {
   useEffect(() => {
     applyPairPreset(symbol)
   }, [symbol])
+
+  const openPos = positions.filter((p) => p.status === 'OPEN')
+  const open = openPos.filter((p) => p.symbol === symbol)
+  const openForChart = openPos
+
+  useEffect(() => {
+    const p = open[0]
+    if (!p) {
+      setEditSl('')
+      setEditTp('')
+      return
+    }
+    setEditSl(p.stop_loss != null ? fmtPrice(p.symbol, p.stop_loss) : '')
+    setEditTp(p.take_profit != null ? fmtPrice(p.symbol, p.take_profit) : '')
+    const slP =
+      p.stop_loss != null ? pipsFromEntryPrice(p.symbol, p.side, p.entry_price, p.stop_loss, 'sl') : null
+    const tpP =
+      p.take_profit != null ? pipsFromEntryPrice(p.symbol, p.side, p.entry_price, p.take_profit, 'tp') : null
+    setEditSlPips(slP != null ? String(slP) : '')
+    setEditTpPips(tpP != null ? String(tpP) : '')
+  }, [open.length, open[0]?.id, open[0]?.stop_loss, open[0]?.take_profit])
 
   if (!session) {
     return (
@@ -364,7 +453,12 @@ export default function TradePage({ fixedPair = null }) {
             ))}
           </div>
         )}
-        <LabCandleChart symbol={symbol} livePrice={tick?.mid} positions={open} />
+        <LabCandleChart
+          symbol={symbol}
+          livePrice={tick?.mid}
+          positions={openForChart}
+          onUpdateStops={open.length ? handleUpdateStops : null}
+        />
         {pairGuide ? (
           <p className="lab-muted lab-pair-hint">
             <strong>{pairGuide.botStyle}</strong> · {pairGuide.note}
@@ -446,16 +540,95 @@ export default function TradePage({ fixedPair = null }) {
           <p className="lab-muted">Flat — no open exposure.</p>
         ) : (
           open.map((p) => (
-            <div key={p.id} className="lab-trade-row">
-              <span>
-                {p.side} {p.symbol} · {p.lots} @ {fmtPrice(p.symbol, p.entry_price)}
-              </span>
-              <span className={p.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
-                uP&amp;L ${money(p.unrealized_pnl)}
-              </span>
-              <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => closeOpen(p.id)}>
-                Close
-              </button>
+            <div key={p.id} className="lab-open-pos">
+              <div className="lab-trade-row">
+                <span>
+                  {p.side} {p.symbol} · {p.lots} @ {fmtPrice(p.symbol, p.entry_price)}
+                </span>
+                <span className={p.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
+                  uP&amp;L ${money(p.unrealized_pnl)}
+                </span>
+                <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => closeOpen(p.id)}>
+                  Close
+                </button>
+              </div>
+              <div className="lab-stops-edit">
+                <p className="lab-muted lab-stops-hint">
+                  Adjust SL / TP on chart (drag lines) or edit pips / prices below · entry{' '}
+                  {fmtPrice(p.symbol, p.entry_price)}
+                </p>
+                <div className="lab-trade-controls">
+                  <label>
+                    SL (pips)
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={editSlPips}
+                      onChange={(e) => {
+                        setEditSlPips(e.target.value)
+                        const lv = pricesFromEntryPips(p.symbol, p.side, p.entry_price, e.target.value, editTpPips)
+                        if (lv) {
+                          setEditSl(fmtPrice(p.symbol, lv.stop_loss))
+                          setEditTp(fmtPrice(p.symbol, lv.take_profit))
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    TP (pips)
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={editTpPips}
+                      onChange={(e) => {
+                        setEditTpPips(e.target.value)
+                        const lv = pricesFromEntryPips(p.symbol, p.side, p.entry_price, editSlPips, e.target.value)
+                        if (lv) {
+                          setEditSl(fmtPrice(p.symbol, lv.stop_loss))
+                          setEditTp(fmtPrice(p.symbol, lv.take_profit))
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Stop loss
+                    <input
+                      type="number"
+                      step={symbol === 'XAUUSD' ? '0.01' : '0.00001'}
+                      value={editSl}
+                      onChange={(e) => {
+                        setEditSl(e.target.value)
+                        const n = Number(e.target.value)
+                        if (Number.isFinite(n)) {
+                          const sp = pipsFromEntryPrice(p.symbol, p.side, p.entry_price, n, 'sl')
+                          if (sp != null) setEditSlPips(String(sp))
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Take profit
+                    <input
+                      type="number"
+                      step={symbol === 'XAUUSD' ? '0.01' : '0.00001'}
+                      value={editTp}
+                      onChange={(e) => {
+                        setEditTp(e.target.value)
+                        const n = Number(e.target.value)
+                        if (Number.isFinite(n)) {
+                          const tpP = pipsFromEntryPrice(p.symbol, p.side, p.entry_price, n, 'tp')
+                          if (tpP != null) setEditTpPips(String(tpP))
+                        }
+                      }}
+                    />
+                  </label>
+                  <button type="button" className="lab-btn" disabled={busy} onClick={() => saveStops(p.id, p)}>
+                    Update SL / TP
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         )}

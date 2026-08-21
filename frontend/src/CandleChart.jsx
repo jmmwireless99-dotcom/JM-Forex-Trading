@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createChart, LineStyle } from 'lightweight-charts'
 import { api } from './api'
 
@@ -186,6 +186,20 @@ function resolveLivePrice(livePrice, liveCandle, candles) {
   return null
 }
 
+const DRAG_HIT_PX = 12
+
+function roundGold(n) {
+  return Number(Number(n).toFixed(2))
+}
+
+function validStopPrice(side, entry, price, kind) {
+  const s = String(side).toUpperCase()
+  if (s === 'BUY') {
+    return kind === 'sl' ? price < entry : price > entry
+  }
+  return kind === 'sl' ? price > entry : price < entry
+}
+
 export default function CandleChart({
   candles = [],
   liveCandle = null,
@@ -196,14 +210,19 @@ export default function CandleChart({
   showEma = true,
   showRsi = true,
   rsiPeriod = 14,
+  onUpdateStops = null,
 }) {
   const hostRef = useRef(null)
+  const wrapRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
   const emaRefs = useRef({ ema20: null, ema50: null, ema200: null })
   const rsiRef = useRef(null)
   const rsiLevelLinesRef = useRef([])
   const priceLinesRef = useRef([])
+  const stopLinesRef = useRef({ entry: null, sl: null, tp: null })
+  const posMetaRef = useRef(null)
+  const dragRef = useRef({ kind: null, startPrice: null })
   const livePriceLineRef = useRef(null)
   const candleTimesRef = useRef([])
   const displayRowsRef = useRef([])
@@ -212,6 +231,7 @@ export default function CandleChart({
   const [histRows, setHistRows] = useState([])
   const [histStatus, setHistStatus] = useState('idle') // idle | loading | ready | error
   const [histError, setHistError] = useState('')
+  const [dragHint, setDragHint] = useState('')
 
   const openPositions = useMemo(
     () =>
@@ -221,6 +241,13 @@ export default function CandleChart({
       }),
     [positions],
   )
+
+  const editablePos = useMemo(() => {
+    if (!onUpdateStops || openPositions.length !== 1) return null
+    return openPositions[0]
+  }, [onUpdateStops, openPositions])
+
+  const editable = Boolean(editablePos)
 
   const liveRows = useMemo(
     () => buildCandleRows(candles, liveCandle),
@@ -496,10 +523,120 @@ export default function CandleChart({
     }
   }, [livePrice, liveCandle, candles, displayRows, histStatus, range])
 
-  // Entry / SL / TP
+  // Entry / SL / TP — editable (single position) or read-only (multi)
+  const syncEditableLines = useCallback(
+    (p) => {
+      const series = seriesRef.current
+      if (!series || !p) return
+      const side = sideOf(p.side)
+      const lines = stopLinesRef.current
+      const slPx = Number(p.stop_loss)
+      const tpPx = Number(p.take_profit)
+      const entryPx = Number(p.entry_price ?? p.entry)
+      const slTitle = Number.isFinite(slPx) ? `SL ${slPx.toFixed(2)}` : 'SL'
+      const tpTitle = Number.isFinite(tpPx) ? `TP ${tpPx.toFixed(2)}` : 'TP'
+      const entryTitle = `${side} @ ${entryPx.toFixed(2)}`
+
+      if (!lines.entry) {
+        lines.entry = series.createPriceLine({
+          price: entryPx,
+          color: side === 'BUY' ? '#7dffb3' : '#ff9f6b',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: entryTitle,
+        })
+      } else {
+        lines.entry.applyOptions({ price: entryPx, color: side === 'BUY' ? '#7dffb3' : '#ff9f6b', title: entryTitle })
+      }
+
+      if (Number.isFinite(slPx) && slPx > 0) {
+        if (!lines.sl) {
+          lines.sl = series.createPriceLine({
+            price: slPx,
+            color: '#ff6b6b',
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: slTitle,
+          })
+        } else {
+          lines.sl.applyOptions({ price: slPx, title: slTitle })
+        }
+      } else if (lines.sl) {
+        series.removePriceLine(lines.sl)
+        lines.sl = null
+      }
+
+      if (Number.isFinite(tpPx) && tpPx > 0) {
+        if (!lines.tp) {
+          lines.tp = series.createPriceLine({
+            price: tpPx,
+            color: '#7dffb3',
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: tpTitle,
+          })
+        } else {
+          lines.tp.applyOptions({ price: tpPx, title: tpTitle })
+        }
+      } else if (lines.tp) {
+        series.removePriceLine(lines.tp)
+        lines.tp = null
+      }
+
+      posMetaRef.current = {
+        id: p.id,
+        side,
+        entry_price: entryPx,
+        stop_loss: Number.isFinite(slPx) ? slPx : null,
+        take_profit: Number.isFinite(tpPx) ? tpPx : null,
+      }
+    },
+    [],
+  )
+
+  const clearEditableLines = useCallback(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const lines = stopLinesRef.current
+    for (const key of ['entry', 'sl', 'tp']) {
+      if (lines[key]) {
+        try {
+          series.removePriceLine(lines[key])
+        } catch {
+          /* ignore */
+        }
+        lines[key] = null
+      }
+    }
+    posMetaRef.current = null
+  }, [])
+
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
+
+    if (editable) {
+      for (const line of priceLinesRef.current) {
+        try {
+          series.removePriceLine(line)
+        } catch {
+          /* ignore */
+        }
+      }
+      priceLinesRef.current = []
+      if (dragRef.current.kind) return
+      if (!editablePos) {
+        clearEditableLines()
+        return
+      }
+      syncEditableLines(editablePos)
+      return
+    }
+
+    clearEditableLines()
     for (const line of priceLinesRef.current) {
       try {
         series.removePriceLine(line)
@@ -548,7 +685,130 @@ export default function CandleChart({
         priceLinesRef.current.push(line)
       }
     })
-  }, [openPositions])
+  }, [clearEditableLines, editable, editablePos, openPositions, syncEditableLines])
+
+  const nearestDragKind = useCallback(
+    (clientY) => {
+      const series = seriesRef.current
+      const meta = posMetaRef.current
+      if (!series || !meta || !editable) return null
+      const rect = hostRef.current?.getBoundingClientRect()
+      if (!rect) return null
+      const candidates = []
+      if (meta.stop_loss != null) {
+        const y = series.priceToCoordinate(meta.stop_loss)
+        if (y != null) candidates.push({ kind: 'sl', dist: Math.abs(clientY - rect.top - y) })
+      }
+      if (meta.take_profit != null) {
+        const y = series.priceToCoordinate(meta.take_profit)
+        if (y != null) candidates.push({ kind: 'tp', dist: Math.abs(clientY - rect.top - y) })
+      }
+      candidates.sort((a, b) => a.dist - b.dist)
+      if (!candidates.length || candidates[0].dist > DRAG_HIT_PX) return null
+      return candidates[0].kind
+    },
+    [editable],
+  )
+
+  const applyDragPrice = useCallback((kind, price) => {
+    const meta = posMetaRef.current
+    const lines = stopLinesRef.current
+    if (!meta || !lines[kind]) return null
+    const rounded = roundGold(price)
+    if (!validStopPrice(meta.side, meta.entry_price, rounded, kind)) return null
+    const title = kind === 'sl' ? `SL ${rounded.toFixed(2)}` : `TP ${rounded.toFixed(2)}`
+    lines[kind].applyOptions({ price: rounded, title })
+    return rounded
+  }, [])
+
+  useEffect(() => {
+    if (!editable) return undefined
+    const wrap = wrapRef.current
+    if (!wrap) return undefined
+
+    const setChartLocked = (locked) => {
+      chartRef.current?.applyOptions({
+        handleScroll: !locked,
+        handleScale: !locked,
+      })
+    }
+
+    const onMove = (ev) => {
+      const drag = dragRef.current
+      if (!drag.kind) return
+      const series = seriesRef.current
+      const rect = hostRef.current?.getBoundingClientRect()
+      if (!series || !rect) return
+      const price = series.coordinateToPrice(ev.clientY - rect.top)
+      if (price == null) return
+      const applied = applyDragPrice(drag.kind, price)
+      if (applied != null) {
+        setDragHint(`${drag.kind === 'sl' ? 'SL' : 'TP'} → ${applied.toFixed(2)}`)
+      }
+    }
+
+    const onUp = async (ev) => {
+      const drag = dragRef.current
+      if (!drag.kind) return
+      dragRef.current = { kind: null, startPrice: null }
+      setChartLocked(false)
+      wrap.style.cursor = ''
+      document.body.style.userSelect = ''
+
+      const meta = posMetaRef.current
+      const series = seriesRef.current
+      const rect = hostRef.current?.getBoundingClientRect()
+      if (!meta || !series || !rect || !onUpdateStops) {
+        setDragHint('')
+        return
+      }
+
+      const price = series.coordinateToPrice(ev.clientY - rect.top)
+      const rounded = price != null ? roundGold(price) : null
+      setDragHint('')
+
+      if (rounded == null || !validStopPrice(meta.side, meta.entry_price, rounded, drag.kind)) {
+        syncEditableLines(editablePos)
+        return
+      }
+
+      const orig = drag.kind === 'sl' ? meta.stop_loss : meta.take_profit
+      if (orig != null && Math.abs(orig - rounded) < 0.001) return
+
+      const body = drag.kind === 'sl' ? { stop_loss: rounded } : { take_profit: rounded }
+      try {
+        await onUpdateStops(meta.id, body)
+      } catch {
+        syncEditableLines(editablePos)
+      }
+    }
+
+    const onDown = (ev) => {
+      if (ev.button !== 0) return
+      const kind = nearestDragKind(ev.clientY)
+      if (!kind) return
+      ev.preventDefault()
+      const meta = posMetaRef.current
+      dragRef.current = {
+        kind,
+        startPrice: kind === 'sl' ? meta?.stop_loss : meta?.take_profit,
+      }
+      setChartLocked(true)
+      wrap.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      setDragHint(`Drag ${kind === 'sl' ? 'SL' : 'TP'} — release to save`)
+    }
+
+    wrap.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      wrap.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setChartLocked(false)
+    }
+  }, [applyDragPrice, editable, editablePos, nearestDragKind, onUpdateStops, syncEditableLines])
 
   // Day separators + signal arrows
   useEffect(() => {
@@ -650,6 +910,7 @@ export default function CandleChart({
           </button>
         ))}
         <span className="meta desk-range-hint">{activeRange.hint}</span>
+        {editable ? <span className="meta chart-drag-hint">· drag SL/TP</span> : null}
         {histStatus === 'loading' ? <span className="meta">Loading history…</span> : null}
         {histStatus === 'error' ? (
           <span className="meta desk-range-error">{histError || 'History failed'}</span>
@@ -669,7 +930,13 @@ export default function CandleChart({
         <span className="chart-leg buy">▲ BUY</span>
         <span className="chart-leg sell">▼ SELL</span>
       </div>
-      <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
+      {dragHint ? <p className="chart-drag-status">{dragHint}</p> : null}
+      <div
+        ref={wrapRef}
+        className={`chart-canvas-wrap${editable ? ' chart-editable' : ''}`}
+      >
+        <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
+      </div>
       {range !== 'live' ? (
         <p className="desk-history-footnote">
           History via market gold OHLC (GC=F / PAXG) · UTC day separators · white{' '}

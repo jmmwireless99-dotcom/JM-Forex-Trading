@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, connectFeed, ensureAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
@@ -31,6 +31,48 @@ function normalizeStrategy(label) {
   if (!label) return 'manual_only'
   if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
   return label
+}
+
+function fmtGoldPrice(n) {
+  return Number(n || 0).toFixed(2)
+}
+
+const GOLD_PIP = 0.01
+
+function pipsFromEntry(side, entry, price, kind) {
+  const e = Number(entry)
+  const p = Number(price)
+  if (!Number.isFinite(e) || !Number.isFinite(p)) return null
+  const s = String(side).toUpperCase()
+  let dist
+  if (kind === 'sl') {
+    dist = s === 'BUY' ? e - p : p - e
+  } else {
+    dist = s === 'BUY' ? p - e : e - p
+  }
+  if (dist < 0) return null
+  return Math.round(dist / GOLD_PIP)
+}
+
+function pricesFromPips(side, entry, slPips, tpPips) {
+  const e = Number(entry)
+  const sl = Number(slPips) * GOLD_PIP
+  const tp = Number(tpPips) * GOLD_PIP
+  if (!Number.isFinite(e) || !Number.isFinite(sl) || !Number.isFinite(tp)) return null
+  const s = String(side).toUpperCase()
+  if (s === 'BUY') {
+    return { stop_loss: roundGold(e - sl), take_profit: roundGold(e + tp) }
+  }
+  return { stop_loss: roundGold(e + sl), take_profit: roundGold(e - tp) }
+}
+
+function roundGold(n) {
+  return Number(Number(n).toFixed(2))
+}
+
+function previewStops(side, mid, slPips, tpPips) {
+  if (mid == null) return null
+  return pricesFromPips(side, mid, slPips, tpPips)
 }
 
 function sessionLabel(raw) {
@@ -97,6 +139,12 @@ export default function App() {
   const [manualLots, setManualLots] = useState(0.01)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
+  const [editSl, setEditSl] = useState('')
+  const [editTp, setEditTp] = useState('')
+  const [editSlPips, setEditSlPips] = useState('')
+  const [editTpPips, setEditTpPips] = useState('')
+  const [manualSlPips, setManualSlPips] = useState('90')
+  const [manualTpPips, setManualTpPips] = useState('225')
   const [chartMode, setChartMode] = useState(() => {
     try {
       const saved = localStorage.getItem('jm_chart_mode')
@@ -429,6 +477,8 @@ export default function App() {
         lots: Number(manualLots) || 0.01,
         comment: 'manual',
         auto_stops: autoStops,
+        stop_loss_pips: autoStops ? Number(manualSlPips) || undefined : undefined,
+        take_profit_pips: autoStops ? Number(manualTpPips) || undefined : undefined,
       })
       if (order?.status === 'REJECTED') {
         throw new Error(order.reject_reason || 'Order rejected')
@@ -458,11 +508,90 @@ export default function App() {
     })
   }
 
+  async function saveStops(positionId) {
+    await run(async () => {
+      const sl = editSl.trim() === '' ? null : Number(editSl)
+      const tp = editTp.trim() === '' ? null : Number(editTp)
+      const slP = editSlPips.trim() === '' ? null : Number(editSlPips)
+      const tpP = editTpPips.trim() === '' ? null : Number(editTpPips)
+      const body = {}
+      if (sl != null && Number.isFinite(sl)) body.stop_loss = sl
+      if (tp != null && Number.isFinite(tp)) body.take_profit = tp
+      if (!Object.keys(body).length && slP != null && tpP != null && Number.isFinite(slP) && Number.isFinite(tpP)) {
+        body.stop_loss_pips = slP
+        body.take_profit_pips = tpP
+      }
+      if (!Object.keys(body).length) throw new Error('Enter SL/TP price or pips')
+      await api.setStops(positionId, body)
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote('SL / TP updated')
+      return null
+    })
+  }
+
+  function syncEditFromPips(p, slPips, tpPips) {
+    const lv = pricesFromPips(p.side, p.entry_price, slPips, tpPips)
+    if (lv) {
+      setEditSl(fmtGoldPrice(lv.stop_loss))
+      setEditTp(fmtGoldPrice(lv.take_profit))
+    }
+  }
+
+  function syncPipsFromPrice(p, slPrice, tpPrice) {
+    const entry = Number(p.entry_price)
+    if (slPrice != null && Number.isFinite(slPrice)) {
+      const sp = pipsFromEntry(p.side, entry, slPrice, 'sl')
+      if (sp != null) setEditSlPips(String(sp))
+    }
+    if (tpPrice != null && Number.isFinite(tpPrice)) {
+      const tpP = pipsFromEntry(p.side, entry, tpPrice, 'tp')
+      if (tpP != null) setEditTpPips(String(tpP))
+    }
+  }
+
+  const handleUpdateStops = useCallback(async (positionId, body) => {
+    await run(async () => {
+      await api.setStops(positionId, body)
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote('SL / TP updated')
+      return null
+    })
+  }, [])
+
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
   const hasOpen = positions.length > 0
+  const canEditStops = mode === 'paper' && positions.length === 1
+
+  useEffect(() => {
+    if (capital?.default_stop_loss_pips != null) {
+      setManualSlPips(String(capital.default_stop_loss_pips))
+    }
+    if (capital?.default_take_profit_pips != null) {
+      setManualTpPips(String(capital.default_take_profit_pips))
+    }
+  }, [capital?.default_stop_loss_pips, capital?.default_take_profit_pips])
+
+  useEffect(() => {
+    const p = positions[0]
+    if (!p) {
+      setEditSl('')
+      setEditTp('')
+      setEditSlPips('')
+      setEditTpPips('')
+      return
+    }
+    setEditSl(p.stop_loss != null ? fmtGoldPrice(p.stop_loss) : '')
+    setEditTp(p.take_profit != null ? fmtGoldPrice(p.take_profit) : '')
+    const slP = p.stop_loss != null ? pipsFromEntry(p.side, p.entry_price, p.stop_loss, 'sl') : null
+    const tpP = p.take_profit != null ? pipsFromEntry(p.side, p.entry_price, p.take_profit, 'tp') : null
+    setEditSlPips(slP != null ? String(slP) : '')
+    setEditTpPips(tpP != null ? String(tpP) : '')
+  }, [positions])
 
   return (
     <div className="app">
@@ -829,6 +958,30 @@ export default function App() {
               onChange={(e) => setManualLots(e.target.value)}
             />
           </label>
+          <label className="lots-field">
+            SL (pips)
+            <input
+              type="number"
+              min="1"
+              max="500"
+              step="1"
+              value={manualSlPips}
+              disabled={busy}
+              onChange={(e) => setManualSlPips(e.target.value)}
+            />
+          </label>
+          <label className="lots-field">
+            TP (pips)
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              value={manualTpPips}
+              disabled={busy}
+              onChange={(e) => setManualTpPips(e.target.value)}
+            />
+          </label>
           <label className="auto-stops-toggle">
             <input
               type="checkbox"
@@ -857,6 +1010,14 @@ export default function App() {
             BUY {gold?.ask != null ? Number(gold.ask).toFixed(2) : ''}
           </button>
         </div>
+        {autoStops && gold?.mid != null ? (
+          <p className="meta manual-stops-preview">
+            @ mid {Number(gold.mid).toFixed(2)} · SL{' '}
+            {fmtGoldPrice(previewStops('BUY', gold.mid, manualSlPips, manualTpPips)?.stop_loss)} · TP{' '}
+            {fmtGoldPrice(previewStops('BUY', gold.mid, manualSlPips, manualTpPips)?.take_profit)}
+            {' '}(BUY ref — SELL mirrors)
+          </p>
+        ) : null}
         {orderNote ? <div className="meta manual-note">{orderNote}</div> : null}
         {hasOpen ? (
           <div className="meta">
@@ -911,9 +1072,101 @@ export default function App() {
             symbol="XAUUSD"
             positions={positions}
             signals={signals}
+            onUpdateStops={canEditStops ? handleUpdateStops : null}
           />
         )}
       </section>
+
+      {hasOpen && positions[0] ? (
+        <section className="panel stops-panel-highlight" aria-label="Adjust SL TP">
+          <h2>SL / TP — open trade</h2>
+          {mode === 'paper' ? (
+            <>
+              <p className="meta stops-hint">
+                Adjust on chart (drag lines on Desk tape) or edit pips / prices below · entry{' '}
+                {fmtGoldPrice(positions[0].entry_price)} · {positions[0].side}
+              </p>
+              <div className="stops-edit-row">
+                <label>
+                  SL (pips)
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={editSlPips}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setEditSlPips(e.target.value)
+                      syncEditFromPips(positions[0], e.target.value, editTpPips)
+                    }}
+                  />
+                </label>
+                <label>
+                  TP (pips)
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={editTpPips}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setEditTpPips(e.target.value)
+                      syncEditFromPips(positions[0], editSlPips, e.target.value)
+                    }}
+                  />
+                </label>
+                <label>
+                  Stop loss
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editSl}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setEditSl(v)
+                      const n = v.trim() === '' ? null : Number(v)
+                      if (n != null && Number.isFinite(n)) {
+                        syncPipsFromPrice(positions[0], n, null)
+                      }
+                    }}
+                  />
+                </label>
+                <label>
+                  Take profit
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editTp}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setEditTp(v)
+                      const n = v.trim() === '' ? null : Number(v)
+                      if (n != null && Number.isFinite(n)) {
+                        syncPipsFromPrice(positions[0], null, n)
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => saveStops(positions[0].id)}
+                >
+                  Update SL / TP
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="meta stops-hint">
+              Live SL / TP edit: switch to <strong>paper</strong> mode. Current SL{' '}
+              {positions[0].stop_loss ?? '—'} · TP {positions[0].take_profit ?? '—'}
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <div className="layout">
         <section className="panel">
