@@ -125,6 +125,7 @@ class LabAccountStore:
             if start_auto:
                 acc.auto.enabled = True
                 acc.auto.last_bar_time = 0
+                acc.auto.last_loss_bar_time = 0
                 acc.auto.last_block_reason = None
             rows.append(
                 {

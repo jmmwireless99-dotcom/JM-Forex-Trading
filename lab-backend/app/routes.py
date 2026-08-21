@@ -289,6 +289,7 @@ async def set_auto(
         if body.tp_pips is None:
             a.tp_pips = p["tp_pips"]
         a.last_bar_time = 0
+        a.last_loss_bar_time = 0
     if body.lots is not None:
         a.lots = body.lots
     if body.sl_pips is not None:
