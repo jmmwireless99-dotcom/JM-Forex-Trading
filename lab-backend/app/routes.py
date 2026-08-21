@@ -42,6 +42,13 @@ class AutoBody(BaseModel):
     strategy: str = "EMA_RSI"
 
 
+class UpdateStopsBody(BaseModel):
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    clear_stop_loss: bool = False
+    clear_take_profit: bool = False
+
+
 def _auth(account_id: str | None, token: str | None):
     if not account_id:
         raise HTTPException(400, "Missing X-JM-Lab-Account-Id")
@@ -238,6 +245,32 @@ async def close_position(
         raise HTTPException(404, "Position not found")
     store.persist()
     return {"ok": True, "position": closed.to_dict(), "account": acc.snapshot()}
+
+
+@router.patch("/positions/{position_id}/stops")
+async def update_position_stops(
+    position_id: str,
+    body: UpdateStopsBody,
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    for sym, t in get_ticks().items():
+        acc.broker.update_tick(sym, t["mid"])
+    try:
+        updated = acc.broker.update_stops(
+            position_id,
+            stop_loss=body.stop_loss,
+            take_profit=body.take_profit,
+            clear_stop_loss=body.clear_stop_loss,
+            clear_take_profit=body.clear_take_profit,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if updated is None:
+        raise HTTPException(404, "Position not found")
+    store.persist()
+    return {"ok": True, "position": updated.to_dict(), "account": acc.snapshot()}
 
 
 @router.get("/auto")
