@@ -67,8 +67,8 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
         "lots": 0.01,
-        "sl_pips": 45.0,
-        "tp_pips": 90.0,
+        "sl_pips": 70.0,
+        "tp_pips": 120.0,
         "min_bars_between": 4,
         "cooldown_bars_after_loss": 5,
         "label": "Trend · EMA+RSI gold",

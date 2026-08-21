@@ -35,8 +35,8 @@ export const PAIR_PRESETS = {
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
     lots: 0.01,
-    sl_pips: 45,
-    tp_pips: 90,
+    sl_pips: 70,
+    tp_pips: 120,
     label: 'Trend · EMA+RSI gold',
     botStyle: 'Trend · Session scalp',
   },
