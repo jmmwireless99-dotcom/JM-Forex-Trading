@@ -598,6 +598,36 @@ a {
   padding-bottom: 0;
 }
 
+.lab-levels-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 0.45rem 0 0.65rem;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab-levels-row em {
+  font-style: normal;
+  color: var(--lab-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.25rem;
+}
+
+.lab-levels-row span:nth-child(1) em {
+  color: var(--lab-accent);
+}
+
+.lab-levels-row span:nth-child(2) em {
+  color: #f87171;
+}
+
+.lab-levels-row span:nth-child(3) em {
+  color: var(--lab-ok);
+}
+
 .lab-stops-edit {
   margin-top: 0.65rem;
 }
@@ -800,7 +830,13 @@ a {
 
 .lab-suite-open {
   font-size: 0.88rem;
-  margin: 0.35rem 0;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.lab-suite-levels {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .lab-suite-signal {

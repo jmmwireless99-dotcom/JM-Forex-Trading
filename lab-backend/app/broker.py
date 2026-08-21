@@ -205,6 +205,8 @@ class LabBroker:
                     "side": p.side,
                     "lots": p.lots,
                     "entry_price": p.entry_price,
+                    "stop_loss": p.stop_loss,
+                    "take_profit": p.take_profit,
                     "exit_price": round(exit_price, 5 if p.symbol != "XAUUSD" else 2),
                     "pnl": pnl,
                     "reason": reason,

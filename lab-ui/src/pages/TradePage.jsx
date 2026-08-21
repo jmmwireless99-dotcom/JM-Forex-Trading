@@ -18,6 +18,12 @@ function fmtPrice(symbol, n) {
   return Number(n || 0).toFixed(d)
 }
 
+function fmtLevel(symbol, n) {
+  if (n == null || n === '') return '—'
+  const v = Number(n)
+  return Number.isFinite(v) ? fmtPrice(symbol, v) : '—'
+}
+
 export default function TradePage({ fixedPair = null }) {
   const lockedPair = fixedPair ? String(fixedPair).toUpperCase() : null
 
@@ -543,7 +549,7 @@ export default function TradePage({ fixedPair = null }) {
             <div key={p.id} className="lab-open-pos">
               <div className="lab-trade-row">
                 <span>
-                  {p.side} {p.symbol} · {p.lots} @ {fmtPrice(p.symbol, p.entry_price)}
+                  {p.side} {p.symbol} · {p.lots} lot(s)
                 </span>
                 <span className={p.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
                   uP&amp;L ${money(p.unrealized_pnl)}
@@ -551,6 +557,17 @@ export default function TradePage({ fixedPair = null }) {
                 <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => closeOpen(p.id)}>
                   Close
                 </button>
+              </div>
+              <div className="lab-levels-row">
+                <span>
+                  <em>Entry</em> {fmtLevel(p.symbol, p.entry_price)}
+                </span>
+                <span>
+                  <em>SL</em> {fmtLevel(p.symbol, p.stop_loss)}
+                </span>
+                <span>
+                  <em>TP</em> {fmtLevel(p.symbol, p.take_profit)}
+                </span>
               </div>
               <div className="lab-stops-edit">
                 <p className="lab-muted lab-stops-hint">
@@ -647,6 +664,10 @@ export default function TradePage({ fixedPair = null }) {
                   <th>Pair</th>
                   <th>Side</th>
                   <th>Lots</th>
+                  <th>Entry</th>
+                  <th>SL</th>
+                  <th>TP</th>
+                  <th>Exit</th>
                   <th>P&amp;L</th>
                 </tr>
               </thead>
@@ -657,6 +678,10 @@ export default function TradePage({ fixedPair = null }) {
                     <td>{t.symbol}</td>
                     <td>{t.side}</td>
                     <td>{t.lots}</td>
+                    <td>{fmtLevel(t.symbol, t.entry_price)}</td>
+                    <td>{fmtLevel(t.symbol, t.stop_loss)}</td>
+                    <td>{fmtLevel(t.symbol, t.take_profit)}</td>
+                    <td>{fmtLevel(t.symbol, t.exit_price)}</td>
                     <td className={t.pnl >= 0 ? 'lab-pos' : 'lab-neg'}>${money(t.pnl)}</td>
                   </tr>
                 ))}

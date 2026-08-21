@@ -14,6 +14,12 @@ function fmtPrice(symbol, n) {
   return Number(n || 0).toFixed(d)
 }
 
+function fmtLevel(symbol, n) {
+  if (n == null || n === '') return '—'
+  const v = Number(n)
+  return Number.isFinite(v) ? fmtPrice(symbol, v) : '—'
+}
+
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -294,12 +300,18 @@ export default function PairSuitePage() {
                 <p className="lab-muted">Waiting for next M5 bar close…</p>
               )}
               {open ? (
-                <p className="lab-suite-open">
-                  Open: {open.side} {open.lots} @ {fmtPrice(row.symbol, open.entry_price)} · uP&amp;L{' '}
-                  <span className={open.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
-                    ${money(open.unrealized_pnl)}
-                  </span>
-                </p>
+                <>
+                  <p className="lab-suite-open">
+                    Open: {open.side} {open.lots} lot(s) · uP&amp;L{' '}
+                    <span className={open.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
+                      ${money(open.unrealized_pnl)}
+                    </span>
+                  </p>
+                  <p className="lab-suite-levels lab-muted">
+                    Entry {fmtLevel(row.symbol, open.entry_price)} · SL {fmtLevel(row.symbol, open.stop_loss)} · TP{' '}
+                    {fmtLevel(row.symbol, open.take_profit)}
+                  </p>
+                </>
               ) : (
                 <p className="lab-muted">Flat</p>
               )}
