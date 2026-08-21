@@ -44,6 +44,8 @@ export default function TradePage({ fixedPair = null }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
+  const [editSl, setEditSl] = useState('')
+  const [editTp, setEditTp] = useState('')
 
   useEffect(() => {
     if (lockedPair) setLabSessionPair(lockedPair)
@@ -210,6 +212,35 @@ export default function TradePage({ fixedPair = null }) {
     }
   }
 
+  const handleUpdateStops = useCallback(
+    async (positionId, body) => {
+      if (!session) return
+      await labTradeApi.updatePositionStops(positionId, body, session)
+      await refresh()
+    },
+    [session, refresh],
+  )
+
+  async function saveStops(positionId) {
+    setBusy(true)
+    setError('')
+    try {
+      const sl = editSl.trim() === '' ? null : Number(editSl)
+      const tp = editTp.trim() === '' ? null : Number(editTp)
+      const body = {}
+      if (sl != null && Number.isFinite(sl)) body.stop_loss = sl
+      if (tp != null && Number.isFinite(tp)) body.take_profit = tp
+      if (!Object.keys(body).length) throw new Error('Enter SL and/or TP price')
+      await labTradeApi.updatePositionStops(positionId, body, session)
+      setNote('SL / TP updated')
+      await refresh()
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function toggleAuto(on) {
     setBusy(true)
     setError('')
@@ -238,7 +269,6 @@ export default function TradePage({ fixedPair = null }) {
   }
 
   const tick = ticks[symbol]
-  const open = positions.filter((p) => p.status === 'OPEN')
   const pairGuide = useMemo(() => PAIR_GUIDE.find((p) => p.id === symbol), [symbol])
   const pairPreset = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
   const stratInfo = STRATEGY_INFO[auto?.strategy || pairPreset.strategy] || {}
@@ -253,6 +283,21 @@ export default function TradePage({ fixedPair = null }) {
   useEffect(() => {
     applyPairPreset(symbol)
   }, [symbol])
+
+  const openPos = positions.filter((p) => p.status === 'OPEN')
+  const open = openPos.filter((p) => p.symbol === symbol)
+  const openForChart = openPos
+
+  useEffect(() => {
+    const p = open[0]
+    if (!p) {
+      setEditSl('')
+      setEditTp('')
+      return
+    }
+    setEditSl(p.stop_loss != null ? fmtPrice(p.symbol, p.stop_loss) : '')
+    setEditTp(p.take_profit != null ? fmtPrice(p.symbol, p.take_profit) : '')
+  }, [open.length, open[0]?.id, open[0]?.stop_loss, open[0]?.take_profit])
 
   if (!session) {
     return (
@@ -364,7 +409,12 @@ export default function TradePage({ fixedPair = null }) {
             ))}
           </div>
         )}
-        <LabCandleChart symbol={symbol} livePrice={tick?.mid} positions={open} />
+        <LabCandleChart
+          symbol={symbol}
+          livePrice={tick?.mid}
+          positions={openForChart}
+          onUpdateStops={open.length ? handleUpdateStops : null}
+        />
         {pairGuide ? (
           <p className="lab-muted lab-pair-hint">
             <strong>{pairGuide.botStyle}</strong> · {pairGuide.note}
@@ -446,16 +496,44 @@ export default function TradePage({ fixedPair = null }) {
           <p className="lab-muted">Flat — no open exposure.</p>
         ) : (
           open.map((p) => (
-            <div key={p.id} className="lab-trade-row">
-              <span>
-                {p.side} {p.symbol} · {p.lots} @ {fmtPrice(p.symbol, p.entry_price)}
-              </span>
-              <span className={p.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
-                uP&amp;L ${money(p.unrealized_pnl)}
-              </span>
-              <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => closeOpen(p.id)}>
-                Close
-              </button>
+            <div key={p.id} className="lab-open-pos">
+              <div className="lab-trade-row">
+                <span>
+                  {p.side} {p.symbol} · {p.lots} @ {fmtPrice(p.symbol, p.entry_price)}
+                </span>
+                <span className={p.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
+                  uP&amp;L ${money(p.unrealized_pnl)}
+                </span>
+                <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => closeOpen(p.id)}>
+                  Close
+                </button>
+              </div>
+              <div className="lab-stops-edit">
+                <p className="lab-muted lab-stops-hint">Adjust SL / TP on chart (drag lines) or type prices below.</p>
+                <div className="lab-trade-controls">
+                  <label>
+                    Stop loss
+                    <input
+                      type="number"
+                      step={symbol === 'XAUUSD' ? '0.01' : '0.00001'}
+                      value={editSl}
+                      onChange={(e) => setEditSl(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Take profit
+                    <input
+                      type="number"
+                      step={symbol === 'XAUUSD' ? '0.01' : '0.00001'}
+                      value={editTp}
+                      onChange={(e) => setEditTp(e.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="lab-btn" disabled={busy} onClick={() => saveStops(p.id)}>
+                    Update SL / TP
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         )}
