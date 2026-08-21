@@ -88,20 +88,13 @@ async function fxRequest(path) {
   return res.json()
 }
 
-export async function ensurePairAccount(symbol) {
-  const sym = String(symbol).toUpperCase()
-  const suite = loadPairSuite()
-  const cached = suite?.accounts?.find((a) => a.symbol === sym)
-  if (cached?.account_id && cached?.token) {
-    return {
-      account_id: cached.account_id,
-      token: cached.token,
-      code: cached.code,
-      symbol: sym,
-    }
-  }
-  const res = await labTradeApi.createPairSuite(10000, true)
-  const accounts = (res.accounts || []).map((a) => ({
+export function isInvalidLabSessionError(err) {
+  const msg = String(err?.message || err || '')
+  return msg.includes('Invalid lab account session') || msg.includes('Missing X-JM-Lab-Account-Id')
+}
+
+function mapSuiteAccounts(res) {
+  return (res.accounts || []).map((a) => ({
     symbol: a.symbol,
     account_id: a.account_id,
     code: a.code,
@@ -109,17 +102,65 @@ export async function ensurePairAccount(symbol) {
     label: a.label,
     strategy: a.strategy,
   }))
+}
+
+export async function syncPairSuiteFromServer(startAuto = false) {
+  const res = await labTradeApi.createPairSuite(10000, startAuto)
+  const accounts = mapSuiteAccounts(res)
   if (accounts.length) {
     savePairSuite({ accounts, created_at: new Date().toISOString() })
   }
-  const row = accounts.find((a) => a.symbol === sym)
-  if (!row) throw new Error(`No demo account for ${sym}`)
-  return {
-    account_id: row.account_id,
-    token: row.token,
-    code: row.code,
-    symbol: sym,
+  return { accounts, message: res.message }
+}
+
+async function validateLabSession(session) {
+  await labTradeApi.account(session)
+  return true
+}
+
+export async function ensurePairAccount(symbol) {
+  const sym = String(symbol).toUpperCase()
+
+  async function pickFromServer(startAuto = false) {
+    const res = await labTradeApi.createPairSuite(10000, startAuto)
+    const accounts = mapSuiteAccounts(res)
+    if (accounts.length) {
+      savePairSuite({ accounts, created_at: new Date().toISOString() })
+    }
+    const row = accounts.find((a) => a.symbol === sym)
+    if (!row) throw new Error(`No demo account for ${sym}`)
+    return {
+      account_id: row.account_id,
+      token: row.token,
+      code: row.code,
+      symbol: sym,
+    }
   }
+
+  const candidates = []
+  const perPair = loadLabSession(sym)
+  if (perPair?.account_id && perPair?.token) candidates.push({ ...perPair, symbol: sym })
+  const suite = loadPairSuite()
+  const cached = suite?.accounts?.find((a) => a.symbol === sym)
+  if (cached?.account_id && cached?.token) {
+    candidates.push({
+      account_id: cached.account_id,
+      token: cached.token,
+      code: cached.code,
+      symbol: sym,
+    })
+  }
+
+  for (const row of candidates) {
+    try {
+      await validateLabSession(row)
+      return row
+    } catch (e) {
+      if (!isInvalidLabSessionError(e)) throw e
+    }
+  }
+
+  return pickFromServer(false)
 }
 
 export const labTradeApi = {

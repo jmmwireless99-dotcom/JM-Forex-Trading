@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import LabCandleChart from '../LabCandleChart.jsx'
 import { PAIR_GUIDE, PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
-import { labTradeApi, loadLabSession, saveLabSession, ensurePairAccount, setLabSessionPair } from '../api.js'
+import { labTradeApi, loadLabSession, saveLabSession, ensurePairAccount, setLabSessionPair, isInvalidLabSessionError } from '../api.js'
 import { PAIR_URL_SYMBOLS, pairTradePath } from '../routing.js'
 import { pipsFromEntryPrice, pipSize, positionStopPips, pricesFromEntryPips } from '../pips.js'
 
@@ -61,7 +61,7 @@ export default function TradePage({ fixedPair = null }) {
   }, [lockedPair])
 
   useEffect(() => {
-    if (!lockedPair || session) return undefined
+    if (!lockedPair) return undefined
 
     let cancelled = false
     setBooting(true)
@@ -72,7 +72,7 @@ export default function TradePage({ fixedPair = null }) {
         if (cancelled) return
         saveLabSession(s, lockedPair)
         setSession(s)
-        setNote(`${lockedPair} demo ready · auto ON · account ${s.code}`)
+        setNote(`${lockedPair} demo ready · account ${s.code}`)
       } catch (e) {
         if (!cancelled) setError(e.message || String(e))
       } finally {
@@ -82,21 +82,32 @@ export default function TradePage({ fixedPair = null }) {
     return () => {
       cancelled = true
     }
-  }, [lockedPair, session])
+  }, [lockedPair])
 
   const refresh = useCallback(async () => {
     if (!session) return
-    const [acc, pos, tr, au] = await Promise.all([
-      labTradeApi.account(session),
-      labTradeApi.positions(session),
-      labTradeApi.trades(session),
-      labTradeApi.auto(session),
-    ])
-    setAccount(acc)
-    setAuto(au)
-    setPositions(pos.positions || [])
-    setTrades(tr.trades || [])
-  }, [session])
+    try {
+      const [acc, pos, tr, au] = await Promise.all([
+        labTradeApi.account(session),
+        labTradeApi.positions(session),
+        labTradeApi.trades(session),
+        labTradeApi.auto(session),
+      ])
+      setAccount(acc)
+      setAuto(au)
+      setPositions(pos.positions || [])
+      setTrades(tr.trades || [])
+    } catch (e) {
+      if (lockedPair && isInvalidLabSessionError(e)) {
+        const s = await ensurePairAccount(lockedPair)
+        saveLabSession(s, lockedPair)
+        setSession(s)
+        setNote(`${lockedPair} session refreshed · account ${s.code}`)
+        return
+      }
+      throw e
+    }
+  }, [session, lockedPair])
 
   const refreshTick = useCallback(async () => {
     try {

@@ -5,6 +5,8 @@ import {
   loadPairSuite,
   saveLabSession,
   savePairSuite,
+  syncPairSuiteFromServer,
+  isInvalidLabSessionError,
 } from '../api.js'
 
 const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
@@ -48,23 +50,35 @@ export default function PairSuitePage() {
     if (!suite?.accounts?.length) return
     const tk = await labTradeApi.ticks()
     setTicks(tk.ticks || {})
-    const snapshots = await Promise.all(
-      suite.accounts.map(async (acc) => {
-        const session = sessionFromRow(acc)
-        const [account, auto, positions] = await Promise.all([
-          labTradeApi.account(session),
-          labTradeApi.auto(session),
-          labTradeApi.positions(session),
-        ])
-        return {
-          ...acc,
-          account,
-          auto,
-          positions: (positions.positions || []).filter((p) => p.status === 'OPEN'),
-        }
-      }),
-    )
-    setRows(snapshots)
+    try {
+      const snapshots = await Promise.all(
+        suite.accounts.map(async (acc) => {
+          const session = sessionFromRow(acc)
+          const [account, auto, positions] = await Promise.all([
+            labTradeApi.account(session),
+            labTradeApi.auto(session),
+            labTradeApi.positions(session),
+          ])
+          return {
+            ...acc,
+            account,
+            auto,
+            positions: (positions.positions || []).filter((p) => p.status === 'OPEN'),
+          }
+        }),
+      )
+      setRows(snapshots)
+    } catch (e) {
+      if (isInvalidLabSessionError(e)) {
+        const { accounts, message } = await syncPairSuiteFromServer(false)
+        const payload = { accounts, created_at: new Date().toISOString() }
+        savePairSuite(payload)
+        setSuite(payload)
+        setNote(message || 'Pair suite credentials refreshed')
+        return
+      }
+      throw e
+    }
   }, [suite])
 
   useEffect(() => {
