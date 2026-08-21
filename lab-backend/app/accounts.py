@@ -17,7 +17,7 @@ from app.pair_strategies import preset_for
 log = logging.getLogger(__name__)
 
 SUITE_LABEL_PREFIX = "Pair suite · "
-PAIR_SUITE_SYMBOLS = ("EURUSD", "GBPUSD", "AUDNZD", "EURCHF")
+PAIR_SUITE_SYMBOLS = ("EURUSD", "GBPUSD", "AUDNZD", "EURCHF", "XAUUSD")
 
 
 def _now() -> datetime:
@@ -125,6 +125,7 @@ class LabAccountStore:
             if start_auto:
                 acc.auto.enabled = True
                 acc.auto.last_bar_time = 0
+                acc.auto.last_loss_bar_time = 0
                 acc.auto.last_block_reason = None
             rows.append(
                 {
