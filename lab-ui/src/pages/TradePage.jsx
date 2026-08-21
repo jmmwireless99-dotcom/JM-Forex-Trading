@@ -113,6 +113,14 @@ export default function TradePage({ fixedPair = null }) {
     let alive = true
     ;(async () => {
       try {
+        const synced = await labTradeApi.syncAutoPreset(session)
+        if (!alive) return
+        if (synced?.auto) {
+          setAuto(synced.auto)
+          setSlPips(String(synced.auto.sl_pips))
+          setTpPips(String(synced.auto.tp_pips))
+          if (synced.message) setNote(synced.message)
+        }
         await Promise.all([refresh(), refreshTick()])
         if (alive) setError('')
       } catch (e) {

@@ -169,6 +169,8 @@ export const labTradeApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  syncAutoPreset: (session) =>
+    labRequestAs(session, '/auto/sync-preset', { method: 'POST' }),
   setAutoFor: (session, body) => labTradeApi.setAuto(body, session),
   strategies: () => labRequest('/strategies'),
 }

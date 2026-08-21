@@ -273,6 +273,27 @@ async def update_position_stops(
     return {"ok": True, "position": updated.to_dict(), "account": acc.snapshot()}
 
 
+@router.post("/auto/sync-preset")
+async def sync_auto_preset(
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    """Apply latest pair SL/TP preset to this account's auto config."""
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    p = preset_for(acc.auto.symbol)
+    acc.auto.sl_pips = float(p["sl_pips"])
+    acc.auto.tp_pips = float(p["tp_pips"])
+    store.persist()
+    info = strategy_info(acc.auto.strategy)
+    return {
+        "ok": True,
+        "auto": acc.auto.to_dict(),
+        "pair_preset": p,
+        "strategy_info": info,
+        "message": f"Preset applied · SL {p['sl_pips']:.0f}p / TP {p['tp_pips']:.0f}p",
+    }
+
+
 @router.get("/auto")
 async def get_auto(
     x_jm_lab_account_id: str | None = Header(None),
