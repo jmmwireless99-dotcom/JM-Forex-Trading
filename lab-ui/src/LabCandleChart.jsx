@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createChart, LineStyle } from 'lightweight-charts'
 import { labTradeApi } from './api.js'
+import { pipsFromEntryPrice } from './pips.js'
 
 const RANGES = [
   { id: '5', label: 'M5' },
@@ -106,8 +107,22 @@ export default function LabCandleChart({
       const series = seriesRef.current
       if (!series || !p) return
       const lines = stopLinesRef.current
-      const slTitle = p.stop_loss != null ? `SL ${fmtLive(symbol, p.stop_loss)}` : 'SL'
-      const tpTitle = p.take_profit != null ? `TP ${fmtLive(symbol, p.take_profit)}` : 'TP'
+      const slPips =
+        p.stop_loss != null
+          ? pipsFromEntryPrice(symbol, p.side, p.entry_price, p.stop_loss, 'sl')
+          : null
+      const tpPips =
+        p.take_profit != null
+          ? pipsFromEntryPrice(symbol, p.side, p.entry_price, p.take_profit, 'tp')
+          : null
+      const slTitle =
+        p.stop_loss != null
+          ? `SL ${fmtLive(symbol, p.stop_loss)}${slPips != null ? ` · ${slPips}p` : ''}`
+          : 'SL'
+      const tpTitle =
+        p.take_profit != null
+          ? `TP ${fmtLive(symbol, p.take_profit)}${tpPips != null ? ` · ${tpPips}p` : ''}`
+          : 'TP'
       const entryTitle = `${p.side} @ ${fmtLive(symbol, p.entry_price)}`
 
       if (!lines.entry) {
@@ -420,7 +435,12 @@ export default function LabCandleChart({
       if (price == null) return
       const applied = applyDragPrice(drag.kind, price)
       if (applied != null) {
-        setDragHint(`${drag.kind === 'sl' ? 'SL' : 'TP'} → ${fmtLive(symbol, applied)}`)
+        const meta = posMetaRef.current
+        const pipN =
+          meta != null ? pipsFromEntryPrice(symbol, meta.side, meta.entry_price, applied, drag.kind) : null
+        setDragHint(
+          `${drag.kind === 'sl' ? 'SL' : 'TP'} → ${fmtLive(symbol, applied)}${pipN != null ? ` · ${pipN} pips` : ''}`,
+        )
       }
     }
 

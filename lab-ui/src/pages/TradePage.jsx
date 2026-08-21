@@ -3,6 +3,7 @@ import LabCandleChart from '../LabCandleChart.jsx'
 import { PAIR_GUIDE, PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
 import { labTradeApi, loadLabSession, saveLabSession, ensurePairAccount, setLabSessionPair } from '../api.js'
 import { PAIR_URL_SYMBOLS, pairTradePath } from '../routing.js'
+import { pipsFromEntryPrice, pipSize, positionStopPips, pricesFromEntryPips } from '../pips.js'
 
 const PAIRS = PAIR_GUIDE.filter((p) => p.status === 'live' || p.status === 'live-ref').map((p) => p.id)
 
@@ -176,35 +177,15 @@ export default function TradePage({ fixedPair = null }) {
     setTrades([])
   }
 
-  function pipSize(sym) {
-    return sym === 'XAUUSD' ? 0.01 : 0.0001
-  }
-
-  function pipsFromEntryPrice(sym, side, entry, price, kind) {
-    const pip = pipSize(sym)
-    const e = Number(entry)
-    const p = Number(price)
-    if (!Number.isFinite(e) || !Number.isFinite(p)) return null
-    let dist
-    if (kind === 'sl') {
-      dist = side === 'BUY' ? e - p : p - e
-    } else {
-      dist = side === 'BUY' ? p - e : e - p
-    }
-    if (dist < 0) return null
-    return Math.round(dist / pip)
-  }
-
-  function pricesFromEntryPips(sym, side, entry, slPips, tpPips) {
-    const pip = pipSize(sym)
-    const e = Number(entry)
-    const sl = Number(slPips) * pip
-    const tp = Number(tpPips) * pip
-    if (!Number.isFinite(e)) return null
-    if (side === 'BUY') {
-      return { stop_loss: e - sl, take_profit: e + tp }
-    }
-    return { stop_loss: e + sl, take_profit: e - tp }
+  async function syncAutoStopPips(p) {
+    if (!session || !p) return
+    const { sl, tp } = positionStopPips(p)
+    if (sl == null || tp == null) return
+    const res = await labTradeApi.setAuto({ sl_pips: sl, tp_pips: tp }, session)
+    setAuto(res.auto)
+    setSlPips(String(sl))
+    setTpPips(String(tp))
+    setNote(`SL / TP · ${sl} pips SL · ${tp} pips TP (from entry)`)
   }
 
   function levels(side, mid) {
@@ -259,7 +240,12 @@ export default function TradePage({ fixedPair = null }) {
     async (positionId, body) => {
       if (!session) return
       await labTradeApi.updatePositionStops(positionId, body, session)
-      await refresh()
+      const posRes = await labTradeApi.positions(session)
+      const list = posRes.positions || []
+      setPositions(list)
+      const p = list.find((x) => x.id === positionId)
+      if (p) await syncAutoStopPips(p)
+      else await refresh()
     },
     [session, refresh],
   )
@@ -286,6 +272,7 @@ export default function TradePage({ fixedPair = null }) {
       await labTradeApi.updatePositionStops(positionId, body, session)
       setNote('SL / TP updated')
       await refresh()
+      if (p) await syncAutoStopPips({ ...p, stop_loss: body.stop_loss ?? p.stop_loss, take_profit: body.take_profit ?? p.take_profit })
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -572,9 +559,17 @@ export default function TradePage({ fixedPair = null }) {
                 </span>
                 <span>
                   <em>SL</em> {fmtLevel(p.symbol, p.stop_loss)}
+                  {(() => {
+                    const sp = positionStopPips(p).sl
+                    return sp != null ? <strong className="lab-pip-tag"> · {sp} pips</strong> : null
+                  })()}
                 </span>
                 <span>
                   <em>TP</em> {fmtLevel(p.symbol, p.take_profit)}
+                  {(() => {
+                    const tpP = positionStopPips(p).tp
+                    return tpP != null ? <strong className="lab-pip-tag"> · {tpP} pips</strong> : null
+                  })()}
                 </span>
               </div>
               <div className="lab-stops-edit">

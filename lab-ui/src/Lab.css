@@ -628,6 +628,12 @@ a {
   color: var(--lab-ok);
 }
 
+.lab-pip-tag {
+  color: var(--lab-text);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
 .lab-stops-edit {
   margin-top: 0.65rem;
 }
