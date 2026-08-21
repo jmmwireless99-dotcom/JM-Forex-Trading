@@ -10,7 +10,6 @@ from app.strategies.base import Strategy
 from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.ema_vwap_scalp import EmaVwapScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
-from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
 
 if TYPE_CHECKING:
     from app.ai.advisor import TradeAdvisor
@@ -20,7 +19,7 @@ class AIMLStrategy(Strategy):
     """Session-routed scalp stack with AI & Machine Learning entry filter.
 
     Flow:
-    1. Pick child strategy from session map (EMA_RSI / Judas / SMC / VWAP)
+    1. Pick child strategy from session map (EMA_RSI / SMC / VWAP)
     2. Generate child signal on M5 close
     3. Score with ML — emit only TAKE / CAUTION (SKIP is blocked here)
     """
@@ -30,7 +29,6 @@ class AIMLStrategy(Strategy):
 
     _CHILD_MAP = {
         "asia": EmaRsiScalpStrategy.name,
-        "london": LondonJudasSweepStrategy.name,
         "london_ny_overlap": LiquiditySweepSmcStrategy.name,
         "new_york": EmaVwapScalpStrategy.name,
     }
@@ -40,7 +38,6 @@ class AIMLStrategy(Strategy):
         self.router = AutoStrategyRouter()
         self._children: dict[str, Strategy] = {
             EmaRsiScalpStrategy.name: EmaRsiScalpStrategy(lookback=lookback),
-            LondonJudasSweepStrategy.name: LondonJudasSweepStrategy(lookback=lookback),
             LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy(lookback=lookback),
             EmaVwapScalpStrategy.name: EmaVwapScalpStrategy(lookback=lookback),
         }
@@ -50,7 +47,6 @@ class AIMLStrategy(Strategy):
         self.last_block_reason: str | None = None
         self.last_checklist: list[str] = []
         self._structure_bars: list[Candle] = []
-        # Accept CAUTION by default; SKIP never passes.
         self.allow_caution = True
 
     def set_advisor(self, advisor: TradeAdvisor | None) -> None:
@@ -77,8 +73,6 @@ class AIMLStrategy(Strategy):
         if not decision.allow_trading:
             self.last_block_reason = decision.reason or "AI_ML stand aside"
             return None, None
-        # Always resolve the classic scalp child from the session slot.
-        # (Router may report AI_ML itself when auto-follow is on.)
         name = self._CHILD_MAP.get(decision.slot)
         if not name or name not in self._children:
             self.last_block_reason = (
@@ -107,7 +101,6 @@ class AIMLStrategy(Strategy):
         else:
             signal = child.evaluate(tick)
 
-        # Surface child checklist for desk UI
         self.last_checklist = list(getattr(child, "last_checklist", []) or [])
         self.last_checklist.insert(0, f"AI_ML child={child_name}")
 
@@ -118,7 +111,6 @@ class AIMLStrategy(Strategy):
             return None
 
         if self.advisor is None or not self.advisor.enabled:
-            # Still tag as AI_ML stack even if advisor disabled
             signal.strategy = f"AI_ML/{child_name}"
             signal.reason = f"AI_ML · {signal.reason}"
             return signal
