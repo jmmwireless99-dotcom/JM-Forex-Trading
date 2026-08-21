@@ -435,9 +435,15 @@ select {
   color: var(--gold);
 }
 
-.chart-drag-status {
-  margin: 0.35rem 0 0;
-  font-size: 0.82rem;
+.stops-panel-highlight {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(240, 199, 94, 0.35);
+  background: linear-gradient(180deg, rgba(20, 99, 92, 0.22), rgba(12, 24, 22, 0.5));
+}
+
+.manual-stops-preview {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
   color: var(--gold);
 }
 

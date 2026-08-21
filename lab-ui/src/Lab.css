@@ -564,6 +564,49 @@ a {
   border: 1px solid var(--lab-line);
 }
 
+.lab-chart-host-wrap {
+  position: relative;
+}
+
+.lab-chart-host-wrap.lab-chart-editable {
+  cursor: crosshair;
+}
+
+.lab-chart-host-wrap.lab-chart-editable:active {
+  cursor: ns-resize;
+}
+
+.lab-chart-drag-hint {
+  color: var(--lab-warn);
+}
+
+.lab-chart-drag-status {
+  font-size: 0.82rem;
+  color: var(--lab-accent);
+  margin: 0 0 0.35rem;
+}
+
+.lab-open-pos {
+  border-bottom: 1px solid var(--lab-line);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.lab-open-pos:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.lab-stops-edit {
+  margin-top: 0.65rem;
+}
+
+.lab-stops-hint {
+  font-size: 0.82rem;
+  margin: 0 0 0.5rem;
+}
+
 .lab-chart-legend {
   font-size: 0.75rem;
   margin: 0.35rem 0 0;
