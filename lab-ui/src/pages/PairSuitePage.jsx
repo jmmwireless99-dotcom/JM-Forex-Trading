@@ -7,7 +7,18 @@ import {
   savePairSuite,
 } from '../api.js'
 
-const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF']
+const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
+
+function fmtPrice(symbol, n) {
+  const d = symbol === 'XAUUSD' ? 2 : 5
+  return Number(n || 0).toFixed(d)
+}
+
+function fmtLevel(symbol, n) {
+  if (n == null || n === '') return '—'
+  const v = Number(n)
+  return Number.isFinite(v) ? fmtPrice(symbol, v) : '—'
+}
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
@@ -76,6 +87,38 @@ export default function PairSuitePage() {
     }
   }, [suite, refresh])
 
+  useEffect(() => {
+    if (!suite?.accounts?.length) return undefined
+    const have = new Set(suite.accounts.map((a) => a.symbol))
+    const missing = SUITE_PAIRS.filter((sym) => !have.has(sym))
+    if (!missing.length) return undefined
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await labTradeApi.createPairSuite(10000, false)
+        const accounts = (res.accounts || []).map((a) => ({
+          symbol: a.symbol,
+          account_id: a.account_id,
+          code: a.code,
+          token: a.token,
+          label: a.label,
+          strategy: a.strategy,
+        }))
+        if (cancelled || accounts.length < SUITE_PAIRS.length) return
+        const payload = { accounts, created_at: suite.created_at || new Date().toISOString() }
+        savePairSuite(payload)
+        setSuite(payload)
+        setNote(`Added missing pair(s): ${missing.join(', ')}`)
+      } catch (e) {
+        if (!cancelled) setError(e.message || String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [suite])
+
   async function bootstrap(startAuto = true) {
     setBusy(true)
     setError('')
@@ -121,7 +164,7 @@ export default function PairSuitePage() {
           )
         }),
       )
-      setNote(on ? 'All 4 pair autos started' : 'All 4 pair autos stopped')
+      setNote(on ? 'All 5 pair autos started' : 'All 5 pair autos stopped')
       await refresh()
     } catch (e) {
       setError(e.message || String(e))
@@ -145,7 +188,7 @@ export default function PairSuitePage() {
     return (
       <div className="lab-page">
         <header className="lab-page-head">
-          <h1>4-pair dry run</h1>
+          <h1>5-pair dry run</h1>
           <p className="lab-muted">
             Isang account bawat pair — tumatakbo sabay sa server kahit iisa lang ang browser mo.
           </p>
@@ -153,9 +196,9 @@ export default function PairSuitePage() {
         <section className="lab-panel">
           <h2>Pair test suite</h2>
           <p className="lab-muted">
-            Gagawa ng 4 demo accounts: <strong>EURUSD</strong>, <strong>GBPUSD</strong>,{' '}
-            <strong>AUDNZD</strong>, <strong>EURCHF</strong>. Bawat isa may sariling strategy preset
-            at auto-trader. Puwedeng i-monitor lahat dito nang sabay.
+            Gagawa ng 5 demo accounts: <strong>EURUSD</strong>, <strong>GBPUSD</strong>,{' '}
+            <strong>AUDNZD</strong>, <strong>EURCHF</strong>, <strong>XAUUSD</strong>. Bawat isa may
+            sariling strategy preset at auto-trader. Puwedeng i-monitor lahat dito nang sabay.
           </p>
           <ul className="lab-suite-list">
             {SUITE_PAIRS.map((id) => {
@@ -169,10 +212,10 @@ export default function PairSuitePage() {
           </ul>
           <div className="lab-trade-controls">
             <button type="button" className="lab-btn" disabled={busy} onClick={() => bootstrap(true)}>
-              Create 4 accounts + start auto
+              Create 5 accounts + start auto
             </button>
             <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => bootstrap(false)}>
-              Create 4 accounts only
+              Create 5 accounts only
             </button>
           </div>
           {error ? <p className="lab-error-inline">{error}</p> : null}
@@ -186,9 +229,9 @@ export default function PairSuitePage() {
     <div className="lab-page">
       <header className="lab-page-head lab-trade-head">
         <div>
-          <h1>4-pair dry run</h1>
+          <h1>5-pair dry run</h1>
           <p className="lab-muted">
-            4 accounts · tumatakbo sabay sa server · refresh every 4s
+            5 accounts · tumatakbo sabay sa server · refresh every 4s
           </p>
         </div>
         <div className="lab-suite-actions">
@@ -257,12 +300,18 @@ export default function PairSuitePage() {
                 <p className="lab-muted">Waiting for next M5 bar close…</p>
               )}
               {open ? (
-                <p className="lab-suite-open">
-                  Open: {open.side} {open.lots} @ {Number(open.entry_price).toFixed(5)} · uP&amp;L{' '}
-                  <span className={open.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
-                    ${money(open.unrealized_pnl)}
-                  </span>
-                </p>
+                <>
+                  <p className="lab-suite-open">
+                    Open: {open.side} {open.lots} lot(s) · uP&amp;L{' '}
+                    <span className={open.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
+                      ${money(open.unrealized_pnl)}
+                    </span>
+                  </p>
+                  <p className="lab-suite-levels lab-muted">
+                    Entry {fmtLevel(row.symbol, open.entry_price)} · SL {fmtLevel(row.symbol, open.stop_loss)} · TP{' '}
+                    {fmtLevel(row.symbol, open.take_profit)}
+                  </p>
+                </>
               ) : (
                 <p className="lab-muted">Flat</p>
               )}

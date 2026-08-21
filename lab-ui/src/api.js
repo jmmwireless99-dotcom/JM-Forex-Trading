@@ -157,12 +157,20 @@ export const labTradeApi = {
     }),
   closePosition: (id) =>
     labRequest(`/positions/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+  updatePositionStops: (id, body, session) =>
+    labRequestAs(session, `/positions/${encodeURIComponent(id)}/stops`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   setAuto: (body, session) =>
     labRequestAs(session, '/auto', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  syncAutoPreset: (session) =>
+    labRequestAs(session, '/auto/sync-preset', { method: 'POST' }),
   setAutoFor: (session, body) => labTradeApi.setAuto(body, session),
   strategies: () => labRequest('/strategies'),
 }
