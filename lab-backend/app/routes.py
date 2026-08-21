@@ -140,7 +140,7 @@ async def create_account(body: CreateAccountBody) -> dict:
 
 @router.post("/accounts/pair-suite")
 async def create_pair_suite(body: PairSuiteBody) -> dict:
-    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF) for parallel dry-run."""
+    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF, XAUUSD) for parallel dry-run."""
     rows = store.bootstrap_pair_suite(deposit=body.deposit, start_auto=body.start_auto)
     accounts = []
     for row in rows:
@@ -289,6 +289,7 @@ async def set_auto(
         if body.tp_pips is None:
             a.tp_pips = p["tp_pips"]
         a.last_bar_time = 0
+        a.last_loss_bar_time = 0
     if body.lots is not None:
         a.lots = body.lots
     if body.sl_pips is not None:

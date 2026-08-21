@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import PairTradeApp from './PairTradeApp.jsx'
+import LabErrorBoundary from './LabErrorBoundary.jsx'
 import { parsePairFromPath } from './routing.js'
 import './Lab.css'
 
@@ -13,6 +14,8 @@ function Root() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Root />
+    <LabErrorBoundary>
+      <Root />
+    </LabErrorBoundary>
   </StrictMode>,
 )

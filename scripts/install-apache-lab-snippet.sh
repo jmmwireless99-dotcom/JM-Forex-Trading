@@ -63,7 +63,7 @@ if marker in text:
         Require all granted
         FallbackResource /index.html
     </Directory>"""
-        dir_new = """    <Directory /opt/jm-lab/dist>
+        dir_mid = """    <Directory /opt/jm-lab/dist>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
@@ -73,9 +73,37 @@ if marker in text:
         RewriteRule ^ index.html [L]
         FallbackResource /index.html
     </Directory>"""
+        dir_new = """    <Directory /opt/jm-lab/dist>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+        RewriteEngine On
+        RewriteCond %{REQUEST_URI} ^/lab/assets/ [NC]
+        RewriteRule ^ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^ index.html [L]
+        <Files "index.html">
+            Header set Cache-Control "no-cache, no-store, must-revalidate"
+        </Files>
+    </Directory>"""
         if dir_old in text:
             text = text.replace(dir_old, dir_new)
             changed = True
+        elif dir_mid in text:
+            text = text.replace(dir_mid, dir_new)
+            changed = True
+        elif "RewriteCond %{REQUEST_URI} ^/lab/assets/" not in text and "Alias /lab /opt/jm-lab/dist" in text:
+            # Upgrade any Directory block missing assets guard
+            import re
+            pat = re.compile(
+                r"(    <Directory /opt/jm-lab/dist>\n.*?</Directory>)",
+                re.DOTALL,
+            )
+            m = pat.search(text)
+            if m and "RewriteCond %{REQUEST_URI} ^/lab/assets/" not in m.group(1):
+                text = text[: m.start(1)] + dir_new + text[m.end(1) :]
+                changed = True
         # Remove legacy broken vhost-level pair rewrite if present
         text = text.replace(
             "    RewriteCond %{REQUEST_URI} ^/lab/(EURUSD|GBPUSD|AUDNZD|EURCHF)/?$ [NC]\n    RewriteRule ^ /lab/index.html [L]\n",
