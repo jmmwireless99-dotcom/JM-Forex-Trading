@@ -556,17 +556,20 @@ async def set_position_stops(
             status_code=400,
             detail="Provide stop_loss/take_profit or set auto=true",
         )
-    updated = await get_engine().set_position_stops(
-        position_id,
-        stop_loss=body.stop_loss,
-        take_profit=body.take_profit,
-        auto=body.auto
-        or body.stop_loss_pips is not None
-        or body.take_profit_pips is not None,
-        stop_loss_pips=body.stop_loss_pips,
-        take_profit_pips=body.take_profit_pips,
-        account=account,
-    )
+    try:
+        updated = await get_engine().set_position_stops(
+            position_id,
+            stop_loss=body.stop_loss,
+            take_profit=body.take_profit,
+            auto=body.auto
+            or body.stop_loss_pips is not None
+            or body.take_profit_pips is not None,
+            stop_loss_pips=body.stop_loss_pips,
+            take_profit_pips=body.take_profit_pips,
+            account=account,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if updated is None:
         raise HTTPException(
             status_code=404,

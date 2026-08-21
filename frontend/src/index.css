@@ -383,6 +383,64 @@ select {
   justify-content: flex-end;
 }
 
+.stops-edit {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.stops-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+}
+
+.stops-hint-mt {
+  margin-top: 0.85rem;
+}
+
+.stops-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.stops-edit-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--mist);
+  font-size: 0.82rem;
+}
+
+.stops-edit-row input {
+  min-width: 8.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(8, 20, 18, 0.65);
+  color: var(--text);
+  font: inherit;
+}
+
+.chart-canvas-wrap {
+  position: relative;
+}
+
+.chart-canvas-wrap.chart-editable {
+  cursor: crosshair;
+}
+
+.chart-drag-hint {
+  color: var(--gold);
+}
+
+.chart-drag-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gold);
+}
+
 @media (max-width: 720px) {
   .manual-prices {
     grid-template-columns: 1fr;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, connectFeed, ensureAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
@@ -31,6 +31,10 @@ function normalizeStrategy(label) {
   if (!label) return 'manual_only'
   if (label === 'auto' || label.startsWith('auto_gold')) return 'manual_only'
   return label
+}
+
+function fmtGoldPrice(n) {
+  return Number(n || 0).toFixed(2)
 }
 
 function sessionLabel(raw) {
@@ -97,6 +101,8 @@ export default function App() {
   const [manualLots, setManualLots] = useState(0.01)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
+  const [editSl, setEditSl] = useState('')
+  const [editTp, setEditTp] = useState('')
   const [chartMode, setChartMode] = useState(() => {
     try {
       const saved = localStorage.getItem('jm_chart_mode')
@@ -458,11 +464,49 @@ export default function App() {
     })
   }
 
+  async function saveStops(positionId) {
+    await run(async () => {
+      const sl = editSl.trim() === '' ? null : Number(editSl)
+      const tp = editTp.trim() === '' ? null : Number(editTp)
+      const body = {}
+      if (sl != null && Number.isFinite(sl)) body.stop_loss = sl
+      if (tp != null && Number.isFinite(tp)) body.take_profit = tp
+      if (!Object.keys(body).length) throw new Error('Enter SL and/or TP price')
+      await api.setStops(positionId, body)
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote('SL / TP updated')
+      return null
+    })
+  }
+
+  const handleUpdateStops = useCallback(async (positionId, body) => {
+    await run(async () => {
+      await api.setStops(positionId, body)
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote('SL / TP updated')
+      return null
+    })
+  }, [])
+
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
   const hasOpen = positions.length > 0
+  const canEditStops = mode === 'paper' && positions.length === 1
+
+  useEffect(() => {
+    const p = positions[0]
+    if (!p) {
+      setEditSl('')
+      setEditTp('')
+      return
+    }
+    setEditSl(p.stop_loss != null ? fmtGoldPrice(p.stop_loss) : '')
+    setEditTp(p.take_profit != null ? fmtGoldPrice(p.take_profit) : '')
+  }, [positions])
 
   return (
     <div className="app">
@@ -911,6 +955,7 @@ export default function App() {
             symbol="XAUUSD"
             positions={positions}
             signals={signals}
+            onUpdateStops={canEditStops ? handleUpdateStops : null}
           />
         )}
       </section>
@@ -1109,6 +1154,46 @@ export default function App() {
               </tbody>
             </table>
           )}
+          {positions.length > 0 && mode === 'paper' ? (
+            <div className="stops-edit">
+              <p className="meta stops-hint">
+                Adjust SL / TP on chart (drag lines) or type prices below.
+              </p>
+              <div className="stops-edit-row">
+                <label>
+                  Stop loss
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editSl}
+                    onChange={(e) => setEditSl(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Take profit
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editTp}
+                    onChange={(e) => setEditTp(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => saveStops(positions[0].id)}
+                >
+                  Update SL / TP
+                </button>
+              </div>
+            </div>
+          ) : positions.length > 0 && mode !== 'paper' ? (
+            <p className="meta stops-hint stops-hint-mt">
+              SL / TP price edit works in <strong>paper</strong> mode. MT live modify coming soon — use
+              Auto SL/TP or close/re-enter for now.
+            </p>
+          ) : null}
         </section>
 
         <section className="panel" style={{ gridColumn: '1 / -1' }}>
