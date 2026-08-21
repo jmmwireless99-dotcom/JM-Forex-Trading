@@ -41,7 +41,7 @@ export default function PairTradeApp({ pair }) {
       </main>
       <footer className="lab-footer">
         {pair} paper trading · open other pairs in new tabs ·{' '}
-        <a href="/lab/#suite">4-pair dashboard</a>
+        <a href="/lab/#suite">5-pair dashboard</a>
       </footer>
     </div>
   )
