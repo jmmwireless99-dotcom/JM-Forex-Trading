@@ -147,7 +147,7 @@ async def create_account(body: CreateAccountBody) -> dict:
 
 @router.post("/accounts/pair-suite")
 async def create_pair_suite(body: PairSuiteBody) -> dict:
-    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF) for parallel dry-run."""
+    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF, XAUUSD) for parallel dry-run."""
     rows = store.bootstrap_pair_suite(deposit=body.deposit, start_auto=body.start_auto)
     accounts = []
     for row in rows:
