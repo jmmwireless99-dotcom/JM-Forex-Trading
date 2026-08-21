@@ -236,10 +236,22 @@ class PaperBroker:
         position = next((p for p in self.positions if p.id == position_id), None)
         if position is None or position.status != PositionStatus.OPEN:
             return None
+        entry = float(position.entry_price)
+        digits = 2 if position.symbol == "XAUUSD" else 5
         if stop_loss is not None:
-            position.stop_loss = stop_loss
+            sl = round(float(stop_loss), digits)
+            if position.side == Side.BUY and sl >= entry:
+                raise ValueError("BUY stop loss must be below entry")
+            if position.side == Side.SELL and sl <= entry:
+                raise ValueError("SELL stop loss must be above entry")
+            position.stop_loss = sl
         if take_profit is not None:
-            position.take_profit = take_profit
+            tp = round(float(take_profit), digits)
+            if position.side == Side.BUY and tp <= entry:
+                raise ValueError("BUY take profit must be above entry")
+            if position.side == Side.SELL and tp >= entry:
+                raise ValueError("SELL take profit must be below entry")
+            position.take_profit = tp
         return position
 
     def close_position(
