@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createChart, LineStyle } from 'lightweight-charts'
 import { labTradeApi } from './api.js'
+import { pipsFromEntryPrice } from './pips.js'
 
 const RANGES = [
   { id: '5', label: 'M5' },
   { id: '15', label: 'M15' },
   { id: '60', label: 'H1' },
 ]
+
+const DRAG_HIT_PX = 12
 
 function toChartCandle(c) {
   const t = Number(c.time)
@@ -31,6 +34,11 @@ function fmtLive(symbol, n) {
   return Number(n).toFixed(d)
 }
 
+function roundPrice(symbol, n) {
+  const d = symbol === 'XAUUSD' ? 2 : 5
+  return Number(Number(n).toFixed(d))
+}
+
 function emaSeries(closes, period) {
   if (!closes.length) return []
   const k = 2 / (period + 1)
@@ -47,21 +55,39 @@ function emaSeries(closes, period) {
   return out
 }
 
-export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, positions = [] }) {
+function validStopPrice(side, entry, price, kind) {
+  if (!Number.isFinite(price)) return false
+  if (side === 'BUY') {
+    return kind === 'sl' ? price < entry : price > entry
+  }
+  return kind === 'sl' ? price > entry : price < entry
+}
+
+export default function LabCandleChart({
+  symbol = 'EURUSD',
+  livePrice = null,
+  positions = [],
+  onUpdateStops = null,
+}) {
   const hostRef = useRef(null)
+  const wrapRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
   const ema20Ref = useRef(null)
   const ema50Ref = useRef(null)
-  const priceLinesRef = useRef([])
+  const ema200Ref = useRef(null)
+  const stopLinesRef = useRef({ entry: null, sl: null, tp: null })
   const liveLineRef = useRef(null)
   const displayRowsRef = useRef([])
+  const posMetaRef = useRef(null)
+  const dragRef = useRef({ kind: null, startPrice: null })
 
   const [range, setRange] = useState('5')
   const [rows, setRows] = useState([])
   const [status, setStatus] = useState('idle')
   const [err, setErr] = useState('')
   const [liveAt, setLiveAt] = useState(null)
+  const [dragHint, setDragHint] = useState('')
   const rowsRef = useRef(rows)
   rowsRef.current = rows
 
@@ -69,6 +95,121 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
     () => (positions || []).filter((p) => (p.status || 'OPEN').toUpperCase() === 'OPEN'),
     [positions],
   )
+
+  const activePos = useMemo(
+    () => openPos.find((p) => p.symbol === symbol) || null,
+    [openPos, symbol],
+  )
+
+  const isGold = symbol === 'XAUUSD'
+  const emaColors = isGold
+    ? { e20: '#fbbf24', e50: '#60a5fa', e200: '#a78bfa' }
+    : { e20: '#a78bfa', e50: '#fbbf24', e200: '#c084fc' }
+  const editable = Boolean(onUpdateStops && activePos)
+
+  const syncStopLines = useCallback(
+    (p) => {
+      const series = seriesRef.current
+      if (!series || !p) return
+      const lines = stopLinesRef.current
+      const slPips =
+        p.stop_loss != null
+          ? pipsFromEntryPrice(symbol, p.side, p.entry_price, p.stop_loss, 'sl')
+          : null
+      const tpPips =
+        p.take_profit != null
+          ? pipsFromEntryPrice(symbol, p.side, p.entry_price, p.take_profit, 'tp')
+          : null
+      const slTitle =
+        p.stop_loss != null
+          ? `SL ${fmtLive(symbol, p.stop_loss)}${slPips != null ? ` · ${slPips}p` : ''}`
+          : 'SL'
+      const tpTitle =
+        p.take_profit != null
+          ? `TP ${fmtLive(symbol, p.take_profit)}${tpPips != null ? ` · ${tpPips}p` : ''}`
+          : 'TP'
+      const entryTitle = `${p.side} @ ${fmtLive(symbol, p.entry_price)}`
+
+      if (!lines.entry) {
+        lines.entry = series.createPriceLine({
+          price: Number(p.entry_price),
+          color: p.side === 'BUY' ? '#6ee7b7' : '#f87171',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: entryTitle,
+        })
+      } else {
+        lines.entry.applyOptions({
+          price: Number(p.entry_price),
+          color: p.side === 'BUY' ? '#6ee7b7' : '#f87171',
+          title: entryTitle,
+        })
+      }
+
+      if (p.stop_loss != null) {
+        if (!lines.sl) {
+          lines.sl = series.createPriceLine({
+            price: Number(p.stop_loss),
+            color: '#f87171',
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: slTitle,
+          })
+        } else {
+          lines.sl.applyOptions({ price: Number(p.stop_loss), title: slTitle })
+        }
+      } else if (lines.sl) {
+        series.removePriceLine(lines.sl)
+        lines.sl = null
+      }
+
+      if (p.take_profit != null) {
+        if (!lines.tp) {
+          lines.tp = series.createPriceLine({
+            price: Number(p.take_profit),
+            color: '#6ee7b7',
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: tpTitle,
+          })
+        } else {
+          lines.tp.applyOptions({ price: Number(p.take_profit), title: tpTitle })
+        }
+      } else if (lines.tp) {
+        series.removePriceLine(lines.tp)
+        lines.tp = null
+      }
+
+      posMetaRef.current = {
+        id: p.id,
+        side: p.side,
+        entry_price: Number(p.entry_price),
+        stop_loss: p.stop_loss != null ? Number(p.stop_loss) : null,
+        take_profit: p.take_profit != null ? Number(p.take_profit) : null,
+      }
+    },
+    [symbol],
+  )
+
+  const clearStopLines = useCallback(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const lines = stopLinesRef.current
+    for (const key of ['entry', 'sl', 'tp']) {
+      if (lines[key]) {
+        try {
+          series.removePriceLine(lines[key])
+        } catch {
+          /* ignore */
+        }
+        lines[key] = null
+      }
+    }
+    posMetaRef.current = null
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -130,24 +271,35 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       priceFormat: pf,
     })
     const ema20 = chart.addLineSeries({
-      color: '#a78bfa',
+      color: emaColors.e20,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       priceFormat: pf,
     })
     const ema50 = chart.addLineSeries({
-      color: '#fbbf24',
+      color: emaColors.e50,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       priceFormat: pf,
     })
+    const ema200 = isGold
+      ? chart.addLineSeries({
+          color: emaColors.e200,
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          priceFormat: pf,
+        })
+      : null
     chartRef.current = chart
     seriesRef.current = series
     ema20Ref.current = ema20
     ema50Ref.current = ema50
+    ema200Ref.current = ema200
     liveLineRef.current = null
+    stopLinesRef.current = { entry: null, sl: null, tp: null }
 
     const ro = new ResizeObserver(() => {
       if (hostRef.current) chart.applyOptions({ width: hostRef.current.clientWidth, height: hostRef.current.clientHeight })
@@ -159,16 +311,20 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      ema20Ref.current = null
+      ema50Ref.current = null
+      ema200Ref.current = null
       liveLineRef.current = null
+      stopLinesRef.current = { entry: null, sl: null, tp: null }
     }
-  }, [symbol])
+  }, [symbol, isGold])
 
-  // Historical candles + EMAs
   useEffect(() => {
     const chart = chartRef.current
     const series = seriesRef.current
     const ema20 = ema20Ref.current
     const ema50 = ema50Ref.current
+    const ema200 = ema200Ref.current
     if (!chart || !series || !rows.length) return
 
     displayRowsRef.current = [...rows]
@@ -178,10 +334,13 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
     const e50 = emaSeries(closes, 50)
     ema20.setData(rows.map((r, i) => (e20[i] != null ? { time: r.time, value: e20[i] } : null)).filter(Boolean))
     ema50.setData(rows.map((r, i) => (e50[i] != null ? { time: r.time, value: e50[i] } : null)).filter(Boolean))
+    if (ema200) {
+      const e200 = emaSeries(closes, 200)
+      ema200.setData(rows.map((r, i) => (e200[i] != null ? { time: r.time, value: e200[i] } : null)).filter(Boolean))
+    }
     chart.timeScale().scrollToRealTime()
-  }, [rows])
+  }, [rows, symbol])
 
-  // Live forming bar + LIVE price line (updates every tick)
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
@@ -232,42 +391,146 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
     }
   }, [livePrice, symbol])
 
-  // Entry / SL / TP lines
   useEffect(() => {
-    const series = seriesRef.current
-    if (!series) return
+    if (dragRef.current.kind) return
+    if (!activePos) {
+      clearStopLines()
+      return
+    }
+    syncStopLines(activePos)
+  }, [activePos, clearStopLines, syncStopLines])
 
-    for (const pl of priceLinesRef.current) {
+  const nearestDragKind = useCallback((clientY) => {
+    const series = seriesRef.current
+    const meta = posMetaRef.current
+    if (!series || !meta || !editable) return null
+    const rect = hostRef.current?.getBoundingClientRect()
+    if (!rect) return null
+
+    const candidates = []
+    if (meta.stop_loss != null) {
+      const y = series.priceToCoordinate(meta.stop_loss)
+      if (y != null) candidates.push({ kind: 'sl', dist: Math.abs(clientY - rect.top - y) })
+    }
+    if (meta.take_profit != null) {
+      const y = series.priceToCoordinate(meta.take_profit)
+      if (y != null) candidates.push({ kind: 'tp', dist: Math.abs(clientY - rect.top - y) })
+    }
+    candidates.sort((a, b) => a.dist - b.dist)
+    if (!candidates.length || candidates[0].dist > DRAG_HIT_PX) return null
+    return candidates[0].kind
+  }, [editable])
+
+  const applyDragPrice = useCallback(
+    (kind, price) => {
+      const meta = posMetaRef.current
+      const lines = stopLinesRef.current
+      if (!meta || !lines[kind]) return null
+      const rounded = roundPrice(symbol, price)
+      if (!validStopPrice(meta.side, meta.entry_price, rounded, kind)) return null
+      const title =
+        kind === 'sl' ? `SL ${fmtLive(symbol, rounded)}` : `TP ${fmtLive(symbol, rounded)}`
+      lines[kind].applyOptions({ price: rounded, title })
+      return rounded
+    },
+    [symbol],
+  )
+
+  useEffect(() => {
+    if (!editable) return undefined
+    const wrap = wrapRef.current
+    if (!wrap) return undefined
+
+    const setChartLocked = (locked) => {
+      chartRef.current?.applyOptions({
+        handleScroll: !locked,
+        handleScale: !locked,
+      })
+    }
+
+    const onMove = (ev) => {
+      const drag = dragRef.current
+      if (!drag.kind) return
+      const series = seriesRef.current
+      const rect = hostRef.current?.getBoundingClientRect()
+      if (!series || !rect) return
+      const price = series.coordinateToPrice(ev.clientY - rect.top)
+      if (price == null) return
+      const applied = applyDragPrice(drag.kind, price)
+      if (applied != null) {
+        const meta = posMetaRef.current
+        const pipN =
+          meta != null ? pipsFromEntryPrice(symbol, meta.side, meta.entry_price, applied, drag.kind) : null
+        setDragHint(
+          `${drag.kind === 'sl' ? 'SL' : 'TP'} → ${fmtLive(symbol, applied)}${pipN != null ? ` · ${pipN} pips` : ''}`,
+        )
+      }
+    }
+
+    const onUp = async (ev) => {
+      const drag = dragRef.current
+      if (!drag.kind) return
+      dragRef.current = { kind: null, startPrice: null }
+      setChartLocked(false)
+      wrap.style.cursor = ''
+      document.body.style.userSelect = ''
+
+      const meta = posMetaRef.current
+      const series = seriesRef.current
+      const rect = hostRef.current?.getBoundingClientRect()
+      if (!meta || !series || !rect || !onUpdateStops) {
+        setDragHint('')
+        return
+      }
+
+      const price = series.coordinateToPrice(ev.clientY - rect.top)
+      const rounded = price != null ? roundPrice(symbol, price) : null
+      setDragHint('')
+
+      if (rounded == null || !validStopPrice(meta.side, meta.entry_price, rounded, drag.kind)) {
+        syncStopLines(activePos)
+        return
+      }
+
+      const orig = drag.kind === 'sl' ? meta.stop_loss : meta.take_profit
+      if (orig != null && Math.abs(orig - rounded) < (symbol === 'XAUUSD' ? 0.001 : 0.000001)) {
+        return
+      }
+
+      const body = drag.kind === 'sl' ? { stop_loss: rounded } : { take_profit: rounded }
       try {
-        series.removePriceLine(pl)
+        await onUpdateStops(meta.id, body)
       } catch {
-        /* ignore */
+        syncStopLines(activePos)
       }
     }
-    priceLinesRef.current = []
-    for (const p of openPos) {
-      if (p.symbol !== symbol) continue
-      priceLinesRef.current.push(
-        series.createPriceLine({
-          price: Number(p.entry_price),
-          color: p.side === 'BUY' ? '#6ee7b7' : '#f87171',
-          lineWidth: 1,
-          lineStyle: 2,
-          title: `${p.side} entry`,
-        }),
-      )
-      if (p.stop_loss != null) {
-        priceLinesRef.current.push(
-          series.createPriceLine({ price: Number(p.stop_loss), color: '#f87171', lineWidth: 1, title: 'SL' }),
-        )
+
+    const onDown = (ev) => {
+      if (ev.button !== 0) return
+      const kind = nearestDragKind(ev.clientY)
+      if (!kind) return
+      ev.preventDefault()
+      const meta = posMetaRef.current
+      dragRef.current = {
+        kind,
+        startPrice: kind === 'sl' ? meta?.stop_loss : meta?.take_profit,
       }
-      if (p.take_profit != null) {
-        priceLinesRef.current.push(
-          series.createPriceLine({ price: Number(p.take_profit), color: '#6ee7b7', lineWidth: 1, title: 'TP' }),
-        )
-      }
+      setChartLocked(true)
+      wrap.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      setDragHint(`Drag ${kind === 'sl' ? 'SL' : 'TP'} — release to save`)
     }
-  }, [openPos, symbol])
+
+    wrap.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      wrap.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setChartLocked(false)
+    }
+  }, [activePos, applyDragPrice, editable, nearestDragKind, onUpdateStops, syncStopLines, symbol])
 
   return (
     <div className="lab-chart-wrap">
@@ -275,6 +538,7 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
         <span className="lab-muted">
           {symbol} candles
           {liveAt ? <span className="lab-live-dot"> · live</span> : null}
+          {editable ? <span className="lab-chart-drag-hint"> · drag SL/TP lines</span> : null}
         </span>
         <div className="lab-chart-ranges">
           {RANGES.map((r) => (
@@ -285,9 +549,17 @@ export default function LabCandleChart({ symbol = 'EURUSD', livePrice = null, po
         </div>
       </div>
       {err ? <p className="lab-error-inline lab-chart-note">{err}</p> : null}
-      <div ref={hostRef} className="lab-chart-host" />
+      {dragHint ? <p className="lab-chart-drag-status">{dragHint}</p> : null}
+      <div ref={wrapRef} className={`lab-chart-host-wrap${editable ? ' lab-chart-editable' : ''}`}>
+        <div ref={hostRef} className="lab-chart-host" />
+      </div>
       <p className="lab-chart-legend lab-muted">
-        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars · real-time tick`}
+        {status === 'loading' ? 'Loading…' : (
+          <>
+            {isGold ? 'EMA 20 · 50 · 200 · RSI8 strategy' : 'EMA 20 · EMA 50'} · {rows.length} bars · real-time tick
+          </>
+        )}
+        {activePos ? ` · Entry / SL / TP on chart` : ''}
       </p>
     </div>
   )

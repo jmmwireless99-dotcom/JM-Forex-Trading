@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
+from app.pair_strategies import preset_for
 from app.strategy import evaluate_strategy
 
 if TYPE_CHECKING:
@@ -17,13 +18,52 @@ def _pip(symbol: str) -> float:
     return 0.01 if symbol == "XAUUSD" else 0.0001
 
 
-def _levels(side: str, mid: float, symbol: str, sl_pips: float, tp_pips: float) -> tuple[float | None, float | None]:
+def _levels_from_entry(
+    side: str,
+    entry: float,
+    symbol: str,
+    sl_pips: float,
+    tp_pips: float,
+) -> tuple[float, float]:
+    """SL/TP anchored to actual fill price (not mid) — avoids spread skew."""
     pip = _pip(symbol)
     sl = sl_pips * pip
     tp = tp_pips * pip
     if side == "BUY":
-        return mid - sl, mid + tp
-    return mid + sl, mid - tp
+        return entry - sl, entry + tp
+    return entry + sl, entry - tp
+
+
+def _bar_seconds(candles: list[dict[str, Any]]) -> int:
+    if len(candles) >= 2:
+        dt = int(candles[-1]["time"]) - int(candles[-2]["time"])
+        if 60 <= dt <= 3600:
+            return dt
+    return 300
+
+
+def _contract_mult(symbol: str) -> float:
+    return 100.0 if symbol == "XAUUSD" else 100_000.0
+
+
+def _risk_lots(acc: LabAccount, symbol: str, sl_pips: float, preset: dict[str, Any]) -> float:
+    if not preset.get("auto_risk"):
+        return acc.auto.lots
+    risk_pct = float(preset.get("risk_pct", 1.0)) / 100.0
+    risk_usd = acc.broker.equity() * risk_pct
+    pip = _pip(symbol)
+    mult = _contract_mult(symbol)
+    per_lot_pip = pip * mult
+    if sl_pips <= 0 or per_lot_pip <= 0:
+        return acc.auto.lots
+    raw = risk_usd / (sl_pips * per_lot_pip)
+    return max(0.01, min(round(raw, 2), 5.0))
+
+
+def _spread_pips(symbol: str) -> float:
+    from app.broker import LabBroker
+
+    return float(LabBroker.SPREAD_PIPS.get(symbol.upper(), 1.0))
 
 
 def try_auto_fill(
@@ -48,6 +88,23 @@ def try_auto_fill(
     bar_time = int(closed[-1]["time"])
     if bar_time <= auto.last_bar_time:
         return None
+
+    preset = preset_for(sym)
+    bar_sec = _bar_seconds(closed)
+    min_bars = int(preset.get("min_bars_between", 2))
+    loss_cooldown = int(preset.get("cooldown_bars_after_loss", 3))
+
+    if auto.last_loss_bar_time and bar_time - auto.last_loss_bar_time < loss_cooldown * bar_sec:
+        bars_left = loss_cooldown - (bar_time - auto.last_loss_bar_time) // bar_sec
+        auto.last_block_reason = f"Cooldown after loss ({max(1, bars_left)} M5 bars left)"
+        return None
+
+    if auto.signals:
+        last_bt = int(auto.signals[0].get("bar_time") or 0)
+        if last_bt and bar_time - last_bt < min_bars * bar_sec:
+            auto.last_block_reason = f"Spacing entries ({min_bars} M5 bars between signals)"
+            return None
+
     auto.last_bar_time = bar_time
 
     signal, block = evaluate_strategy(auto.strategy, closed, symbol=sym)
@@ -55,14 +112,23 @@ def try_auto_fill(
         auto.last_block_reason = block
         return None
 
-    auto.last_block_reason = None
+    max_spread = float(preset.get("max_spread_pips", 99))
+    spread = _spread_pips(sym)
+    if spread > max_spread:
+        auto.last_block_reason = f"Spread {spread:.1f}p > max {max_spread:.1f}p — skip entry"
+        return None
+
     side = signal.side
-    sl, tp = _levels(side, mid, sym, auto.sl_pips, auto.tp_pips)
+    entry = acc.broker.entry_price(sym, side, mid)
+    sl, tp = _levels_from_entry(side, entry, sym, auto.sl_pips, auto.tp_pips)
+    lots = _risk_lots(acc, sym, auto.sl_pips, preset)
+    auto.last_block_reason = None
+
     try:
         pos = acc.broker.open_market(
             symbol=sym,
             side=side,
-            lots=auto.lots,
+            lots=lots,
             stop_loss=sl,
             take_profit=tp,
         )
@@ -70,15 +136,15 @@ def try_auto_fill(
         auto.last_block_reason = str(e)
         return None
 
-    entry = {
+    entry_row = {
         "at": _now(),
         "side": side,
         "symbol": sym,
-        "lots": auto.lots,
+        "lots": lots,
         "reason": signal.reason,
         "position_id": pos.id,
         "bar_time": bar_time,
     }
-    auto.signals.appendleft(entry)
-    auto.last_signal_at = entry["at"]
-    return {"signal": signal.to_dict(), "position": pos.to_dict(), "fill": entry}
+    auto.signals.appendleft(entry_row)
+    auto.last_signal_at = entry_row["at"]
+    return {"signal": signal.to_dict(), "position": pos.to_dict(), "fill": entry_row}
