@@ -75,6 +75,7 @@ export default function LabCandleChart({
   const seriesRef = useRef(null)
   const ema20Ref = useRef(null)
   const ema50Ref = useRef(null)
+  const ema200Ref = useRef(null)
   const stopLinesRef = useRef({ entry: null, sl: null, tp: null })
   const liveLineRef = useRef(null)
   const displayRowsRef = useRef([])
@@ -100,6 +101,10 @@ export default function LabCandleChart({
     [openPos, symbol],
   )
 
+  const isGold = symbol === 'XAUUSD'
+  const emaColors = isGold
+    ? { e20: '#fbbf24', e50: '#60a5fa', e200: '#a78bfa' }
+    : { e20: '#a78bfa', e50: '#fbbf24', e200: '#c084fc' }
   const editable = Boolean(onUpdateStops && activePos)
 
   const syncStopLines = useCallback(
@@ -266,23 +271,33 @@ export default function LabCandleChart({
       priceFormat: pf,
     })
     const ema20 = chart.addLineSeries({
-      color: '#a78bfa',
+      color: emaColors.e20,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       priceFormat: pf,
     })
     const ema50 = chart.addLineSeries({
-      color: '#fbbf24',
+      color: emaColors.e50,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
       priceFormat: pf,
     })
+    const ema200 = isGold
+      ? chart.addLineSeries({
+          color: emaColors.e200,
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          priceFormat: pf,
+        })
+      : null
     chartRef.current = chart
     seriesRef.current = series
     ema20Ref.current = ema20
     ema50Ref.current = ema50
+    ema200Ref.current = ema200
     liveLineRef.current = null
     stopLinesRef.current = { entry: null, sl: null, tp: null }
 
@@ -296,16 +311,20 @@ export default function LabCandleChart({
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      ema20Ref.current = null
+      ema50Ref.current = null
+      ema200Ref.current = null
       liveLineRef.current = null
       stopLinesRef.current = { entry: null, sl: null, tp: null }
     }
-  }, [symbol])
+  }, [symbol, isGold])
 
   useEffect(() => {
     const chart = chartRef.current
     const series = seriesRef.current
     const ema20 = ema20Ref.current
     const ema50 = ema50Ref.current
+    const ema200 = ema200Ref.current
     if (!chart || !series || !rows.length) return
 
     displayRowsRef.current = [...rows]
@@ -315,8 +334,12 @@ export default function LabCandleChart({
     const e50 = emaSeries(closes, 50)
     ema20.setData(rows.map((r, i) => (e20[i] != null ? { time: r.time, value: e20[i] } : null)).filter(Boolean))
     ema50.setData(rows.map((r, i) => (e50[i] != null ? { time: r.time, value: e50[i] } : null)).filter(Boolean))
+    if (ema200) {
+      const e200 = emaSeries(closes, 200)
+      ema200.setData(rows.map((r, i) => (e200[i] != null ? { time: r.time, value: e200[i] } : null)).filter(Boolean))
+    }
     chart.timeScale().scrollToRealTime()
-  }, [rows])
+  }, [rows, symbol])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -531,7 +554,11 @@ export default function LabCandleChart({
         <div ref={hostRef} className="lab-chart-host" />
       </div>
       <p className="lab-chart-legend lab-muted">
-        {status === 'loading' ? 'Loading…' : `EMA 20 · EMA 50 · ${rows.length} bars · real-time tick`}
+        {status === 'loading' ? 'Loading…' : (
+          <>
+            {isGold ? 'EMA 20 · 50 · 200 · RSI8 strategy' : 'EMA 20 · EMA 50'} · {rows.length} bars · real-time tick
+          </>
+        )}
         {activePos ? ` · Entry / SL / TP on chart` : ''}
       </p>
     </div>

@@ -42,6 +42,30 @@ def _bar_seconds(candles: list[dict[str, Any]]) -> int:
     return 300
 
 
+def _contract_mult(symbol: str) -> float:
+    return 100.0 if symbol == "XAUUSD" else 100_000.0
+
+
+def _risk_lots(acc: LabAccount, symbol: str, sl_pips: float, preset: dict[str, Any]) -> float:
+    if not preset.get("auto_risk"):
+        return acc.auto.lots
+    risk_pct = float(preset.get("risk_pct", 1.0)) / 100.0
+    risk_usd = acc.broker.equity() * risk_pct
+    pip = _pip(symbol)
+    mult = _contract_mult(symbol)
+    per_lot_pip = pip * mult
+    if sl_pips <= 0 or per_lot_pip <= 0:
+        return acc.auto.lots
+    raw = risk_usd / (sl_pips * per_lot_pip)
+    return max(0.01, min(round(raw, 2), 5.0))
+
+
+def _spread_pips(symbol: str) -> float:
+    from app.broker import LabBroker
+
+    return float(LabBroker.SPREAD_PIPS.get(symbol.upper(), 1.0))
+
+
 def try_auto_fill(
     acc: LabAccount,
     candles: list[dict[str, Any]],
@@ -88,16 +112,23 @@ def try_auto_fill(
         auto.last_block_reason = block
         return None
 
+    max_spread = float(preset.get("max_spread_pips", 99))
+    spread = _spread_pips(sym)
+    if spread > max_spread:
+        auto.last_block_reason = f"Spread {spread:.1f}p > max {max_spread:.1f}p — skip entry"
+        return None
+
     side = signal.side
     entry = acc.broker.entry_price(sym, side, mid)
     sl, tp = _levels_from_entry(side, entry, sym, auto.sl_pips, auto.tp_pips)
+    lots = _risk_lots(acc, sym, auto.sl_pips, preset)
     auto.last_block_reason = None
 
     try:
         pos = acc.broker.open_market(
             symbol=sym,
             side=side,
-            lots=auto.lots,
+            lots=lots,
             stop_loss=sl,
             take_profit=tp,
         )
@@ -109,7 +140,7 @@ def try_auto_fill(
         "at": _now(),
         "side": side,
         "symbol": sym,
-        "lots": auto.lots,
+        "lots": lots,
         "reason": signal.reason,
         "position_id": pos.id,
         "bar_time": bar_time,

@@ -20,8 +20,16 @@ STRATEGIES: dict[str, dict[str, Any]] = {
         "pairs": ["AUDNZD", "EURCHF"],
     },
     "EMA_RSI_TREND": {
-        "name": "EMA+RSI Trend",
-        "description": "M5 EMA 20/50 + RSI — wider SL and spacing for XAUUSD volatility.",
+        "name": "Gold EMA+RSI (Review)",
+        "description": (
+            "M5 EMA 20/50/200 + RSI(8) · oversold 40 / overbought 60 · "
+            "30p SL / 75p TP (1:2.5) · min 15p signal candle · 1% auto risk."
+        ),
+        "pairs": ["XAUUSD"],
+    },
+    "GOLD_EMA_RSI": {
+        "name": "Gold EMA+RSI (Review)",
+        "description": "Alias for EMA_RSI_TREND gold review preset.",
         "pairs": ["XAUUSD"],
     },
 }
@@ -67,11 +75,21 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
         "lots": 0.01,
-        "sl_pips": 70.0,
-        "tp_pips": 120.0,
+        "sl_pips": 30.0,
+        "tp_pips": 75.0,
         "min_bars_between": 4,
         "cooldown_bars_after_loss": 5,
-        "label": "Trend · EMA+RSI gold",
+        "auto_risk": True,
+        "risk_pct": 1.0,
+        "max_spread_pips": 3.5,
+        "breakout_min_pips": 15.0,
+        "ema_fast": 20,
+        "ema_medium": 50,
+        "ema_slow": 200,
+        "rsi_period": 8,
+        "rsi_oversold": 40.0,
+        "rsi_overbought": 60.0,
+        "label": "Gold · EMA20/50/200 + RSI8",
     },
 }
 

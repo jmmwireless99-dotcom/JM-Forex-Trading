@@ -17,6 +17,7 @@ class LabSignal:
     rsi: float | None = None
     ema_fast: float | None = None
     ema_slow: float | None = None
+    ema_trend: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,6 +28,7 @@ class LabSignal:
             "rsi": self.rsi,
             "ema_fast": self.ema_fast,
             "ema_slow": self.ema_slow,
+            "ema_trend": self.ema_trend,
         }
 
 
@@ -105,6 +107,101 @@ def evaluate_ema_rsi(
     if bearish:
         return None, f"SELL trend but RSI {rv:.1f} outside {rsi_sell[0]}-{rsi_sell[1]}"
     return None, "EMA flat — no trend"
+
+
+def evaluate_gold_ema_rsi(
+    candles: list[dict[str, Any]],
+    *,
+    symbol: str,
+    ema_fast: int = 20,
+    ema_medium: int = 50,
+    ema_slow: int = 200,
+    rsi_period: int = 8,
+    rsi_oversold: float = 40.0,
+    rsi_overbought: float = 60.0,
+    breakout_min_pips: float = 15.0,
+    min_bars: int = 210,
+) -> tuple[LabSignal | None, str | None]:
+    """Gold M5 stack from review: EMA 20/50/200 + RSI(8) + min breakout candle."""
+    if len(candles) < min_bars:
+        return None, f"Need {min_bars}+ M5 bars for EMA{ema_slow} (have {len(candles)})"
+
+    closes = [float(c["close"]) for c in candles]
+    e_fast = ema(closes, ema_fast)
+    e_med = ema(closes, ema_medium)
+    e_slow = ema(closes, ema_slow)
+    rs = rsi(closes, rsi_period)
+
+    i = len(closes) - 1
+    ef, em, es, rv = e_fast[i], e_med[i], e_slow[i], rs[i]
+    if ef is None or em is None or es is None or rv is None:
+        return None, "Indicators warming up (EMA20/50/200 + RSI8)"
+
+    cur = candles[-1]
+    close = float(cur["close"])
+    open_ = float(cur["open"])
+    pip = _pip(symbol)
+    body_pips = abs(close - open_) / pip
+    range_pips = (float(cur["high"]) - float(cur["low"])) / pip
+    candle_pips = max(body_pips, range_pips)
+    bar_time = _bar_time(candles)
+
+    if candle_pips < breakout_min_pips:
+        return (
+            None,
+            f"Signal candle too small ({candle_pips:.1f}p, need {breakout_min_pips:.0f}p min)",
+        )
+
+    bull_bar = close > open_
+    bear_bar = close < open_
+    uptrend = ef > em and close > es
+    downtrend = ef < em and close < es
+
+    # Oversold bounce: RSI 40–55 in uptrend · Overbought fade: RSI 45–60 in downtrend
+    if uptrend and bull_bar and rsi_oversold <= rv <= 55.0:
+        return (
+            LabSignal(
+                side="BUY",
+                symbol=symbol,
+                reason=(
+                    f"Gold BUY · EMA{ema_fast}>{ema_medium} · above EMA{ema_slow} · "
+                    f"RSI{rsi_period} {rv:.1f} bounce · candle {candle_pips:.0f}p"
+                ),
+                bar_time=bar_time,
+                rsi=round(rv, 2),
+                ema_fast=round(ef, 2),
+                ema_slow=round(em, 2),
+                ema_trend=round(es, 2),
+            ),
+            None,
+        )
+    if downtrend and bear_bar and 45.0 <= rv <= rsi_overbought:
+        return (
+            LabSignal(
+                side="SELL",
+                symbol=symbol,
+                reason=(
+                    f"Gold SELL · EMA{ema_fast}<{ema_medium} · below EMA{ema_slow} · "
+                    f"RSI{rsi_period} {rv:.1f} exhaustion · candle {candle_pips:.0f}p"
+                ),
+                bar_time=bar_time,
+                rsi=round(rv, 2),
+                ema_fast=round(ef, 2),
+                ema_slow=round(em, 2),
+                ema_trend=round(es, 2),
+            ),
+            None,
+        )
+
+    if uptrend and not bull_bar:
+        return None, f"Uptrend but bearish M5 bar (RSI {rv:.1f})"
+    if downtrend and not bear_bar:
+        return None, f"Downtrend but bullish M5 bar (RSI {rv:.1f})"
+    if uptrend:
+        return None, f"Uptrend but RSI {rv:.1f} outside bounce {rsi_oversold}–55"
+    if downtrend:
+        return None, f"Downtrend but RSI {rv:.1f} outside fade 45–{rsi_overbought:.0f}"
+    return None, f"No gold trend · RSI {rv:.1f} · wait for EMA20/50/200 alignment"
 
 
 def evaluate_breakout(
@@ -239,11 +336,34 @@ def evaluate_strategy(
             rsi_sell=(46.0, 60.0),
         )
     if sid == "EMA_RSI_TREND":
-        return evaluate_ema_rsi(
+        from app.pair_strategies import preset_for
+
+        p = preset_for(symbol)
+        return evaluate_gold_ema_rsi(
             candles,
             symbol=symbol,
-            rsi_buy=(38.0, 52.0),
-            rsi_sell=(50.0, 62.0),
+            ema_fast=int(p.get("ema_fast", 20)),
+            ema_medium=int(p.get("ema_medium", 50)),
+            ema_slow=int(p.get("ema_slow", 200)),
+            rsi_period=int(p.get("rsi_period", 8)),
+            rsi_oversold=float(p.get("rsi_oversold", 40)),
+            rsi_overbought=float(p.get("rsi_overbought", 60)),
+            breakout_min_pips=float(p.get("breakout_min_pips", 15)),
+        )
+    if sid == "GOLD_EMA_RSI":
+        from app.pair_strategies import preset_for
+
+        p = preset_for(symbol)
+        return evaluate_gold_ema_rsi(
+            candles,
+            symbol=symbol,
+            ema_fast=int(p.get("ema_fast", 20)),
+            ema_medium=int(p.get("ema_medium", 50)),
+            ema_slow=int(p.get("ema_slow", 200)),
+            rsi_period=int(p.get("rsi_period", 8)),
+            rsi_oversold=float(p.get("rsi_oversold", 40)),
+            rsi_overbought=float(p.get("rsi_overbought", 60)),
+            breakout_min_pips=float(p.get("breakout_min_pips", 15)),
         )
     if sid == "BREAKOUT":
         return evaluate_breakout(candles, symbol=symbol, buffer_pct=0.015)

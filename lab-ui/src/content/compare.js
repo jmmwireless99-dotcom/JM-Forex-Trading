@@ -35,10 +35,10 @@ export const PAIR_PRESETS = {
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
     lots: 0.01,
-    sl_pips: 70,
-    tp_pips: 120,
-    label: 'Trend · EMA+RSI gold',
-    botStyle: 'Trend · Session scalp',
+    sl_pips: 30,
+    tp_pips: 75,
+    label: 'Gold · EMA20/50/200 + RSI8',
+    botStyle: 'Review preset · 1% risk · 30/75 pips',
   },
 }
 
@@ -56,8 +56,9 @@ export const STRATEGY_INFO = {
     description: 'Buy bottom 25% / sell top 25% of range. Grid-lite for AUD/NZD & EUR/CHF.',
   },
   EMA_RSI_TREND: {
-    name: 'EMA+RSI Trend',
-    description: 'Wider RSI zones for gold trends. Paper demo only — live gold on /fx/.',
+    name: 'Gold EMA+RSI (Review)',
+    description:
+      'M5 EMA 20 (yellow) / 50 (blue) / 200 (purple) · RSI(8) oversold 40 / overbought 60 · 30p SL · 75p TP · 1% auto risk.',
   },
 }
 
