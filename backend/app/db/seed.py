@@ -25,8 +25,12 @@ SEED_STRATEGIES: list[dict] = [
             "batch_model": "LogisticRegression",
             "session_children": {
                 "asia": "EMA_RSI_Scalp",
+                "london": "EMA_RSI_Scalp",
+                "london_wind_down": "EMA_RSI_Scalp",
+                "london_close": "EMA_RSI_Scalp",
                 "london_ny_overlap": "Liquidity_Sweep_SMC",
                 "new_york": "EMA_VWAP_Scalp",
+                "off_hours": "EMA_RSI_Scalp",
             },
             "actions": ["TAKE", "CAUTION", "SKIP"],
             "chart_tf": "M1",

@@ -64,7 +64,7 @@ async def test_desk_endpoint(client):
     data = res.json()
     assert data["mode"] == "scalp_desk"
     assert data["recommended_strategy"] == "AI_ML"
-    assert data["recommended_london"] == "Stand aside"
+    assert data["recommended_london"] == "AI_ML → EMA_RSI_Scalp"
     assert data["recommended_asia"] == "AI_ML → EMA_RSI_Scalp"
     assert data["symbol"] == "XAUUSD"
     assert "session" in data and "news" in data

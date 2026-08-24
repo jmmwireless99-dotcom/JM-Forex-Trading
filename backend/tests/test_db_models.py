@@ -20,7 +20,7 @@ def test_seed_specs_match_prompt():
     }
     aiml = next(s for s in SEED_STRATEGIES if s["name"] == "AI_ML")
     assert aiml["parameters"]["session_children"]["asia"] == "EMA_RSI_Scalp"
-    assert "london" not in aiml["parameters"]["session_children"]
+    assert aiml["parameters"]["session_children"]["london"] == "EMA_RSI_Scalp"
     ema = next(s for s in SEED_STRATEGIES if s["name"] == "EMA_RSI_Scalp")
     assert ema["parameters"]["ema_trend"] == 200
     assert ema["parameters"]["rsi_buy_zone"] == [38, 52]

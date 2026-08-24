@@ -49,8 +49,16 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "AI_ML",
             "name": "AI & Machine Learning",
-            "sessions": ["Asia", "London/NY overlap", "New York"],
-            "session_slots": ["asia", "london_ny_overlap", "new_york"],
+            "sessions": ["Asia", "London", "London/NY overlap", "New York", "Early Asia"],
+            "session_slots": [
+                "asia",
+                "london",
+                "london_wind_down",
+                "london_close",
+                "london_ny_overlap",
+                "new_york",
+                "off_hours",
+            ],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -59,7 +67,7 @@ def strategy_catalog() -> list[dict]:
                 "win-probability filter (scikit-learn)."
             ),
             "entry_rules": [
-                "Asia → EMA_RSI_Scalp child · London 07–11 stand aside · Overlap → SMC · NY → VWAP.",
+                "Asia/London/Early Asia → EMA_RSI_Scalp · Overlap → SMC · NY → VWAP.",
                 "Child must print a valid setup on M5 close.",
                 "ML scores TAKE / CAUTION / SKIP from labeled trade history.",
                 "SKIP is blocked inside AI_ML (no order sent).",
@@ -81,8 +89,8 @@ def strategy_catalog() -> list[dict]:
         {
             "id": "EMA_RSI_Scalp",
             "name": "EMA + RSI Scalp",
-            "sessions": ["Asia", "New York"],
-            "session_slots": ["asia", "new_york"],
+            "sessions": ["Asia", "London", "Early Asia"],
+            "session_slots": ["asia", "london", "london_wind_down", "london_close", "off_hours"],
             "timeframe": "M5",
             "signal_tf": "M5",
             "chart_tf": "M1",
@@ -187,7 +195,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "AI_ML — session child (EMA_RSI/SMC/VWAP) + AI & Machine Learning filter",
-        "London 07–11 UTC — stand aside (Judas removed)",
+        "London/Early Asia → EMA_RSI_Scalp · Overlap → SMC · NY → VWAP.",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",

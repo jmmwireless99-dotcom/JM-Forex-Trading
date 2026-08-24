@@ -261,7 +261,7 @@ async def desk() -> dict:
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
         "recommended_asia": "AI_ML → EMA_RSI_Scalp",
-        "recommended_london": "Stand aside",
+        "recommended_london": "AI_ML → EMA_RSI_Scalp",
         "recommended_overlap": "AI_ML → Liquidity_Sweep_SMC",
         "recommended_ny": "AI_ML → EMA_VWAP_Scalp",
         "recommended_sr_scalp": "AI_ML → Liquidity_Sweep_SMC",
@@ -269,7 +269,7 @@ async def desk() -> dict:
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
             "AI & Machine Learning filter on every auto entry",
-            "London 07–11 UTC — stand aside (Judas removed)",
+            "Full-hours desk — Asia PH 7AM start · London/Early Asia → EMA_RSI",
             "EMA 200 / 20 / 50 + RSI 14",
             "Engulfing + pin bar confirmation",
             "Spread > 30 pips ($0.30) blocked · UK/EUR news −15m",

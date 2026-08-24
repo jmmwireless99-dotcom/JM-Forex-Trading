@@ -29,8 +29,12 @@ class AIMLStrategy(Strategy):
 
     _CHILD_MAP = {
         "asia": EmaRsiScalpStrategy.name,
+        "london": EmaRsiScalpStrategy.name,
+        "london_wind_down": EmaRsiScalpStrategy.name,
+        "london_close": EmaRsiScalpStrategy.name,
         "london_ny_overlap": LiquiditySweepSmcStrategy.name,
         "new_york": EmaVwapScalpStrategy.name,
+        "off_hours": EmaRsiScalpStrategy.name,
     }
 
     def __init__(self, lookback: int = 260) -> None:

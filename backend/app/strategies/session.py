@@ -56,43 +56,46 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia 00:00–06:59 — EMA_RSI
-    London 07:00–10:59 — stand aside (Judas removed)
-    London wind-down 11:00–11:59 — no new entries
-    London close 12:00–12:59 — kill pending limits
+    Asia PH 7:00AM–2:59PM (UTC 23 + 00:00–06:59) — EMA_RSI
+    London 07:00–10:59 — EMA_RSI
+    London wind-down 11:00–11:59 — EMA_RSI
+    London close 12:00–12:59 — EMA_RSI
     Overlap 13:00–17:59 — SMC
     New York 18:00–19:59 — EMA_VWAP
-    Off-hours / weekend — stand aside
+    Off-hours 20:00–22:59 — EMA_RSI (PH 4:00AM–6:59AM)
+    Weekend — stand aside
     """
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
+    ph = ph_hour(utc)
 
-    if 0 <= hour < 7:
+    # PH 7:00AM–2:59PM = UTC 23 (prior day) + 00:00–06:59
+    if ASIA_PH_START <= ph < 15:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
+            "Asia session (PH 7:00AM–2:59PM) — EMA_RSI + Asia range box",
         )
     if 7 <= hour < 11:
         return SessionWindow(
-            SessionTier.AVOID,
+            SessionTier.ALLOWED,
             "london",
-            "London session (UTC 07:00–10:59) — stand aside",
+            "London session (UTC 07:00–10:59) — EMA_RSI scalp",
         )
     if 11 <= hour < 12:
         return SessionWindow(
-            SessionTier.AVOID,
+            SessionTier.ALLOWED,
             "london_wind_down",
-            "London wind-down (UTC 11:00–11:59) — no new entries before kill",
+            "London wind-down (UTC 11:00–11:59) — EMA_RSI scalp",
         )
     if 12 <= hour < 13:
         return SessionWindow(
-            SessionTier.AVOID,
+            SessionTier.ALLOWED,
             "london_close",
-            "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
+            "London close (UTC 12:00–12:59) — EMA_RSI scalp",
         )
     if 13 <= hour < 18:
         return SessionWindow(
@@ -107,9 +110,9 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
             "New York session — USD-driven gold continuation",
         )
     return SessionWindow(
-        SessionTier.AVOID,
+        SessionTier.ALLOWED,
         "off_hours",
-        "Off-hours — spreads widen, skip new entries",
+        "Early Asia pre-open (UTC 20:00–22:59 / PH 4:00AM–6:59AM) — EMA_RSI scalp",
     )
 
 
@@ -163,14 +166,22 @@ def next_session_hint(ts: datetime) -> dict:
 
 _SESSION_STRATEGY = {
     "asia": "AI_ML",
+    "london": "AI_ML",
+    "london_wind_down": "AI_ML",
+    "london_close": "AI_ML",
     "london_ny_overlap": "AI_ML",
     "new_york": "AI_ML",
+    "off_hours": "AI_ML",
 }
 
 _SESSION_CHILD = {
     "asia": "EMA_RSI_Scalp",
+    "london": "EMA_RSI_Scalp",
+    "london_wind_down": "EMA_RSI_Scalp",
+    "london_close": "EMA_RSI_Scalp",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
     "new_york": "EMA_VWAP_Scalp",
+    "off_hours": "EMA_RSI_Scalp",
 }
 
 
