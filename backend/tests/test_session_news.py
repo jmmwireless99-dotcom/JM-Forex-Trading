@@ -29,9 +29,17 @@ def test_asia_starts_7am_ph():
     assert window.label == "asia"
 
 
+def test_asia_covers_ph_afternoon():
+    # 07:26 UTC = 3:26PM PH — still Asia (not London)
+    ts = datetime(2026, 8, 25, 7, 26, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
+
+
 def test_london_trades_ema_rsi():
-    # 08:00 UTC — London hours, EMA_RSI active
-    ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+    # 09:00 UTC = 5:00PM PH — London after Asia desk ends
+    ts = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ALLOWED
     assert window.label == "london"
@@ -69,10 +77,11 @@ def test_asia_desk_only_blocks_after_5pm():
 
 
 def test_next_session_after_asia_is_london():
-    ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
+    ts = datetime(2026, 7, 20, 8, 30, tzinfo=timezone.utc)  # 4:30PM PH — still Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
     assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 9
 
 
 def test_friday_night_next_is_asia_7am_ph():

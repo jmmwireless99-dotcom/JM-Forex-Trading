@@ -147,16 +147,16 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
-                "utc": "23:00-06:59",
-                "ph": "07:00-14:59",
+                "utc": "23:00-08:59",
+                "ph": "07:00-16:59",
                 "slot": "Asia",
                 "session": "asia",
                 "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
-                "utc": "07:00-10:59",
-                "ph": "15:00-18:59",
+                "utc": "09:00-10:59",
+                "ph": "17:00-18:59",
                 "slot": "London",
                 "session": "london",
                 "strategies": "AI_ML → EMA_RSI_Scalp",
