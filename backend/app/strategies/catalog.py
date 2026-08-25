@@ -167,8 +167,9 @@ def strategy_catalog() -> list[dict]:
                 "immediate rejection, retest, FVG/OB, or momentum entry."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (00:00–07:00 UTC) + PDH/PDL + swing pool.",
+                "Mark liquidity: Asian High/Low (PH 7AM–5PM box) + PDH/PDL + swing pool.",
                 "Sweep: wick beyond level with rejection (not a clean breakout).",
+                "SL placed beyond swept level + 2.5×ATR min · TP 2R.",
                 "Enter on sweep bar, retest of swept level, FVG/OB, or soft momentum.",
                 "Structure shift (MSS) preferred but not required when sweep is fresh.",
                 "Up to 4 entries per day; sweep memory expires after 18 M5 bars (~90 min).",
@@ -185,7 +186,7 @@ def strategy_catalog() -> list[dict]:
                 "Needs 40+ M5 bars for zone/structure context.",
             ],
             "order_type": "MARKET",
-            "reward_r": 2.5,
+            "reward_r": 2.0,
         },
         _MANUAL_CARD,
     ]
