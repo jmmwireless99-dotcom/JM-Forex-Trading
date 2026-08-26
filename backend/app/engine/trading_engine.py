@@ -42,7 +42,6 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 _AUTO_POOL = (
     "AI_ML",
     "EMA_RSI_Scalp",
-    "London_Judas_Sweep",
     "Liquidity_Sweep_SMC",
     "EMA_VWAP_Scalp",
 )
@@ -680,45 +679,6 @@ class TradingEngine:
                     {**order.model_dump(mode="json"), "account_id": account.id},
                 )
 
-    async def _persist_london(self, signal: Signal) -> str | None:
-        try:
-            from app.db.repository import create_london_signal, upsert_london_range
-            from app.db.session import db_enabled
-            from app.strategies.london_session import calculate_asian_range
-
-            if not db_enabled() or signal.strategy != "London_Judas_Sweep":
-                return None
-            bars = self.signal_candles.closed_history(signal.symbol, 240)
-            asian = calculate_asian_range(bars, as_of=signal.timestamp)
-            session_id = None
-            if asian:
-                swept_h = signal.side.value == "SELL"
-                swept_l = signal.side.value == "BUY"
-                session_id = upsert_london_range(
-                    session_date=asian.session_date,
-                    asian_high=asian.high,
-                    asian_low=asian.low,
-                    asian_range_pips=asian.range_pips,
-                    is_swept_high=swept_h,
-                    is_swept_low=swept_l,
-                )
-            entry = signal.limit_price or 0
-            risk = abs((signal.stop_loss or 0) - entry)
-            reward = abs(entry - (signal.take_profit or 0))
-            rr = round(reward / risk, 3) if risk else None
-            return create_london_signal(
-                session_id=session_id,
-                signal_type=signal.side.value,
-                sweep_price=float(signal.sweep_price or entry),
-                entry_price=float(entry),
-                stop_loss=float(signal.stop_loss or 0),
-                take_profit=float(signal.take_profit or 0),
-                risk_reward_ratio=rr,
-                metadata={"reason": signal.reason},
-            )
-        except Exception:
-            return None
-
     async def _persist_candle(self, candle: Candle, *, timeframe: str) -> None:
         try:
             from app.db.repository import upsert_candle
@@ -1295,12 +1255,11 @@ class TradingEngine:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
                     signal_db_id = await self._persist_signal(signal)
-                    london_id = await self._persist_london(signal)
                     await self._handle_signal(
                         signal,
                         tick,
                         signal_db_id=signal_db_id,
-                        london_signal_id=london_id,
+                        london_signal_id=None,
                     )
 
                 await self._emit("tick", tick.model_dump(mode="json"))

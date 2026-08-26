@@ -1,7 +1,4 @@
-"""London Judas async helpers — process M1/M5 bars, manage Asian range + kill switch.
-
-Used by TradingEngine; can also be imported for standalone scripts.
-"""
+"""London session helpers — Asian range snapshot + pending limit kill switch."""
 
 from __future__ import annotations
 
@@ -9,12 +6,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 
-from app.models.domain import Candle, Order, OrderStatus, Tick
-from app.strategies.london_judas_sweep import LondonJudasSweepStrategy
+from app.models.domain import Candle, Order, OrderStatus
 from app.strategies.london_session import (
     calculate_asian_range,
-    is_past_pending_kill,
     is_london_entry_window,
+    is_past_pending_kill,
 )
 
 
@@ -29,15 +25,18 @@ class LondonDeskSnapshot:
 
 
 class LondonEngine:
-    """Thin façade around LondonJudasSweepStrategy + session math."""
-
-    def __init__(self) -> None:
-        self.strategy = LondonJudasSweepStrategy()
+    """Session board for London hours (Judas strategy removed — stand aside)."""
 
     def snapshot(self, bars_m5: list[Candle], ts: datetime) -> LondonDeskSnapshot:
         asian = calculate_asian_range(bars_m5, as_of=ts)
+        in_window = is_london_entry_window(ts)
+        block = (
+            "London session — stand aside (Judas removed)"
+            if in_window
+            else "Outside London entry window (07:00–11:00 UTC)"
+        )
         return LondonDeskSnapshot(
-            in_entry_window=is_london_entry_window(ts),
+            in_entry_window=in_window,
             past_kill=is_past_pending_kill(ts),
             asian_range=(
                 {
@@ -50,22 +49,10 @@ class LondonEngine:
                 if asian
                 else None
             ),
-            last_block=self.strategy.last_block_reason,
-            checklist=list(self.strategy.last_checklist),
+            last_block=block,
+            checklist=[],
             pending_note="Unfilled LIMIT orders auto-cancel at 12:00 UTC",
         )
-
-    def evaluate(
-        self,
-        bars_m5: list[Candle],
-        tick: Tick,
-        *,
-        bars_m1: list[Candle] | None = None,
-    ):
-        self.strategy.set_structure_bars(bars_m5)
-        if bars_m1:
-            self.strategy.set_m1_bars(bars_m1)
-        return self.strategy.on_bar(bars_m5, tick)
 
     def as_dict(self, bars_m5: list[Candle], ts: datetime) -> dict:
         return asdict(self.snapshot(bars_m5, ts))
