@@ -13,7 +13,7 @@ from app.strategies.session import (
 
 
 def test_asia_ph_daytime():
-    # 02:00 UTC = Asia box / EMA window
+    # 02:00 UTC = 10:00AM PH — Asia EMA window
     ts = datetime(2026, 7, 20, 2, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ASIA
@@ -21,60 +21,58 @@ def test_asia_ph_daytime():
     assert session_allows_entry(ts) is False
 
 
-def test_london_trades_ema_rsi():
-    # 08:00 UTC = 4:00PM PH — London after Asia ends at 3PM PH
+def test_afternoon_ph_still_asia():
+    # 08:00 UTC = 4:00PM PH — still Asia until 8:59PM
     ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
-    assert window.label == "london"
-    assert session_allows_entry(ts) is True
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
 
 
-def test_london_wind_down_trades():
-    # 11:30 UTC — London wind-down, EMA_RSI active
+def test_evening_ph_still_asia():
+    # 11:30 UTC = 7:30PM PH — Asia through 8:59PM
     ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
-    assert window.label == "london_wind_down"
-    assert session_allows_entry(ts) is True
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
 
 
-def test_london_close_trades():
-    # 12:00 UTC — London close hour, EMA_RSI active
+def test_8pm_ph_still_asia():
+    # 12:00 UTC = 8:00PM PH — last Asia hour
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.ALLOWED
-    assert window.label == "london_close"
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
 
 
-def test_overlap_prime():
+def test_after_8pm_ph_overlap():
     ts = datetime(2026, 7, 20, 14, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.PRIME
     assert session_allows_entry(ts, prime_only=True) is True
 
 
-def test_asia_desk_only_blocks_after_5pm():
-    ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+def test_asia_desk_only_blocks_after_8pm():
+    ts = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)  # 9PM PH
     assert classify_asia_desk(ts).tier == SessionTier.AVOID
-    assert classify_full_sessions(ts).label == "london_close"
+    assert classify_full_sessions(ts).label == "london_ny_overlap"
 
 
-def test_next_session_after_asia_is_london():
+def test_next_session_after_asia_is_overlap():
     ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
     nxt = next_session_hint(ts)
-    assert nxt["session"] == "london"
+    assert nxt["session"] == "london_ny_overlap"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 7
+    assert nxt["hour_utc"] == 13
 
 
 def test_friday_night_next_is_asia():
-    # Fri 22:00 UTC = early Asia off-hours slot; next tradeable Asia at UTC 00
+    # Fri 22:00 UTC = 6:00AM PH off-hours; next Asia at UTC 23
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 0
+    assert nxt["hour_utc"] == 23
 
 
 def test_weekend_avoided():

@@ -21,7 +21,7 @@ class SessionWindow:
 
 # Asia M3/M5 scalp desk — Philippines local hours
 ASIA_PH_START = 7
-ASIA_PH_END = 17  # exclusive → until 5:00PM
+ASIA_PH_END = 21  # exclusive → active PH 7:00AM–8:59PM (ends at 9:00PM)
 
 
 def ph_hour(utc: datetime) -> int:
@@ -34,7 +34,7 @@ _ph_hour = ph_hour
 
 
 def classify_asia_desk(ts: datetime) -> SessionWindow:
-    """Asia-only desk: scalp PH 07:00–17:00; flat outside (JM_ASIA_DESK_ONLY)."""
+    """Asia-only desk: scalp PH 07:00–20:59; flat outside (JM_ASIA_DESK_ONLY)."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
@@ -44,22 +44,20 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–5:00PM) — M5 Support/Resistance",
+            "Asia scalp desk (PH 7:00AM–8:59PM) — M5 Support/Resistance",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "outside_asia_desk",
-        "Outside Asia desk hours — next window PH 7:00AM–5:00PM",
+        "Outside Asia desk hours — next window PH 7:00AM–8:59PM",
     )
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia UTC 00:00–06:59 (PH 8:00AM–2:59PM) — EMA_RSI
-    London 07:00–10:59 — EMA_RSI
-    London wind-down 11:00–11:59 — EMA_RSI
-    London close 12:00–12:59 — EMA_RSI
+    Asia PH 7:00AM–8:59PM (UTC 23 + 00:00–12:59) — EMA_RSI
+    London 12:00–12:59 UTC — EMA_RSI (only outside Asia PH window)
     Overlap 13:00–17:59 — SMC
     New York 18:00–19:59 — EMA_VWAP
     Off-hours 20:00–22:59 — EMA_RSI (PH 4:00AM–6:59AM)
@@ -70,12 +68,14 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
+    ph = ph_hour(utc)
 
-    if 0 <= hour < 7:
+    # PH 7:00AM–8:59PM (ASIA_PH_END=21 exclusive) = UTC 23 + 00:00–12:59
+    if ASIA_PH_START <= ph < ASIA_PH_END:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
+            "Asia session (PH 7:00AM–8:59PM) — EMA_RSI + Asia range box",
         )
     if 7 <= hour < 11:
         return SessionWindow(

@@ -167,7 +167,7 @@ def strategy_catalog() -> list[dict]:
                 "immediate rejection, retest, FVG/OB, or momentum entry."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (PH 7AM–5PM box) + PDH/PDL + swing pool.",
+                "Mark liquidity: Asian High/Low (PH 7AM–8PM box) + PDH/PDL + swing pool.",
                 "Sweep: wick beyond level with rejection (not a clean breakout).",
                 "SL placed beyond swept level + 2.5×ATR min · TP 2R.",
                 "Enter on sweep bar, retest of swept level, FVG/OB, or soft momentum.",

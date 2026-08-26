@@ -269,7 +269,7 @@ async def desk() -> dict:
         "next_session": (engine.recommended_now() or {}).get("next_session"),
         "indicators": [
             "AI & Machine Learning filter on every auto entry",
-            "Full-hours desk — Asia PH 7AM start · London/Early Asia → EMA_RSI",
+            "Full-hours desk — Asia PH 7AM–8PM · Overlap → SMC · NY → VWAP",
             "EMA 200 / 20 / 50 + RSI 14",
             "Engulfing + pin bar confirmation",
             "Spread > 30 pips ($0.30) blocked · UK/EUR news −15m",
