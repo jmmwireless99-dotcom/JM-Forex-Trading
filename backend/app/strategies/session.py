@@ -56,8 +56,8 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia PH 7:00AM–4:59PM (until 5:00PM) — EMA_RSI
-    London 09:00–10:59 UTC — EMA_RSI (PH 5:00–6:59PM)
+    Asia UTC 00:00–06:59 (PH 8:00AM–2:59PM) — EMA_RSI
+    London 07:00–10:59 — EMA_RSI
     London wind-down 11:00–11:59 — EMA_RSI
     London close 12:00–12:59 — EMA_RSI
     Overlap 13:00–17:59 — SMC
@@ -70,14 +70,12 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
-    ph = ph_hour(utc)
 
-    # PH 7:00AM–4:59PM (ASIA_PH_END=17 exclusive) = UTC 23 + 00:00–08:59
-    if ASIA_PH_START <= ph < ASIA_PH_END:
+    if 0 <= hour < 7:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (PH 7:00AM–5:00PM) — EMA_RSI + Asia range box",
+            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
         )
     if 7 <= hour < 11:
         return SessionWindow(

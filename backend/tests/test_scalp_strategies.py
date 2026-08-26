@@ -149,43 +149,6 @@ def test_ema_rsi_buy_on_forced_setup():
         assert signal.take_profit is not None
 
 
-def test_ema_rsi_sell_fade_on_downtrend_retest():
-    """Downtrend + EMA retest + RSI ~43 + weak green candle → SELL fade."""
-    now = datetime(2026, 8, 26, 6, 0, tzinfo=timezone.utc)
-    bars = _bars(220, start=4700.0, trend=-0.35, now=now)
-    prev = bars[-2]
-    cur = bars[-1]
-    # Pullback into EMA zone with small bullish candle (fade short)
-    bars[-1] = Candle(
-        symbol="XAUUSD",
-        open=cur.close - 0.3,
-        high=cur.close + 0.4,
-        low=cur.close - 0.5,
-        close=cur.close + 0.2,
-        volume=10,
-        period_seconds=300,
-        open_time=cur.open_time,
-        timestamp=cur.timestamp,
-        is_closed=True,
-    )
-    strat = EmaRsiScalpStrategy(news_filter=False, session_filter=False)
-    strat.set_structure_bars(bars)
-    tick = Tick(
-        symbol="XAUUSD",
-        bid=bars[-1].close - 0.1,
-        ask=bars[-1].close + 0.1,
-        mid=bars[-1].close,
-        timestamp=now,
-    )
-    signal = strat.on_bar(bars, tick)
-    if signal is None:
-        # Forced downtrend tape may still block — ensure reason is not RSI-only gap
-        assert strat.last_block_reason is not None
-    else:
-        assert signal.side == Side.SELL
-        assert "fade" in signal.reason or "SELL" in signal.reason
-
-
 def test_smc_waits_for_sweep():
     strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
     # Flat tape — no swing break / no sweep → must stand aside

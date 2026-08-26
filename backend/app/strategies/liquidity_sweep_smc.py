@@ -56,14 +56,13 @@ def _swing_low(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> boo
 
 
 def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
-    """Candles in today's Asia desk box — PH 7:00AM–4:59PM (UTC prior 23:00 → 09:00)."""
+    """Candles in today's Asia box UTC 00:00–07:00."""
     utc = now.astimezone(timezone.utc)
-    day0 = utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = day0.replace(hour=9)
-    start = (day0 - timedelta(days=1)).replace(hour=23)
-    if utc.hour < 9:
-        end = end - timedelta(days=1)
+    start = utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(hours=7)
+    if utc.hour < 7:
         start = start - timedelta(days=1)
+        end = start + timedelta(hours=7)
     return [c for c in bars if start <= _bar_utc(c) < end]
 
 

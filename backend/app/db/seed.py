@@ -47,7 +47,7 @@ SEED_STRATEGIES: list[dict] = [
             "ema_slow": 50,
             "rsi_period": 14,
             "rsi_buy_zone": [38, 52],
-            "rsi_sell_zone": [38, 62],
+            "rsi_sell_zone": [48, 62],
             "patterns": ["engulfing", "pin_bar"],
             "reward_r": 2.0,
             "min_stop_atr": 1.15,

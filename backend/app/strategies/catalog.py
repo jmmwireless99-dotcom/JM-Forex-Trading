@@ -102,7 +102,7 @@ def strategy_catalog() -> list[dict]:
                 "Uptrend: price above EMA200 and EMA20 ≥ EMA50.",
                 "Downtrend: price below EMA200 and EMA20 ≤ EMA50.",
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
-                "RSI 38–52 for BUY; RSI 38–62 for SELL (trend picks side).",
+                "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
                 "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
             ],
@@ -197,7 +197,7 @@ def entry_rules_short() -> list[str]:
     return [
         "AI_ML — session child (EMA_RSI/SMC/VWAP) + AI & Machine Learning filter",
         "London/Early Asia → EMA_RSI_Scalp · Overlap → SMC · NY → VWAP.",
-        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/38-62 · fade entries · hold SL/TP",
+        "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
         "Manual BUY/SELL with auto SL/TP always available",
