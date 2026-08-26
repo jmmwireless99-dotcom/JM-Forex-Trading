@@ -30,10 +30,10 @@ class EmaRsiScalpStrategy(Strategy):
         ema_slow: int = 50,
         rsi_period: int = 14,
         rsi_buy: tuple[float, float] = (38.0, 52.0),
-        rsi_sell: tuple[float, float] = (48.0, 62.0),
+        rsi_sell: tuple[float, float] = (38.0, 62.0),
         news_filter: bool | None = None,
         session_filter: bool | None = None,
-        min_bars_between_signals: int = 4,  # ≥20m on M5 — space entries without starving Asia
+        min_bars_between_signals: int = 3,  # ≥15m on M5
         # Asia scalp: tighter SL, 1:2 R — easier TP than swing sessions
         reward_r: float = 2.0,
         min_stop_atr: float = 1.15,
@@ -122,8 +122,8 @@ class EmaRsiScalpStrategy(Strategy):
 
         buy_rsi = self.rsi_buy[0] <= rsi_v <= self.rsi_buy[1]
         sell_rsi = self.rsi_sell[0] <= rsi_v <= self.rsi_sell[1]
-        uptrend = price > e200 and e20 >= e50
-        downtrend = price < e200 and e20 <= e50
+        uptrend = price > e200
+        downtrend = price < e200
 
         self.last_checklist = [
             f"EMA200={e200:.2f} EMA20={e20:.2f} EMA50={e50:.2f}",
@@ -142,7 +142,7 @@ class EmaRsiScalpStrategy(Strategy):
                 )
                 if len(bars) - 1 - idx < self.min_bars_between_signals:
                     self.last_block_reason = (
-                        f"Cooldown cooldown ({self.min_bars_between_signals} M5 bars)"
+                        f"Cooldown ({self.min_bars_between_signals} M5 bars)"
                     )
                     return None
             except StopIteration:
@@ -150,27 +150,32 @@ class EmaRsiScalpStrategy(Strategy):
 
         side: Side | None = None
         reason = ""
-        # Prefer real patterns; soft only with RSI in band + zone touch
-        if uptrend and near_fast and buy_rsi and (bull_pat or bull_soft):
+        # BUY: above EMA200 retest · SELL: below EMA200 retest
+        # Fade weak counter-candles at the EMA zone (bullish pop in downtrend → SELL).
+        if uptrend and near_fast and buy_rsi and (bull_pat or bull_soft or bear_soft):
             side = Side.BUY
             tag = (
                 "engulf"
                 if bullish_engulfing(prev, cur)
                 else "pin"
                 if bullish_pin_bar(cur)
+                else "dip"
+                if bear_soft
                 else "reclaim"
             )
             reason = (
                 f"EMA_RSI BUY · trend>EMA200 · retest EMA20/50 · "
                 f"RSI {rsi_v:.0f} · {tag}"
             )
-        elif downtrend and near_fast and sell_rsi and (bear_pat or bear_soft):
+        elif downtrend and near_fast and sell_rsi and (bear_pat or bear_soft or bull_soft):
             side = Side.SELL
             tag = (
                 "engulf"
                 if bearish_engulfing(prev, cur)
                 else "pin"
                 if bearish_pin_bar(cur)
+                else "fade"
+                if bull_soft
                 else "reclaim"
             )
             reason = (
