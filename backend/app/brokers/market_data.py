@@ -147,22 +147,15 @@ class MarketDataSimulator:
         if utc.weekday() >= 5:
             return
         hour = utc.hour
-        # Track Asia box roughly for later Judas/SMC sweeps.
+        # Track Asia box roughly for later SMC sweeps.
         # Do not return here — Asia session also needs EMA pullback demos below.
         if 0 <= hour < 7:
             if state.session_anchor is None:
                 state.session_anchor = state.mid
             state.asia_high = max(state.asia_high or state.mid, state.mid)
             state.asia_low = min(state.asia_low or state.mid, state.mid)
-        # London sweep window: inject Judas-style spike + reject more often on paper
-        if 7 <= hour < 11 and self._step % 180 == 0:
-            if state.asia_high is None:
-                state.asia_high = state.mid + 1.2
-                state.asia_low = state.mid - 1.2
-            state.scenario = "judas_sell" if (self._step // 180) % 2 == 0 else "judas_buy"
-            state.scenario_step = 0
         # Overlap: SMC-style liquidity grab
-        elif 13 <= hour < 16 and self._step % 150 == 0:
+        if 13 <= hour < 16 and self._step % 150 == 0:
             if state.asia_high is None:
                 state.asia_high = state.mid + 1.5
                 state.asia_low = state.mid - 1.5
@@ -184,30 +177,6 @@ class MarketDataSimulator:
         step = state.scenario_step
         state.scenario_step += 1
         vol = state.volatility
-
-        if state.scenario == "judas_sell":
-            # Spike ~$1.20 above Asia high (~120 pips @ 0.01), then reject inside
-            target_hi = (state.asia_high or state.mid) + 1.20
-            if step < 10:
-                return max(0.08, (target_hi - state.mid) * 0.4) + random.gauss(0, vol * 0.15)
-            if step < 25:
-                return -0.12 - abs(random.gauss(0, vol * 0.2))
-            if step < 45:
-                # Displacement + room for bearish FVG / ChoCH
-                return -0.05 + random.gauss(0, vol * 0.12)
-            state.scenario = None
-            return None
-
-        if state.scenario == "judas_buy":
-            target_lo = (state.asia_low or state.mid) - 1.20
-            if step < 10:
-                return min(-0.08, (target_lo - state.mid) * 0.4) + random.gauss(0, vol * 0.15)
-            if step < 25:
-                return 0.12 + abs(random.gauss(0, vol * 0.2))
-            if step < 45:
-                return 0.05 + random.gauss(0, vol * 0.12)
-            state.scenario = None
-            return None
 
         if state.scenario == "smc_sweep_sell":
             # Grab above recent high (~$1.0), reject, then bearish follow-through

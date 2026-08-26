@@ -21,29 +21,45 @@ def test_asia_ph_daytime():
     assert session_allows_entry(ts) is False
 
 
-def test_london_judas_window():
-    # 08:00 UTC — primary Judas sweep/entry (must NOT be Asia)
-    ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+def test_asia_starts_7am_ph():
+    # Mon 23:00 UTC = Tue 7:00AM PH — Asia window
+    ts = datetime(2026, 7, 20, 23, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
+
+
+def test_asia_covers_ph_afternoon():
+    # 07:26 UTC = 3:26PM PH — still Asia (not London)
+    ts = datetime(2026, 8, 25, 7, 26, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
+
+
+def test_london_trades_ema_rsi():
+    # 09:00 UTC = 5:00PM PH — London after Asia desk ends
+    ts = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ALLOWED
     assert window.label == "london"
     assert session_allows_entry(ts) is True
 
 
-def test_london_wind_down_before_kill():
-    # 11:30 UTC — strategy entry window closed; stand aside before 12:00 kill
+def test_london_wind_down_trades():
+    # 11:30 UTC — London wind-down, EMA_RSI active
     ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_wind_down"
-    assert session_allows_entry(ts) is False
+    assert session_allows_entry(ts) is True
 
 
-def test_london_kill_hour_stand_aside():
-    # 12:00 UTC — kill pending, no new strategy entries
+def test_london_close_trades():
+    # 12:00 UTC — London close hour, EMA_RSI active
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_close"
 
 
@@ -61,19 +77,20 @@ def test_asia_desk_only_blocks_after_5pm():
 
 
 def test_next_session_after_asia_is_london():
-    ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # Asia
+    ts = datetime(2026, 7, 20, 8, 30, tzinfo=timezone.utc)  # 4:30PM PH — still Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
     assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 9
 
 
-def test_friday_night_arms_monday_asia():
-    # Fri 22:00 UTC is off_hours; next tradeable is Monday Asia (beyond 24h).
+def test_friday_night_next_is_asia_7am_ph():
+    # Fri 22:00 UTC = Sat 6:00AM PH — early Asia; next slot is 7AM PH Asia (UTC 23)
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 0
+    assert nxt["hour_utc"] == 23
 
 
 def test_weekend_avoided():
