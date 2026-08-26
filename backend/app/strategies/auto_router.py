@@ -43,9 +43,12 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # Classic child under the AI_ML umbrella (session → setup engine)
 _CHILD_BY_SESSION = {
     "asia": "EMA_RSI_Scalp",
-    "london": "London_Judas_Sweep",
+    "london": "EMA_RSI_Scalp",
+    "london_wind_down": "EMA_RSI_Scalp",
+    "london_close": "EMA_RSI_Scalp",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
     "new_york": "EMA_VWAP_Scalp",
+    "off_hours": "EMA_RSI_Scalp",
 }
 
 
@@ -61,13 +64,13 @@ class AutoStrategyRouter:
         self.session_map: dict[str, str | None] = {
             "asia": "AI_ML",
             "london": "AI_ML",
-            "london_close": None,
-            "london_wind_down": None,
+            "london_close": "AI_ML",
+            "london_wind_down": "AI_ML",
             "london_ny_overlap": "AI_ML",
             "new_york": "AI_ML",
+            "off_hours": "AI_ML",
             "friday_late": None,
             "weekend": None,
-            "off_hours": None,
             "outside_asia_desk": None,
         }
         self.child_map = dict(_CHILD_BY_SESSION)
@@ -156,7 +159,7 @@ class AutoStrategyRouter:
                 "ph": "15:00-18:59",
                 "slot": "London",
                 "session": "london",
-                "strategies": "AI_ML → London_Judas_Sweep",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
@@ -164,7 +167,7 @@ class AutoStrategyRouter:
                 "ph": "19:00-19:59",
                 "slot": "London wind-down",
                 "session": "london_wind_down",
-                "strategies": "Stand aside",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
@@ -172,7 +175,7 @@ class AutoStrategyRouter:
                 "ph": "20:00-20:59",
                 "slot": "London close",
                 "session": "london_close",
-                "strategies": "Stand aside",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
                 "days": "Mon-Fri",
@@ -192,10 +195,10 @@ class AutoStrategyRouter:
             },
             {
                 "days": "Mon-Fri",
-                "utc": "20:00-23:59",
-                "ph": "04:00-07:59",
-                "slot": "Off-hours",
+                "utc": "20:00-22:59",
+                "ph": "04:00-06:59",
+                "slot": "Early Asia",
                 "session": "off_hours",
-                "strategies": "Stand aside",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
             },
         ]

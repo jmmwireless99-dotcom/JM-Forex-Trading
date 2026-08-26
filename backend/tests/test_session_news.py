@@ -21,8 +21,8 @@ def test_asia_ph_daytime():
     assert session_allows_entry(ts) is False
 
 
-def test_london_judas_window():
-    # 08:00 UTC — primary Judas sweep/entry (must NOT be Asia)
+def test_london_trades_ema_rsi():
+    # 08:00 UTC = 4:00PM PH — London after Asia ends at 3PM PH
     ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ALLOWED
@@ -30,20 +30,20 @@ def test_london_judas_window():
     assert session_allows_entry(ts) is True
 
 
-def test_london_wind_down_before_kill():
-    # 11:30 UTC — strategy entry window closed; stand aside before 12:00 kill
+def test_london_wind_down_trades():
+    # 11:30 UTC — London wind-down, EMA_RSI active
     ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_wind_down"
-    assert session_allows_entry(ts) is False
+    assert session_allows_entry(ts) is True
 
 
-def test_london_kill_hour_stand_aside():
-    # 12:00 UTC — kill pending, no new strategy entries
+def test_london_close_trades():
+    # 12:00 UTC — London close hour, EMA_RSI active
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
+    assert window.tier == SessionTier.ALLOWED
     assert window.label == "london_close"
 
 
@@ -65,10 +65,11 @@ def test_next_session_after_asia_is_london():
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london"
     assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 7
 
 
-def test_friday_night_arms_monday_asia():
-    # Fri 22:00 UTC is off_hours; next tradeable is Monday Asia (beyond 24h).
+def test_friday_night_next_is_asia():
+    # Fri 22:00 UTC = early Asia off-hours slot; next tradeable Asia at UTC 00
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"

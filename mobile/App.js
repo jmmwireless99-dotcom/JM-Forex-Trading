@@ -17,9 +17,10 @@ import { api, defaultApiBase, getApiBase, setApiBase } from './src/api'
 
 const STRATEGIES = [
   'manual_only',
-  'London_Judas_Sweep',
+  'AI_ML',
   'EMA_RSI_Scalp',
   'Liquidity_Sweep_SMC',
+  'EMA_VWAP_Scalp',
 ]
 
 function money(n) {

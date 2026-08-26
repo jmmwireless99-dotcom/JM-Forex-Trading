@@ -40,6 +40,13 @@ upsert_env JM_AI_SMC_SELL_OVERLAP_MIN_N 5
 upsert_env JM_AUTO_FILL_SINGLE_BOOK false
 upsert_env JM_EXECUTION_MODE paper
 upsert_env JM_DEFAULT_SYMBOLS XAUUSD
+# Investment dashboard (do not overwrite JM_INVEST_SECRET if present)
+grep -q '^JM_INVEST_SECRET=' "$ENV_FILE" 2>/dev/null || upsert_env JM_INVEST_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+upsert_env JM_INVEST_ADMIN_EMAIL admin@jmfx.local
+upsert_env JM_INVEST_ADMIN_NAME "JM FX Admin"
+upsert_env JM_INVEST_DEMO_ENABLED false
+upsert_env JM_INVEST_PERIOD_RATE 0.30
+upsert_env JM_INVEST_PERIOD_DAYS 30
 
 echo "[3/5] Build frontend with base=/fx/ ..."
 cd "$ROOT/frontend"
