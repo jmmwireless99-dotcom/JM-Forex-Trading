@@ -47,9 +47,9 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = Asia PH 7AM–5PM only (flat after). false = full map (Asia → London → NY)
-    # JM_ASIA_DESK_ONLY=false
-    asia_desk_only: bool = False
+    # true = Asia PH 7AM–8PM only (flat after). false = full map (Asia → Overlap → NY)
+    # JM_ASIA_DESK_ONLY=true
+    asia_desk_only: bool = True
 
     # Paper tape: pin XAUUSD mid to live gold (Yahoo GC=F / Binance PAXG)
     # so Manual trade / desk match TradingView (~4100), not the old 2350 sim.

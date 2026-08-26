@@ -69,7 +69,7 @@ SEED_STRATEGIES: list[dict] = [
         "timeframe": "M5",
         "description": "Asia/PDH-PDL sweep + MSS/ChoCH + FVG/OB retest entry",
         "parameters": {
-            "asia_session_utc": ["00:00", "07:00"],
+            "asia_session_utc": ["23:00", "13:00"],
             "liquidity": ["ASIAN_HIGH", "ASIAN_LOW", "PDH", "PDL", "SWING_HIGH", "SWING_LOW"],
             "structure": ["MSS", "ChoCH"],
             "entry_zones": ["SWEEP", "RETEST", "FVG", "ORDER_BLOCK"],

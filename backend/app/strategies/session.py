@@ -21,7 +21,7 @@ class SessionWindow:
 
 # Asia M3/M5 scalp desk — Philippines local hours
 ASIA_PH_START = 7
-ASIA_PH_END = 17  # exclusive → until 5:00PM
+ASIA_PH_END = 20  # exclusive → active PH 7:00AM–7:59PM (flat from 8:00PM)
 
 
 def ph_hour(utc: datetime) -> int:
@@ -34,7 +34,7 @@ _ph_hour = ph_hour
 
 
 def classify_asia_desk(ts: datetime) -> SessionWindow:
-    """Asia-only desk: scalp PH 07:00–17:00; flat outside (JM_ASIA_DESK_ONLY)."""
+    """Asia-only desk: scalp PH 07:00–19:59; flat outside (JM_ASIA_DESK_ONLY)."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
@@ -44,22 +44,20 @@ def classify_asia_desk(ts: datetime) -> SessionWindow:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–5:00PM) — M5 Support/Resistance",
+            "Asia scalp desk (PH 7:00AM–8:00PM) — M5 Support/Resistance",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "outside_asia_desk",
-        "Outside Asia desk hours — next window PH 7:00AM–5:00PM",
+        "Outside Asia desk hours — next window PH 7:00AM–8:00PM",
     )
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
     """Full desk map aligned with strategy clocks (UTC).
 
-    Asia 00:00–06:59 — EMA_RSI
-    London 07:00–10:59 — stand aside (Judas removed)
-    London wind-down 11:00–11:59 — no new entries
-    London close 12:00–12:59 — kill pending limits
+    Asia PH 7:00AM–8:00PM (UTC 23 + 00:00–11:59) — EMA_RSI
+    London 07:00–12:59 — stand aside (Judas removed)
     Overlap 13:00–17:59 — SMC
     New York 18:00–19:59 — EMA_VWAP
     Off-hours / weekend — stand aside
@@ -69,30 +67,19 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     hour = utc.hour
+    ph = ph_hour(utc)
 
-    if 0 <= hour < 7:
+    if ASIA_PH_START <= ph < ASIA_PH_END:
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia session (UTC 00:00–06:59) — EMA_RSI + Asia range box",
+            "Asia session (PH 7:00AM–8:00PM) — EMA_RSI + Asia range box",
         )
-    if 7 <= hour < 11:
+    if 7 <= hour < 13:
         return SessionWindow(
             SessionTier.AVOID,
             "london",
-            "London session (UTC 07:00–10:59) — stand aside",
-        )
-    if 11 <= hour < 12:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_wind_down",
-            "London wind-down (UTC 11:00–11:59) — no new entries before kill",
-        )
-    if 12 <= hour < 13:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london_close",
-            "London kill hour (UTC 12:00–12:59) — cancel limits, no new entries",
+            "London session (UTC 07:00–12:59) — stand aside",
         )
     if 13 <= hour < 18:
         return SessionWindow(
@@ -114,7 +101,7 @@ def classify_full_sessions(ts: datetime) -> SessionWindow:
 
 
 def classify_session(ts: datetime) -> SessionWindow:
-    """Active session map — full hybrid by default; Asia-only if configured."""
+    """Active session map — Asia-only by default; full hybrid if configured off."""
     from app.core.config import get_settings
 
     if get_settings().asia_desk_only:

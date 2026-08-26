@@ -36,7 +36,7 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–5PM)',
+    asia: 'Asia (PH 7AM–8PM)',
     london: 'London',
     london_ny_overlap: 'London / NY overlap',
     new_york: 'New York',
