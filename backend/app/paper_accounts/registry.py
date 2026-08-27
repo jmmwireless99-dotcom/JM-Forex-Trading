@@ -26,6 +26,21 @@ def _short_code() -> str:
     return secrets.token_hex(3).upper()  # 6 chars
 
 
+def _parse_stored_dt(raw: str | datetime | None) -> datetime | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        dt = raw
+    else:
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _contract_size(symbol: str) -> float:
     return PaperBroker.CONTRACT_SIZES.get(symbol.upper(), PaperBroker.DEFAULT_CONTRACT_SIZE)
 
@@ -86,7 +101,10 @@ def _settle_open_trade_row(row: dict) -> dict:
         "exit": exit_price,
     }
     if not settled.get("closed_at"):
-        settled["closed_at"] = utcnow().isoformat()
+        opened = _parse_stored_dt(row.get("opened_at"))
+        settled["closed_at"] = (
+            opened.isoformat() if opened is not None else utcnow().isoformat()
+        )
     return settled
 
 
@@ -105,6 +123,21 @@ class PaperAccount:
     is_desk: bool = False
     created_at: datetime = field(default_factory=utcnow)
 
+    def _effective_daily_pnl(self) -> float:
+        """Journal-backed PnL when broker positions were not restored from disk."""
+        snap = self.broker.snapshot()
+        if abs(snap.daily_pnl) >= 0.01:
+            return snap.daily_pnl
+        from app.models.domain import TradeStatus
+
+        closed = [t for t in self.journal.list(500) if t.status == TradeStatus.CLOSED]
+        journal_net = sum(float(t.realized_pnl or 0) for t in closed)
+        unrealized = sum(p.unrealized_pnl for p in self.broker.open_positions())
+        derived = round(journal_net + unrealized, 2)
+        if derived != 0:
+            return derived
+        return round(snap.equity - snap.deposit, 2)
+
     def public_info(self) -> dict:
         snap = self.broker.snapshot()
         return {
@@ -117,12 +150,14 @@ class PaperAccount:
             "balance": snap.balance,
             "equity": snap.equity,
             "open_positions": snap.open_positions,
+            "daily_pnl": self._effective_daily_pnl(),
             "trades_logged": self.journal.summary().get("total", 0),
         }
 
     def snapshot_payload(self) -> dict:
         """Account snapshot dict tagged with identity for API / WS clients."""
         snap = self.broker.snapshot().model_dump(mode="json")
+        snap["daily_pnl"] = self._effective_daily_pnl()
         return {
             **snap,
             "account_id": self.id,
@@ -376,6 +411,8 @@ class PaperAccountRegistry:
                             realized_pnl=float(t.get("realized_pnl") or 0),
                             mode=t.get("mode") or "paper",
                             reject_reason=t.get("reject_reason"),
+                            opened_at=_parse_stored_dt(t.get("opened_at")) or utcnow(),
+                            closed_at=_parse_stored_dt(t.get("closed_at")),
                         )
                         journal._trades.append(row_log)
                         journal._by_ticket[row_log.ticket] = row_log

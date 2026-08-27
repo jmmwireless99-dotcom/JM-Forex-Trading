@@ -1,4 +1,4 @@
-"""London session clocks + Asian range calculator for Judas Swing setups."""
+"""London session clocks + Asian range calculator."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def is_london_entry_window(ts: datetime) -> bool:
 
 
 def is_london_sweep_window(ts: datetime) -> bool:
-    """07:00–09:00 UTC — Judas sweep hunt window."""
+    """07:00–09:00 UTC — legacy London sweep window (stand aside)."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return False
