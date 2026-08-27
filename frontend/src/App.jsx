@@ -1053,6 +1053,90 @@ export default function App() {
           )}
         </section>
 
+        {desk?.night_monitor ? (
+          <section
+            className="panel"
+            style={{ gridColumn: '1 / -1' }}
+            data-alert={desk.night_monitor.alert_level || 'ok'}
+          >
+            <h2>Night trade monitor (PH 9PM–7AM)</h2>
+            <div className="status-row">
+              <span>
+                Now: {desk.night_monitor.is_currently_night ? 'NIGHT session' : 'DAY (Asia)'}
+              </span>
+              <span>
+                Tonight: {desk.night_monitor.tonight?.n ?? 0} trades · WR{' '}
+                {desk.night_monitor.tonight?.win_rate_pct ?? '—'}% · net $
+                {money(desk.night_monitor.tonight?.net_pnl ?? 0)}
+              </span>
+              <span>
+                7d night: {desk.night_monitor.last_7d?.n ?? 0} trades · net $
+                {money(desk.night_monitor.last_7d?.net_pnl ?? 0)}
+              </span>
+            </div>
+            {desk.night_monitor.alert ? (
+              <div
+                className={`error-banner${
+                  desk.night_monitor.alert_level === 'caution' ? ' caution' : ''
+                }`}
+                style={
+                  desk.night_monitor.alert_level === 'ok'
+                    ? { display: 'none' }
+                    : undefined
+                }
+              >
+                {desk.night_monitor.alert}
+              </div>
+            ) : null}
+            <div className="meta" style={{ marginTop: '0.5rem' }}>
+              ML history — night WR {desk.night_monitor.ml_history?.night?.win_rate_pct ?? '—'}%
+              ({desk.night_monitor.ml_history?.night?.n ?? 0} trades) vs day{' '}
+              {desk.night_monitor.ml_history?.day?.win_rate_pct ?? '—'}% (
+              {desk.night_monitor.ml_history?.day?.n ?? 0})
+            </div>
+            <table className="table" style={{ marginTop: '0.75rem' }}>
+              <thead>
+                <tr>
+                  <th>Night slot</th>
+                  <th>PH time</th>
+                  <th>Strategy</th>
+                  <th>Trades</th>
+                  <th>Win %</th>
+                  <th>Net P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ['overlap', '9PM–2AM', 'SMC'],
+                  ['ny', '2AM–4AM', 'VWAP'],
+                  ['other', '4AM–7AM', 'EMA_RSI early'],
+                ].map(([key, ph, strat]) => {
+                  const row = desk.night_monitor.by_night_session?.[key] || {}
+                  return (
+                    <tr key={key}>
+                      <td>{key}</td>
+                      <td className="meta">{ph}</td>
+                      <td className="meta">{strat}</td>
+                      <td>{row.n ?? 0}</td>
+                      <td>{row.win_rate_pct ?? '—'}%</td>
+                      <td className={pnlClass(row.net_pnl ?? 0)}>
+                        ${money(row.net_pnl ?? 0)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {(desk.night_monitor.recommendations || []).length ? (
+              <ul className="ai-reasons" style={{ marginTop: '0.75rem' }}>
+                {desk.night_monitor.recommendations.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="panel" style={{ gridColumn: '1 / -1' }}>
           <h2>Open positions</h2>
           {positions.length === 0 ? (

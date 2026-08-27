@@ -284,7 +284,14 @@ async def desk() -> dict:
         "last_block_reason": block,
         "server_time_utc": now.astimezone(timezone.utc).isoformat(),
         "ai": engine.ai_status(),
+        "night_monitor": engine.night_monitor_status(),
     }
+
+
+@router.get("/analytics/night")
+async def night_analytics() -> dict:
+    """PH night trade monitor — overlap / NY / early Asia loss tracking."""
+    return get_engine().night_monitor_status()
 
 
 @router.post("/engine/start")

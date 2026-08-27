@@ -868,6 +868,22 @@ class TradingEngine:
         payload["last_advice"] = self._last_advice
         return payload
 
+    def night_monitor_status(self) -> dict[str, Any]:
+        """PH night desk stats — overlap / NY / early Asia vs day Asia."""
+        from app.analytics.night_monitor import build_night_report
+
+        all_trades: list[dict] = []
+        for acct in self.accounts.clients():
+            all_trades.extend(
+                t.model_dump(mode="json")
+                for t in acct.journal.list(500, include_rejected=False)
+            )
+        report = build_night_report(
+            ml_history_path=self.settings.ai_history_path,
+            paper_trades=all_trades,
+        )
+        return report.as_dict()
+
     def ai_advice(self, account: PaperAccount | None = None) -> dict[str, Any]:
         """Score the newest signal; optionally backfill journal history first."""
         acct = account or self._desk
