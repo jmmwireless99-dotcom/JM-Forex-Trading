@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
 
+    # Entry lot size: 0.03 lots per $1,000 account capital (equity)
+    lots_per_1000_usd: float = 0.03
+
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"

@@ -94,7 +94,7 @@ export default function App() {
   const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [manualLots, setManualLots] = useState(0.01)
+  const [manualLots, setManualLots] = useState(0.03)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
   const [chartMode, setChartMode] = useState(() => {
@@ -110,6 +110,14 @@ export default function App() {
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
   const accountIdRef = useRef(null)
+
+  const applyCapital = (cap) => {
+    if (!cap) return
+    setCapital(cap)
+    if (cap.suggested_lots != null) {
+      setManualLots(Number(cap.suggested_lots))
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -301,7 +309,7 @@ export default function App() {
         const advice = bval(3)
         if (acc) {
           setAccount(acc)
-          setCapital(acc.capital || null)
+          applyCapital(acc.capital || null)
           if (acc.deposit != null) setDepositInput(String(acc.deposit))
           else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
         }
@@ -386,7 +394,7 @@ export default function App() {
     await run(async () => {
       const res = await api.setDeposit(value, true)
       if (res?.account) setAccount(res.account)
-      if (res?.capital) setCapital(res.capital)
+      if (res?.capital) applyCapital(res.capital)
       setDepositInput(String(res?.capital?.deposit ?? value))
       if (res?.trades?.trades) setTrades(res.trades.trades)
       if (res?.trades?.summary) setTradeSummary(res.trades.summary)
@@ -405,7 +413,7 @@ export default function App() {
   async function previewDeposit(amount) {
     try {
       const preview = await api.capitalPreview(amount)
-      setCapital(preview)
+      applyCapital(preview)
     } catch (err) {
       setError(err.message || 'Preview failed')
     }
@@ -780,11 +788,12 @@ export default function App() {
               </strong>
             </div>
             <div>
-              <label>Suggested lots</label>
+              <label>Entry lots</label>
               <strong>
                 {Number(capital.suggested_lots).toFixed(2)}{' '}
                 <span className="meta">
-                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                  ({Number(capital.lots_per_1000_usd ?? 0.03).toFixed(2)} / $1,000
+                  {capital.equity != null ? ` · equity $${money(capital.equity)}` : ''})
                 </span>
               </strong>
             </div>

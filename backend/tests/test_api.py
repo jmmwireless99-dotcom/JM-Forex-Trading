@@ -133,7 +133,7 @@ async def test_paper_deposit_changes_capital(client):
     preview = await client.get("/api/account/capital?amount=1000", headers=headers)
     assert preview.status_code == 200
     assert preview.json()["deposit"] == 1000.0
-    assert preview.json()["risk_per_trade_usd"] == 5.0
+    assert preview.json()["suggested_lots"] == 0.03
 
     # Live account still at 500 until applied
     acc = await client.get("/api/account", headers=headers)

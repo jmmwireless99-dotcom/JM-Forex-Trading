@@ -15,6 +15,7 @@ from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
 from app.engine.trade_journal import TradeJournal
+from app.risk.lot_sizing import lots_for_capital
 from app.models.domain import (
     AccountSnapshot,
     Candle,
@@ -268,6 +269,15 @@ class TradingEngine:
 
     def _balance(self, account: PaperAccount | None = None) -> float:
         return self.account_snapshot(account).balance
+
+    def _entry_lots(self, account: PaperAccount | None = None) -> float:
+        """Auto/manual default: 0.03 lots per $1,000 equity."""
+        snap = self.account_snapshot(account)
+        capital = float(snap.equity or snap.balance or snap.deposit)
+        return lots_for_capital(
+            capital,
+            lots_per_1000=self.settings.lots_per_1000_usd,
+        )
 
     async def _emit(self, event: str, payload: Any) -> None:
         message = {"event": event, "data": payload}
@@ -946,22 +956,26 @@ class TradingEngine:
         deposit: float | None = None,
         account: PaperAccount | None = None,
     ) -> dict:
-        """Show how risk / lot sizing scales with a paper deposit amount."""
+        """Show how entry lots scale with paper deposit / equity."""
         acct = account or self._desk
+        snap = acct.broker.snapshot()
+        equity = float(snap.equity or snap.balance or acct.broker.deposit)
         amount = float(deposit if deposit is not None else acct.broker.deposit)
+        sizing_capital = float(deposit if deposit is not None else equity)
+        lots_per_1000 = float(self.settings.lots_per_1000_usd)
+        suggested_lots = lots_for_capital(sizing_capital, lots_per_1000=lots_per_1000)
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
         stop_pips = float(self.settings.default_stop_loss_pips)
         tp_pips = float(self.settings.default_take_profit_pips)
         risk_usd = amount * (risk_pct / 100.0)
         daily_usd = amount * (daily_pct / 100.0) if daily_pct > 0 else None
-        pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
-        suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
-        suggested_lots = max(0.01, round(suggested, 2))
         return {
             "deposit": round(amount, 2),
+            "equity": round(equity, 2),
             "currency": self.settings.base_currency,
             "paper": not self.using_mt(),
+            "lots_per_1000_usd": lots_per_1000,
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
@@ -972,7 +986,10 @@ class TradingEngine:
             "suggested_lots": suggested_lots,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-            "note": "Paper demo capital for this account only — other clients cannot see it",
+            "note": (
+                f"Entry lots = ${lots_per_1000:.2f} per $1,000 equity "
+                f"(paper demo — account {acct.code})"
+            ),
         }
 
     async def set_paper_deposit(
@@ -1364,10 +1381,11 @@ class TradingEngine:
             except Exception:
                 advice = None
         if advice is not None and self.advisor.should_block(advice):
+            entry_lots = self._entry_lots(account)
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,
-                lots=0.01,
+                lots=entry_lots,
                 strategy=signal.strategy,
                 comment=(signal.reason or "")[:60],
                 status=OrderStatus.REJECTED,
@@ -1383,10 +1401,11 @@ class TradingEngine:
             )
             return
 
+        entry_lots = self._entry_lots(account)
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
-            lots=0.01,
+            lots=entry_lots,
             strategy=signal.strategy,
             comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
