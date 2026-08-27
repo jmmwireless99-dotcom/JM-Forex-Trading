@@ -20,6 +20,23 @@ function money(n) {
   })
 }
 
+const PH_TIME = { timeZone: 'Asia/Manila', hour12: true }
+
+function formatPhDateTime(raw) {
+  if (!raw) return '—'
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-PH', {
+    ...PH_TIME,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 function pnlClass(n) {
   if (n > 0) return 'positive'
   if (n < 0) return 'negative'
@@ -984,8 +1001,14 @@ export default function App() {
                     <div>
                       <div>
                         <strong>{s.symbol}</strong> · {s.strategy}
+                        <span className="meta"> · {formatPhDateTime(s.timestamp)}</span>
                       </div>
                       <div className="meta">{s.reason}</div>
+                      {(s.stop_loss != null || s.take_profit != null) && (
+                        <div className="meta">
+                          SL {s.stop_loss ?? '—'} · TP {s.take_profit ?? '—'}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -1153,7 +1176,8 @@ export default function App() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Time</th>
+                    <th>Opened (PH)</th>
+                    <th>Closed (PH)</th>
                     <th>Status</th>
                     <th>Side</th>
                     <th>Lots</th>
@@ -1169,8 +1193,9 @@ export default function App() {
                 <tbody>
                   {trades.map((t) => (
                     <tr key={t.id || t.ticket}>
+                      <td className="meta">{formatPhDateTime(t.opened_at)}</td>
                       <td className="meta">
-                        {t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}
+                        {t.status === 'CLOSED' ? formatPhDateTime(t.closed_at || t.opened_at) : '—'}
                       </td>
                       <td>
                         <span
