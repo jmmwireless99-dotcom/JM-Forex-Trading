@@ -247,6 +247,13 @@ class TradeAdvisor:
             stop_loss=trade.stop_loss,
             take_profit=trade.take_profit,
             mode=mode,
+            opened_at=(
+                trade.opened_at.isoformat()
+                if hasattr(trade.opened_at, "isoformat")
+                else trade.opened_at
+            )
+            if trade.opened_at
+            else None,
         )
 
     def record_close_from_trade(self, trade: TradeLog) -> dict[str, Any] | None:
@@ -255,6 +262,13 @@ class TradeAdvisor:
             realized_pnl=trade.realized_pnl,
             close_reason=trade.close_reason,
             exit_price=trade.exit,
+            closed_at=(
+                trade.closed_at.isoformat()
+                if trade.closed_at and hasattr(trade.closed_at, "isoformat")
+                else trade.closed_at
+            )
+            if trade.closed_at
+            else None,
         )
         if labeled and labeled.get("label") is not None and labeled.get("features"):
             self.model.partial_fit(labeled["features"], int(labeled["label"]))

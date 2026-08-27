@@ -31,7 +31,7 @@ def test_rejects_when_max_positions_reached():
 
 
 def test_approves_and_sizes_lots():
-    risk = RiskManager(Settings(max_risk_per_trade_pct=1.0))
+    risk = RiskManager(Settings(lots_per_1000_usd=0.03))
     tick = Tick(symbol="EURUSD", bid=1.1, ask=1.1001, mid=1.10005)
     decision = risk.evaluate(
         OrderRequest(symbol="EURUSD", side=Side.BUY, lots=1.0),
@@ -40,5 +40,4 @@ def test_approves_and_sizes_lots():
         tick=tick,
     )
     assert decision.approved is True
-    assert decision.adjusted_lots is not None
-    assert decision.adjusted_lots <= 1.0
+    assert decision.adjusted_lots == 0.30

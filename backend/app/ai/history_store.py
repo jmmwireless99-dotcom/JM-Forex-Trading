@@ -56,6 +56,7 @@ class TradeHistoryStore:
         stop_loss: float | None,
         take_profit: float | None,
         mode: str = "paper",
+        opened_at: str | None = None,
     ) -> dict[str, Any]:
         row = {
             "id": str(uuid4()),
@@ -71,7 +72,7 @@ class TradeHistoryStore:
             "label": None,
             "realized_pnl": None,
             "close_reason": None,
-            "opened_at": utcnow().isoformat(),
+            "opened_at": opened_at or utcnow().isoformat(),
             "closed_at": None,
         }
         return self._append(row)
@@ -83,6 +84,7 @@ class TradeHistoryStore:
         realized_pnl: float | None,
         close_reason: str | None,
         exit_price: float | None = None,
+        closed_at: str | None = None,
     ) -> dict[str, Any] | None:
         with self._lock:
             rows = list(self._read_all())
@@ -103,7 +105,7 @@ class TradeHistoryStore:
                 "realized_pnl": realized_pnl,
                 "close_reason": close_reason,
                 "exit": exit_price,
-                "closed_at": utcnow().isoformat(),
+                "closed_at": closed_at or utcnow().isoformat(),
             }
             # Rewrite file with updated row (small histories — fine for desk scale)
             for i, row in enumerate(rows):

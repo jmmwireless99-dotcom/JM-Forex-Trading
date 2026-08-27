@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from app.models.domain import Candle, Side, Tick
 from app.strategies.liquidity_sweep_smc import (
     LiquiditySweepSmcStrategy,
+    _asia_window_bars,
     _wick_swept_high,
     _wick_swept_low,
 )
@@ -86,10 +87,52 @@ def test_smc_enters_on_asia_high_sweep_rejection():
     )
     signal = strat.on_bar(bars, tick)
     assert signal is not None
+    strat.commit_pending_signal()
     assert signal.strategy == "Liquidity_Sweep_SMC"
     assert signal.side == Side.SELL
     assert signal.stop_loss is not None
     assert signal.take_profit is not None
+
+
+def test_smc_sl_beyond_swept_level():
+    """Stop must sit beyond the swept pool, not tight to the entry bar only."""
+    from app.strategies.liquidity_sweep_smc import SweepMemory, _smc_structure_levels
+
+    now = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+    bars = []
+    for i in range(84):
+        ts = datetime(2026, 7, 21, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * i)
+        bars.append(_bar(ts, 2352.0, 2355.0, 2348.0, 2352.5))
+    for i in range(84, 95):
+        ts = datetime(2026, 7, 21, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * i)
+        bars.append(_bar(ts, 2353.5, 2354.2, 2353.0, 2353.8))
+    ts = datetime(2026, 7, 21, 7, 55, tzinfo=timezone.utc)
+    bars.append(_bar(ts, 2354.5, 2355.6, 2354.2, 2354.7))
+    atr = 2.11
+    sweep = SweepMemory("SELL", "ASIAN_HIGH sweep", 2355.0, ts, ts.date(), bar_index=len(bars) - 1)
+    entry = 2354.6
+    tight = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        sweep=None,
+        pad=0.08,
+        min_stop_atr=1.8,
+        swing_lookback=3,
+        atr_pad=0.35,
+    )
+    wide = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        sweep=sweep,
+        pad=0.08,
+    )
+    assert wide.stop_loss >= sweep.level
+    assert wide.stop_loss >= tight.stop_loss
+    assert wide.risk >= tight.risk * 0.9
 
 
 def test_smc_choppy_market_can_fire_after_sweep():
@@ -115,5 +158,42 @@ def test_smc_choppy_market_can_fire_after_sweep():
             timestamp=sub[-1].timestamp + timedelta(seconds=30),
         )
         if strat.on_bar(sub, tick):
+            strat.commit_pending_signal()
             fired += 1
     assert fired >= 1
+
+
+def test_asia_box_available_during_overlap():
+    """Completed Asia H/L must be present when SMC runs after 8PM PH."""
+    base = datetime(2026, 8, 27, 0, 0, tzinfo=timezone.utc)
+    bars = []
+    for i in range(180):
+        ts = base + timedelta(minutes=5 * i)
+        p = 2600 + (i % 20) * 0.1
+        bars.append(_bar(ts, p, p + 2.0, p - 2.0, p + 0.5))
+
+    overlap = datetime(2026, 8, 27, 14, 30, tzinfo=timezone.utc)
+    asia = _asia_window_bars(bars, overlap)
+    assert len(asia) > 0
+
+    strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
+    zones, asia_bars, _ = strat._liquidity_zones(bars, overlap)
+    kinds = {z.kind for z in zones}
+    assert "ASIAN_HIGH" in kinds
+    assert "ASIAN_LOW" in kinds
+    assert len(asia_bars) > 0
+
+
+def test_smc_pending_fire_rollback_on_skip():
+    """ML SKIP must not consume SMC daily trade cap."""
+    strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
+    day = datetime(2026, 7, 21, tzinfo=timezone.utc).date()
+    strat._pending_fire = ("test-key", day)
+    assert strat._day_trade_count.get(day, 0) == 0
+    strat.rollback_pending_signal()
+    assert strat._pending_fire is None
+    assert strat._day_trade_count.get(day, 0) == 0
+    strat._pending_fire = ("test-key", day)
+    strat.commit_pending_signal()
+    assert strat._day_trade_count.get(day, 0) == 1
+    assert "test-key" in strat._fired_keys

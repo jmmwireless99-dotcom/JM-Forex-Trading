@@ -20,6 +20,23 @@ function money(n) {
   })
 }
 
+const PH_TIME = { timeZone: 'Asia/Manila', hour12: true }
+
+function formatPhDateTime(raw) {
+  if (!raw) return '—'
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-PH', {
+    ...PH_TIME,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 function pnlClass(n) {
   if (n > 0) return 'positive'
   if (n < 0) return 'negative'
@@ -94,7 +111,7 @@ export default function App() {
   const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [manualLots, setManualLots] = useState(0.01)
+  const [manualLots, setManualLots] = useState(0.03)
   const [autoStops, setAutoStops] = useState(true)
   const [orderNote, setOrderNote] = useState('')
   const [chartMode, setChartMode] = useState(() => {
@@ -110,6 +127,14 @@ export default function App() {
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
   const accountIdRef = useRef(null)
+
+  const applyCapital = (cap) => {
+    if (!cap) return
+    setCapital(cap)
+    if (cap.suggested_lots != null) {
+      setManualLots(Number(cap.suggested_lots))
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -301,7 +326,7 @@ export default function App() {
         const advice = bval(3)
         if (acc) {
           setAccount(acc)
-          setCapital(acc.capital || null)
+          applyCapital(acc.capital || null)
           if (acc.deposit != null) setDepositInput(String(acc.deposit))
           else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
         }
@@ -386,7 +411,7 @@ export default function App() {
     await run(async () => {
       const res = await api.setDeposit(value, true)
       if (res?.account) setAccount(res.account)
-      if (res?.capital) setCapital(res.capital)
+      if (res?.capital) applyCapital(res.capital)
       setDepositInput(String(res?.capital?.deposit ?? value))
       if (res?.trades?.trades) setTrades(res.trades.trades)
       if (res?.trades?.summary) setTradeSummary(res.trades.summary)
@@ -405,7 +430,7 @@ export default function App() {
   async function previewDeposit(amount) {
     try {
       const preview = await api.capitalPreview(amount)
-      setCapital(preview)
+      applyCapital(preview)
     } catch (err) {
       setError(err.message || 'Preview failed')
     }
@@ -505,7 +530,6 @@ export default function App() {
                   'manual_only',
                   'EMA_RSI_Scalp',
                   'Liquidity_Sweep_SMC',
-                  'London_Judas_Sweep',
                   'EMA_VWAP_Scalp',
                 ]
             ).map((name) => (
@@ -518,9 +542,7 @@ export default function App() {
                       ? 'EMA_RSI_Scalp (EMA200 + RSI + pin/engulf)'
                       : name === 'Liquidity_Sweep_SMC'
                         ? 'Liquidity_Sweep_SMC (sweep + FVG/OB)'
-                        : name === 'London_Judas_Sweep'
-                          ? 'London_Judas_Sweep (Asia trap · FVG50 limit · 07-11 UTC)'
-                          : name === 'EMA_VWAP_Scalp'
+                        : name === 'EMA_VWAP_Scalp'
                             ? 'EMA_VWAP_Scalp (9/21 EMA + VWAP)'
                             : name}
               </option>
@@ -607,7 +629,7 @@ export default function App() {
               <code>{activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: AI_ML · London_Judas · EMA_RSI · SMC · VWAP · manual
+              Strategies: AI_ML · EMA_RSI · SMC · VWAP · manual
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
@@ -783,11 +805,12 @@ export default function App() {
               </strong>
             </div>
             <div>
-              <label>Suggested lots</label>
+              <label>Entry lots</label>
               <strong>
                 {Number(capital.suggested_lots).toFixed(2)}{' '}
                 <span className="meta">
-                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                  ({Number(capital.lots_per_1000_usd ?? 0.03).toFixed(2)} / $1,000
+                  {capital.equity != null ? ` · equity $${money(capital.equity)}` : ''})
                 </span>
               </strong>
             </div>
@@ -978,8 +1001,14 @@ export default function App() {
                     <div>
                       <div>
                         <strong>{s.symbol}</strong> · {s.strategy}
+                        <span className="meta"> · {formatPhDateTime(s.timestamp)}</span>
                       </div>
                       <div className="meta">{s.reason}</div>
+                      {(s.stop_loss != null || s.take_profit != null) && (
+                        <div className="meta">
+                          SL {s.stop_loss ?? '—'} · TP {s.take_profit ?? '—'}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -1147,7 +1176,8 @@ export default function App() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Time</th>
+                    <th>Opened (PH)</th>
+                    <th>Closed (PH)</th>
                     <th>Status</th>
                     <th>Side</th>
                     <th>Lots</th>
@@ -1163,8 +1193,9 @@ export default function App() {
                 <tbody>
                   {trades.map((t) => (
                     <tr key={t.id || t.ticket}>
+                      <td className="meta">{formatPhDateTime(t.opened_at)}</td>
                       <td className="meta">
-                        {t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}
+                        {t.status === 'CLOSED' ? formatPhDateTime(t.closed_at || t.opened_at) : '—'}
                       </td>
                       <td>
                         <span

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
 
+    # Entry lot size: 0.03 lots per $1,000 account capital (equity)
+    lots_per_1000_usd: float = 0.03
+
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
     default_symbols: str = "XAUUSD"
@@ -47,7 +50,7 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = Asia PH 7AM–5PM only (flat after). false = full map (Asia → London → NY)
+    # true = Asia PH 7AM–8PM only (flat after). false = full map (Asia → London → NY)
     # JM_ASIA_DESK_ONLY=false
     asia_desk_only: bool = False
 

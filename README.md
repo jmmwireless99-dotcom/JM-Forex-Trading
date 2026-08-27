@@ -58,7 +58,7 @@ picks a classic child setup, then filters with Machine Learning:
 | Session (UTC) | Child under `AI_ML` |
 | --- | --- |
 | Asia 00–07 | `EMA_RSI_Scalp` |
-| London 07–11 | `London_Judas_Sweep` |
+| London 07–11 | Stand aside |
 | Overlap 13–18 | `Liquidity_Sweep_SMC` |
 | New York 18–20 | `EMA_VWAP_Scalp` |
 

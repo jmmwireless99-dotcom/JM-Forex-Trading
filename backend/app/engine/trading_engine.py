@@ -15,6 +15,7 @@ from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
 from app.engine.trade_journal import TradeJournal
+from app.risk.lot_sizing import lots_for_capital
 from app.models.domain import (
     AccountSnapshot,
     Candle,
@@ -42,7 +43,6 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 _AUTO_POOL = (
     "AI_ML",
     "EMA_RSI_Scalp",
-    "London_Judas_Sweep",
     "Liquidity_Sweep_SMC",
     "EMA_VWAP_Scalp",
 )
@@ -269,6 +269,15 @@ class TradingEngine:
 
     def _balance(self, account: PaperAccount | None = None) -> float:
         return self.account_snapshot(account).balance
+
+    def _entry_lots(self, account: PaperAccount | None = None) -> float:
+        """Auto/manual default: 0.03 lots per $1,000 equity."""
+        snap = self.account_snapshot(account)
+        capital = float(snap.equity or snap.balance or snap.deposit)
+        return lots_for_capital(
+            capital,
+            lots_per_1000=self.settings.lots_per_1000_usd,
+        )
 
     async def _emit(self, event: str, payload: Any) -> None:
         message = {"event": event, "data": payload}
@@ -680,45 +689,6 @@ class TradingEngine:
                     {**order.model_dump(mode="json"), "account_id": account.id},
                 )
 
-    async def _persist_london(self, signal: Signal) -> str | None:
-        try:
-            from app.db.repository import create_london_signal, upsert_london_range
-            from app.db.session import db_enabled
-            from app.strategies.london_session import calculate_asian_range
-
-            if not db_enabled() or signal.strategy != "London_Judas_Sweep":
-                return None
-            bars = self.signal_candles.closed_history(signal.symbol, 240)
-            asian = calculate_asian_range(bars, as_of=signal.timestamp)
-            session_id = None
-            if asian:
-                swept_h = signal.side.value == "SELL"
-                swept_l = signal.side.value == "BUY"
-                session_id = upsert_london_range(
-                    session_date=asian.session_date,
-                    asian_high=asian.high,
-                    asian_low=asian.low,
-                    asian_range_pips=asian.range_pips,
-                    is_swept_high=swept_h,
-                    is_swept_low=swept_l,
-                )
-            entry = signal.limit_price or 0
-            risk = abs((signal.stop_loss or 0) - entry)
-            reward = abs(entry - (signal.take_profit or 0))
-            rr = round(reward / risk, 3) if risk else None
-            return create_london_signal(
-                session_id=session_id,
-                signal_type=signal.side.value,
-                sweep_price=float(signal.sweep_price or entry),
-                entry_price=float(entry),
-                stop_loss=float(signal.stop_loss or 0),
-                take_profit=float(signal.take_profit or 0),
-                risk_reward_ratio=rr,
-                metadata={"reason": signal.reason},
-            )
-        except Exception:
-            return None
-
     async def _persist_candle(self, candle: Candle, *, timeframe: str) -> None:
         try:
             from app.db.repository import upsert_candle
@@ -986,22 +956,26 @@ class TradingEngine:
         deposit: float | None = None,
         account: PaperAccount | None = None,
     ) -> dict:
-        """Show how risk / lot sizing scales with a paper deposit amount."""
+        """Show how entry lots scale with paper deposit / equity."""
         acct = account or self._desk
+        snap = acct.broker.snapshot()
+        equity = float(snap.equity or snap.balance or acct.broker.deposit)
         amount = float(deposit if deposit is not None else acct.broker.deposit)
+        sizing_capital = float(deposit if deposit is not None else equity)
+        lots_per_1000 = float(self.settings.lots_per_1000_usd)
+        suggested_lots = lots_for_capital(sizing_capital, lots_per_1000=lots_per_1000)
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
         stop_pips = float(self.settings.default_stop_loss_pips)
         tp_pips = float(self.settings.default_take_profit_pips)
         risk_usd = amount * (risk_pct / 100.0)
         daily_usd = amount * (daily_pct / 100.0) if daily_pct > 0 else None
-        pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
-        suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
-        suggested_lots = max(0.01, round(suggested, 2))
         return {
             "deposit": round(amount, 2),
+            "equity": round(equity, 2),
             "currency": self.settings.base_currency,
             "paper": not self.using_mt(),
+            "lots_per_1000_usd": lots_per_1000,
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
@@ -1012,7 +986,10 @@ class TradingEngine:
             "suggested_lots": suggested_lots,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-            "note": "Paper demo capital for this account only — other clients cannot see it",
+            "note": (
+                f"Entry lots = ${lots_per_1000:.2f} per $1,000 equity "
+                f"(paper demo — account {acct.code})"
+            ),
         }
 
     async def set_paper_deposit(
@@ -1295,12 +1272,11 @@ class TradingEngine:
                     self._recent_signals.appendleft(signal)
                     await self._emit("signal", signal.model_dump(mode="json"))
                     signal_db_id = await self._persist_signal(signal)
-                    london_id = await self._persist_london(signal)
                     await self._handle_signal(
                         signal,
                         tick,
                         signal_db_id=signal_db_id,
-                        london_signal_id=london_id,
+                        london_signal_id=None,
                     )
 
                 await self._emit("tick", tick.model_dump(mode="json"))
@@ -1405,10 +1381,11 @@ class TradingEngine:
             except Exception:
                 advice = None
         if advice is not None and self.advisor.should_block(advice):
+            entry_lots = self._entry_lots(account)
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,
-                lots=0.01,
+                lots=entry_lots,
                 strategy=signal.strategy,
                 comment=(signal.reason or "")[:60],
                 status=OrderStatus.REJECTED,
@@ -1424,10 +1401,11 @@ class TradingEngine:
             )
             return
 
+        entry_lots = self._entry_lots(account)
         request = OrderRequest(
             symbol=signal.symbol,
             side=signal.side,
-            lots=0.01,
+            lots=entry_lots,
             strategy=signal.strategy,
             comment=signal.reason[:60],
             stop_loss=signal.stop_loss,
