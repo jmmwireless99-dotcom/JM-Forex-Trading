@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.core.config import Settings
 from app.models.domain import OrderRequest, Position, PositionStatus, Side, Tick
+from app.risk.lot_sizing import lots_for_capital
 
 
 @dataclass
@@ -79,18 +80,16 @@ class RiskManager:
         if stop_pips <= 0:
             return RiskDecision(False, "Invalid stop loss distance")
 
-        risk_amount = balance * (self.settings.max_risk_per_trade_pct / 100.0)
-        # $ value of 1 pip on 1.0 lot
-        # FX majors ≈ $10/pip; XAUUSD pip=0.1 → $10/pip on 100oz lot
-        pip_value_per_lot = 10.0
-        max_lots = risk_amount / (stop_pips * pip_value_per_lot)
-        # Gold: allow micro sizing down to 0.01
-        max_lots = max(0.01, round(min(max_lots, request.lots), 2))
+        cap_lots = lots_for_capital(
+            balance,
+            lots_per_1000=self.settings.lots_per_1000_usd,
+        )
+        approved_lots = max(0.01, round(min(request.lots, cap_lots), 2))
 
-        if max_lots < 0.01:
+        if approved_lots < 0.01:
             return RiskDecision(False, "Calculated lot size below minimum 0.01")
 
-        return RiskDecision(True, "Approved", adjusted_lots=max_lots)
+        return RiskDecision(True, "Approved", adjusted_lots=approved_lots)
 
     def apply_default_stops(
         self, request: OrderRequest, tick: Tick
