@@ -114,7 +114,15 @@ class AIMLStrategy(Strategy):
             )
             return None
 
+        smc_child = (
+            child
+            if child_name == LiquiditySweepSmcStrategy.name
+            else None
+        )
+
         if self.advisor is None or not self.advisor.enabled:
+            if smc_child is not None:
+                smc_child.commit_pending_signal()
             signal.strategy = f"AI_ML/{child_name}"
             signal.reason = f"AI_ML · {signal.reason}"
             return signal
@@ -128,12 +136,17 @@ class AIMLStrategy(Strategy):
         if advice.action == "SKIP" or (
             advice.action == "CAUTION" and not self.allow_caution
         ):
+            if smc_child is not None:
+                smc_child.rollback_pending_signal()
             self.last_block_reason = (
                 f"AI_ML {advice.action} p={advice.win_probability:.0%} · "
                 + (advice.reasons[0] if advice.reasons else "ML filter")
             )
             self.last_checklist.append(self.last_block_reason)
             return None
+
+        if smc_child is not None:
+            smc_child.commit_pending_signal()
 
         signal.strategy = f"AI_ML/{child_name}"
         signal.reason = (

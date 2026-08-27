@@ -56,7 +56,11 @@ def _swing_low(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> boo
 
 
 def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
-    """Candles in today's Asia box PH 7:00AM–8:00PM (UTC 23:00–12:59)."""
+    """Candles in the PH Asia box (7:00AM–8:59PM) for the active session day.
+
+    While the box is forming (UTC 23:00–12:59) return candles so far.
+    After Asia closes (UTC 13:00–22:59) return the completed box for SMC overlap.
+    """
     from app.strategies.session import ASIA_PH_END, ASIA_PH_START
 
     utc = now.astimezone(timezone.utc)
@@ -74,7 +78,11 @@ def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
         )
         end = utc.replace(hour=end_hour, minute=0, second=0, microsecond=0)
     else:
-        return []
+        # Overlap / off-hours: use completed Asia box (yesterday 23:00 → today 13:00 UTC)
+        end = utc.replace(hour=end_hour, minute=0, second=0, microsecond=0)
+        start = (end - timedelta(days=1)).replace(
+            hour=start_hour, minute=0, second=0, microsecond=0
+        )
 
     return [c for c in bars if start <= _bar_utc(c) < end]
 
@@ -256,6 +264,7 @@ class LiquiditySweepSmcStrategy(Strategy):
         self._sweep: SweepMemory | None = None
         self._fired_keys: set[str] = set()
         self._day_trade_count: dict[date, int] = {}
+        self._pending_fire: tuple[str, date] | None = None
 
     def set_structure_bars(self, candles: list[Candle]) -> None:
         self._structure_bars = list(candles)
@@ -383,6 +392,18 @@ class LiquiditySweepSmcStrategy(Strategy):
         self._fired_keys.add(key)
         self._day_trade_count[day] = self._day_trade_count.get(day, 0) + 1
 
+    def commit_pending_signal(self) -> None:
+        """Mark daily cap / fire key after ML or engine accepts the signal."""
+        if self._pending_fire is None:
+            return
+        key, day = self._pending_fire
+        self._mark_fired(key, day)
+        self._pending_fire = None
+
+    def rollback_pending_signal(self) -> None:
+        """Release pending cap when AI_ML SKIP blocks the setup."""
+        self._pending_fire = None
+
     def _build_signal(
         self,
         *,
@@ -422,7 +443,7 @@ class LiquiditySweepSmcStrategy(Strategy):
             f"SL/TP risk={levels.risk:.2f} R={levels.reward_r:.1f} "
             f"sl={levels.stop_loss:.2f} tp={levels.take_profit:.2f}"
         )
-        self._mark_fired(fire_key, day)
+        self._pending_fire = (fire_key, day)
         return Signal(
             strategy=self.name,
             symbol=tick.symbol,
@@ -440,6 +461,7 @@ class LiquiditySweepSmcStrategy(Strategy):
         self.last_checklist = []
         self.last_block_reason = None
         self.last_zones = []
+        self._pending_fire = None
 
         if len(bars) < 40:
             self.last_block_reason = "Need 40+ M5 bars for SMC"
