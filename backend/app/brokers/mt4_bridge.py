@@ -212,7 +212,7 @@ class MT4FileBridge:
         return positions
 
     # --- orders -------------------------------------------------------
-    def place_order(self, request: OrderRequest, timeout: float = 8.0) -> Order:
+    def place_order(self, request: OrderRequest, timeout: float = 15.0) -> Order:
         order = Order(
             symbol=request.symbol,
             side=request.side,
@@ -241,10 +241,10 @@ class MT4FileBridge:
             order.status = OrderStatus.FILLED
             order.fill_price = None
             order.filled_at = utcnow()
-            order.comment = f"mt4:{ack.detail}"
+            order.comment = f"mt5:{ack.detail}"
         else:
             order.status = OrderStatus.REJECTED
-            order.reject_reason = ack.detail or "MT4 bridge error"
+            order.reject_reason = ack.detail or "MT5 bridge error"
         return order
 
     def close_all(self, timeout: float = 8.0) -> BridgeAck:
@@ -273,7 +273,7 @@ class MT4FileBridge:
             if ack and ack.command_id == cmd_id:
                 return ack
             time.sleep(0.15)
-        return BridgeAck(cmd_id, "ERR", "timeout_waiting_mt4_ack")
+        return BridgeAck(cmd_id, "ERR", "timeout_waiting_mt5_ack")
 
     def _read_ack(self) -> BridgeAck | None:
         if not self.ack_file.exists():
@@ -295,6 +295,6 @@ def resolve_bridge(settings) -> MT4FileBridge | None:
     path = getattr(settings, "mt4_bridge_dir", "") or ""
     if not path:
         return None
-    mt_symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+    mt_symbol = getattr(settings, "mt_symbol", None) or getattr(settings, "mt4_symbol", "GOLD#")
     desk = settings.symbols[0] if settings.symbols else "XAUUSD"
     return MT4FileBridge(path, symbol=mt_symbol, desk_symbol=desk)

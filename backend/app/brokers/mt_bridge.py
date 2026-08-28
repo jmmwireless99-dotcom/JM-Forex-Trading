@@ -8,10 +8,18 @@ from app.brokers.mt4_bridge import BridgeAck, MT4FileBridge
 MetaTraderBridge = MT4FileBridge
 
 
+def _resolve_mt_symbol(settings, *, mode: str) -> str:
+    mt5_path = getattr(settings, "mt5_bridge_dir", "") or ""
+    remote = bool(getattr(settings, "mt_remote_bridge", False))
+    if mt5_path or remote or mode == "mt5":
+        return getattr(settings, "mt_symbol", None) or "GOLD#"
+    return getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+
+
 def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     """Return (bridge, platform) where platform is mt4|mt5|paper."""
     mode = (getattr(settings, "execution_mode", "paper") or "paper").lower()
-    mt_symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "GOLD#")
+    mt_symbol = _resolve_mt_symbol(settings, mode=mode)
     desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
     remote = bool(getattr(settings, "mt_remote_bridge", False))
 
@@ -38,7 +46,8 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     # Auto-detect configured folder even in paper (for status UI)
     path = getattr(settings, "mt4_bridge_dir", "") or getattr(settings, "mt5_bridge_dir", "")
     if path:
-        return _bridge(path), "paper"
+        platform = "mt5" if getattr(settings, "mt5_bridge_dir", "") or remote else "paper"
+        return _bridge(path), platform
     return None, "paper"
 
 
