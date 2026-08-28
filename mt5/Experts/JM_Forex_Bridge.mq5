@@ -12,7 +12,7 @@
 input string InpSymbol         = "GOLD#";
 input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
-input int    InpPollMs         = 500;
+input int    InpPollMs         = 100;
 input bool   UseCommonFolder   = true;
 input string CommandFile       = "jm_command.csv";
 input string StatusFile        = "jm_status.csv";

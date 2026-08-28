@@ -101,6 +101,21 @@ async def test_remote_sync_pushes_mt_demo_account(remote_client):
 
 
 @pytest.mark.asyncio
+async def test_remote_command_endpoint(remote_client):
+    client, bridge_dir = remote_client
+    (bridge_dir / "jm_command.csv").write_text(
+        "id,action,symbol,side,lots,sl,tp,comment\n"
+        "abc123,OPEN,GOLD#,BUY,0.01,4580,4610,manual\n"
+    )
+    res = await client.get("/api/mt/remote/command?token=test-bridge-token")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert body["pending"] is True
+    assert "GOLD#" in body["command"]
+
+
+@pytest.mark.asyncio
 async def test_remote_sync_rejects_bad_token(remote_client):
     client, _ = remote_client
     res = await client.post(

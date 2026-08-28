@@ -282,7 +282,7 @@ class MT4FileBridge:
             ack = self._read_ack()
             if ack and ack.command_id == cmd_id:
                 return ack
-            time.sleep(0.15)
+            time.sleep(0.05)
         return BridgeAck(cmd_id, "ERR", "timeout_waiting_mt5_ack")
 
     def _read_ack(self) -> BridgeAck | None:

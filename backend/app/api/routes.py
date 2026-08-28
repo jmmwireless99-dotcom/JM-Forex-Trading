@@ -342,6 +342,31 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
     }
 
 
+@router.get("/mt/remote/command")
+async def mt_remote_command(token: str) -> dict:
+    """Lightweight poll — PC agent fetches pending jm_command.csv only (fast JM FX → MT5)."""
+    settings = get_engine().settings
+    if not settings.mt_remote_bridge:
+        raise HTTPException(status_code=400, detail="Remote bridge disabled")
+    try:
+        verify_bridge_token(settings, token)
+        root = ensure_remote_bridge_dir(settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    command_path = root / COMMAND_FILE
+    command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
+    body = command.strip()
+    has_open = "OPEN" in body or "CLOSE" in body or "PING" in body
+    return {
+        "ok": True,
+        "command": command,
+        "has_command": bool(body),
+        "pending": has_open,
+    }
+
+
 @router.get("/mt/remote/status")
 async def mt_remote_agent_status(token: str) -> dict:
     """Health check for PC sync agent."""
