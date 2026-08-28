@@ -323,6 +323,9 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
 
     command_path = root / COMMAND_FILE
     command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
+    engine = get_engine()
+    if "jm_status.csv" in written or "jm_ticks.csv" in written:
+        await engine.notify_mt_demo_sync()
     return {
         "ok": True,
         "written": written,
@@ -532,7 +535,11 @@ async def login_account(body: LoginAccountBody) -> dict:
         "follow_auto": acct.follow_auto,
         "account": engine.account_payload(acct),
         "mt5": engine.mt_demo_link_status(acct),
-        "message": "Login OK — save token in this browser to stay signed in",
+        "message": (
+            "Login OK — DDDC3D is MT5-only; balance syncs from XM terminal when PC agent runs"
+            if acct.code.upper() == (engine.settings.mt5_demo_account_code or "").upper()
+            else "Login OK — save token in this browser to stay signed in"
+        ),
     }
 
 

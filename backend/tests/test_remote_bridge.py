@@ -55,6 +55,52 @@ async def test_remote_sync_writes_files(remote_client):
 
 
 @pytest.mark.asyncio
+async def test_remote_sync_pushes_mt_demo_account(remote_client):
+    client, bridge_dir = remote_client
+    reset_engine(
+        Settings(
+            tick_interval_seconds=0.05,
+            auto_strategy=False,
+            execution_mode="paper",
+            mt5_bridge_dir=str(bridge_dir),
+            mt_remote_bridge=True,
+            mt_bridge_token="test-bridge-token",
+            mt5_demo_account_code="ABC123",
+            mt_symbol="GOLD#",
+        )
+    )
+    from app.api.deps import get_engine
+    from app.paper_accounts.registry import PaperAccountRegistry
+
+    engine = get_engine()
+    store = bridge_dir.parent / "accounts.json"
+    reg = PaperAccountRegistry(engine.settings, store_path=store)
+    acct = reg.create(deposit=500.0, label="XM MT5 Demo", follow_auto=False)
+    acct.code = "ABC123"
+    engine.accounts = reg
+
+    events: list[str] = []
+
+    async def capture(msg):
+        if msg.get("event") == "account":
+            events.append(msg["data"].get("account_code", ""))
+
+    engine.subscribe(capture)
+    res = await client.post(
+        "/api/mt/remote/sync",
+        json={
+            "token": "test-bridge-token",
+            "status": "ok,1000.00,1005.50,0,2026-08-28 10:00:00\n",
+        },
+    )
+    assert res.status_code == 200
+    assert events == ["ABC123"]
+    payload = engine.account_payload(acct)
+    assert payload["balance"] == 1000.0
+    assert payload["mt5_only"] is True
+
+
+@pytest.mark.asyncio
 async def test_remote_sync_rejects_bad_token(remote_client):
     client, _ = remote_client
     res = await client.post(

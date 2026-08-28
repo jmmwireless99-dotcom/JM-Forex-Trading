@@ -258,6 +258,30 @@ class TradingEngine:
     def _account_executes_via_mt(self, account: PaperAccount) -> bool:
         return self._is_mt_demo_account(account)
 
+    def mt_demo_account(self) -> PaperAccount | None:
+        code = (self.settings.mt5_demo_account_code or "").strip().upper()
+        if not code:
+            return None
+        for acct in self.accounts.all():
+            if (acct.code or "").upper() == code and not acct.is_desk:
+                return acct
+        return None
+
+    async def notify_mt_demo_sync(self) -> None:
+        """Push live MT5 balance/positions to DDDC3D clients after PC agent sync."""
+        acct = self.mt_demo_account()
+        if acct is None:
+            return
+        await self._emit("account", self.account_payload(acct))
+        await self._emit(
+            "positions",
+            {
+                "account_id": acct.id,
+                "positions": [p.model_dump(mode="json") for p in self.open_positions(acct)],
+            },
+        )
+        await self._emit("connection", self.connection_info())
+
     def mt_demo_link_status(self, account: PaperAccount) -> dict[str, Any]:
         linked = self._is_mt_demo_account(account)
         live = linked and self._mt_bridge_live()
@@ -1244,7 +1268,19 @@ class TradingEngine:
         if self.using_mt():
             tick = self.mt.read_tick()
             return [tick] if tick else []
-        return self.market.next_ticks()
+        ticks = self.market.next_ticks()
+        # Keep MT5 live price available for DDDC3D / manual orders even in paper desk mode.
+        if self.mt and self._mt_bridge_live():
+            mt_tick = self.mt.read_tick()
+            if mt_tick:
+                self._recent_ticks[mt_tick.symbol] = mt_tick
+                for i, t in enumerate(ticks):
+                    if t.symbol == mt_tick.symbol:
+                        ticks[i] = mt_tick
+                        break
+                else:
+                    ticks.append(mt_tick)
+        return ticks
 
     async def _tick_once(self) -> None:
         async with self._lock:
