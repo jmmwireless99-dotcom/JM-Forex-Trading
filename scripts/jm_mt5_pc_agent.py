@@ -47,6 +47,14 @@ def write_text(path: Path, content: str) -> None:
     tmp.replace(path)
 
 
+def _command_id(command: str) -> str | None:
+    for line in command.strip().splitlines():
+        if not line or line.startswith("id,action"):
+            continue
+        return line.split(",", 1)[0].strip() or None
+    return None
+
+
 def sync_once(base_url: str, token: str, bridge_dir: Path) -> dict:
     payload = {"token": token}
     for key, fname in FILES.items():
@@ -70,7 +78,29 @@ def sync_once(base_url: str, token: str, bridge_dir: Path) -> dict:
         if command != current:
             write_text(cmd_path, command if command.endswith("\n") else command + "\n")
             data["command_written"] = True
+            data["command_id"] = _command_id(command)
     return data
+
+
+def burst_sync_ack(
+    base_url: str,
+    token: str,
+    bridge_dir: Path,
+    cmd_id: str,
+    *,
+    seconds: float = 40.0,
+) -> bool:
+    """Fast sync loop after a new command — upload MT5 ack quickly."""
+    ack_path = bridge_dir / FILES["ack"]
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        sync_once(base_url, token, bridge_dir)
+        ack = read_text(ack_path) or ""
+        first = ack.strip().splitlines()[0] if ack.strip() else ""
+        if first.startswith(cmd_id + ","):
+            return True
+        time.sleep(0.25)
+    return False
 
 
 def main() -> int:
@@ -110,7 +140,14 @@ def main() -> int:
         try:
             result = sync_once(args.url, args.token, bridge_dir)
             status = "online" if result.get("written") else "waiting"
-            extra = " cmd→MT5" if result.get("command_written") else ""
+            extra = ""
+            if result.get("command_written"):
+                cmd_id = result.get("command_id") or "?"
+                extra = f" cmd→MT5 {cmd_id[:8]}"
+                if burst_sync_ack(args.url, args.token, bridge_dir, cmd_id):
+                    extra += " ack✓"
+                else:
+                    extra += " ack…"
             print(f"\r  sync OK · {status}{extra} · {time.strftime('%H:%M:%S')}", end="", flush=True)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")[:120]

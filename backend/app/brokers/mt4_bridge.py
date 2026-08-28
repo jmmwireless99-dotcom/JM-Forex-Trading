@@ -212,7 +212,17 @@ class MT4FileBridge:
         return positions
 
     # --- orders -------------------------------------------------------
-    def place_order(self, request: OrderRequest, timeout: float = 15.0) -> Order:
+    def _format_ack_error(self, ack: BridgeAck) -> str:
+        detail = (ack.detail or "").strip()
+        if detail == "symbol_or_lots":
+            return f"MT5 symbol mismatch — recompile EA & set InpSymbol={self.mt_symbol}"
+        if detail == "timeout_waiting_mt5_ack":
+            return "MT5 ack timeout — keep PC Agent open + Algo Trading ON"
+        if detail.isdigit():
+            return f"MT5 error {detail}"
+        return detail or "MT5 bridge error"
+
+    def place_order(self, request: OrderRequest, timeout: float = 45.0) -> Order:
         order = Order(
             symbol=request.symbol,
             side=request.side,
@@ -244,7 +254,7 @@ class MT4FileBridge:
             order.comment = f"mt5:{ack.detail}"
         else:
             order.status = OrderStatus.REJECTED
-            order.reject_reason = ack.detail or "MT5 bridge error"
+            order.reject_reason = self._format_ack_error(ack)
         return order
 
     def close_all(self, timeout: float = 8.0) -> BridgeAck:

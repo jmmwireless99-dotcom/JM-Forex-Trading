@@ -150,7 +150,22 @@ void ProcessCommandLine(string line)
    double tp = (n > 6 && StringLen(parts[6]) > 0) ? StringToDouble(parts[6]) : 0;
    string comment = (n > 7) ? parts[7] : "JM";
 
-   if(symbol != InpSymbol || lots <= 0)
+   if(lots <= 0)
+   {
+      WriteAck(cmd_id, "ERR", "symbol_or_lots");
+      return;
+   }
+
+   // Auto-pick broker symbol: command may say GOLD# or XAUUSD (desk alias)
+   string trade_symbol = symbol;
+   double bid_cmd = SymbolInfoDouble(symbol, SYMBOL_BID);
+   double bid_inp = SymbolInfoDouble(InpSymbol, SYMBOL_BID);
+   double bid_chart = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if(bid_cmd <= 0 && bid_inp > 0)
+      trade_symbol = InpSymbol;
+   else if(bid_cmd <= 0 && bid_inp <= 0 && bid_chart > 0)
+      trade_symbol = _Symbol;
+   else if(bid_cmd <= 0)
    {
       WriteAck(cmd_id, "ERR", "symbol_or_lots");
       return;
@@ -162,9 +177,9 @@ void ProcessCommandLine(string line)
 
    bool sent = false;
    if(side == "BUY")
-      sent = trade.Buy(lots, symbol, 0, sl, tp, comment);
+      sent = trade.Buy(lots, trade_symbol, 0, sl, tp, comment);
    else if(side == "SELL")
-      sent = trade.Sell(lots, symbol, 0, sl, tp, comment);
+      sent = trade.Sell(lots, trade_symbol, 0, sl, tp, comment);
    else
    {
       WriteAck(cmd_id, "ERR", "bad_side");
