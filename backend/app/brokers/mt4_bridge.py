@@ -19,6 +19,62 @@ from app.models.domain import (
 )
 
 
+def _live_gold_mid() -> float | None:
+    try:
+        from app.market_data.gold_feed import fetch_gold_candles
+
+        data = fetch_gold_candles(interval="5m", limit=3)
+        price = data.get("price")
+        if price is None and data.get("candles"):
+            price = data["candles"][-1].get("close")
+        mid = float(price) if price is not None else 0.0
+        return mid if mid > 100 else None
+    except Exception:
+        return None
+
+
+def repair_mt_tick_line(
+    line: str,
+    *,
+    mt_symbol: str,
+    live_mid: float | None = None,
+) -> str:
+    """Normalize legacy XAUUSD,0.00 ticks to configured MT symbol + live mid."""
+    raw = (line or "").strip()
+    if not raw:
+        return line
+    parts = raw.split(",")
+    if len(parts) < 3:
+        return line
+    sym = parts[0]
+    try:
+        bid = float(parts[1])
+        ask = float(parts[2])
+    except ValueError:
+        return line
+    mt = (mt_symbol or "").strip()
+    mt_u = mt.upper()
+    sym_u = sym.upper()
+    legacy = sym_u in {"XAUUSD", "XAUUSD#", "GOLD", "GOLD24-7#"}
+    if legacy and mt_u and sym_u != mt_u:
+        parts[0] = mt
+    if bid <= 0 or ask <= 0:
+        mid = live_mid if live_mid and live_mid > 100 else _live_gold_mid()
+        if mid:
+            spread = 0.30
+            parts[1] = f"{mid - spread / 2:.2f}"
+            parts[2] = f"{mid + spread / 2:.2f}"
+    return ",".join(parts) + ("\n" if line.endswith("\n") else "")
+
+
+def repair_mt_tick_csv(content: str, *, mt_symbol: str, live_mid: float | None = None) -> str:
+    lines = [ln for ln in (content or "").splitlines() if ln.strip()]
+    if not lines:
+        return content or ""
+    fixed = repair_mt_tick_line(lines[-1], mt_symbol=mt_symbol, live_mid=live_mid)
+    return fixed if fixed.endswith("\n") else fixed + "\n"
+
+
 @dataclass
 class BridgeAck:
     command_id: str
@@ -89,8 +145,12 @@ class MT4FileBridge:
         parts = line[-1].split(",")
         if len(parts) < 3:
             return None
+        repaired = repair_mt_tick_line(line[-1], mt_symbol=self.mt_symbol)
+        parts = repaired.strip().split(",")
         symbol, bid_s, ask_s = parts[0], parts[1], parts[2]
         bid, ask = float(bid_s), float(ask_s)
+        if bid <= 0 or ask <= 0:
+            return None
         desk = self._to_desk_symbol(symbol)
         decimals = 2 if desk == "XAUUSD" else 5
         return Tick(

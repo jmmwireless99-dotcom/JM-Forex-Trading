@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.api.account_deps import require_paper_account
 from app.api.deps import get_engine
 from app.brokers.mt_bridge import resolve_mt_bridge
+from app.brokers.mt4_bridge import repair_mt_tick_csv
 from app.brokers.remote_bridge import (
     BRIDGE_FILES,
     COMMAND_FILE,
@@ -311,9 +312,17 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     written: list[str] = []
+    engine = get_engine()
+    tick_content = body.ticks
+    if tick_content is not None:
+        tick_content = repair_mt_tick_csv(
+            tick_content,
+            mt_symbol=settings.mt_symbol,
+            live_mid=engine._live_gold_mid("XAUUSD"),
+        )
     for name, content in (
         ("jm_status.csv", body.status),
-        ("jm_ticks.csv", body.ticks),
+        ("jm_ticks.csv", tick_content),
         ("jm_positions.csv", body.positions),
         ("jm_ack.csv", body.ack),
     ):
@@ -323,7 +332,6 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
 
     command_path = root / COMMAND_FILE
     command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
-    engine = get_engine()
     if "jm_status.csv" in written or "jm_ticks.csv" in written:
         await engine.notify_mt_demo_sync()
     return {

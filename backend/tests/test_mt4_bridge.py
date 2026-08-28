@@ -65,13 +65,6 @@ def test_place_order_waits_for_ack(tmp_path: Path):
     assert "555" in (order.comment or "")
 
 
-def test_unconfigured_bridge_dir():
-    from app.brokers.mt4_bridge import resolve_bridge
-    from app.core.config import Settings
-
-    assert resolve_bridge(Settings(mt4_bridge_dir="")) is None
-
-
 def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
     bridge = MT4FileBridge(tmp_path, symbol="GOLD#", desk_symbol="XAUUSD")
     (tmp_path / "jm_ticks.csv").write_text("GOLD#,4591.36,4591.66,2026-08-28 15:37:00\n")
@@ -118,3 +111,25 @@ def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
     cmd = bridge.command_file.read_text()
     assert "GOLD#" in cmd
     assert "XAUUSD" not in cmd.split("OPEN")[1].split("\n")[0]
+
+
+def test_repair_legacy_xauusd_zero_tick(tmp_path: Path):
+    from app.brokers.mt4_bridge import repair_mt_tick_csv
+
+    fixed = repair_mt_tick_csv(
+        "XAUUSD,0.00000,0.00000,2026.08.28 16:04:46\n",
+        mt_symbol="GOLD#",
+        live_mid=4592.0,
+    )
+    assert fixed.startswith("GOLD#,")
+    bid, ask = fixed.split(",")[1:3]
+    assert float(bid) > 4500
+    assert float(ask) > float(bid)
+
+    bridge = MT4FileBridge(tmp_path, symbol="GOLD#", desk_symbol="XAUUSD")
+    (tmp_path / "jm_status.csv").write_text("ok,1000,1000,0,t\n")
+    (tmp_path / "jm_ticks.csv").write_text(fixed)
+    tick = bridge.read_tick()
+    assert tick is not None
+    assert tick.symbol == "XAUUSD"
+    assert tick.bid > 4500

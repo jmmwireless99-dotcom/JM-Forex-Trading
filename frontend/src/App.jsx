@@ -553,6 +553,7 @@ export default function App() {
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const gold = ticks.XAUUSD
+  const goldLabel = mt5Only ? 'GOLD#' : 'XAUUSD'
   const hasOpen = positions.length > 0
 
   return (
@@ -720,7 +721,7 @@ export default function App() {
               Sync: {account.mt5_linked && mtOnline ? 'OK · $' + Number(account.balance || 0).toFixed(2) : 'offline'}
             </span>
           ) : null}
-          {gold ? <span>XAUUSD {gold.mid}</span> : null}
+          {gold ? <span>{goldLabel} {gold.mid}</span> : null}
         </div>
         {autoInfo?.decision ? (
           <div className="meta" style={{ marginTop: '0.55rem' }}>
@@ -1138,12 +1139,14 @@ export default function App() {
               }
             }}
           >
-            Desk tape ({mode})
+            Desk tape ({mt5Only ? 'MT5' : mode})
           </button>
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? 'Live COMEX gold candles · strategies still use paper/MT feed'
-              : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
+              : mt5Only
+                ? 'GOLD# desk tape — synced from XM MT5 · M5 · M15 · H1 · 1M Daily'
+                : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
@@ -1153,7 +1156,7 @@ export default function App() {
             candles={candles}
             liveCandle={liveCandle}
             livePrice={gold?.mid}
-            symbol="XAUUSD"
+            symbol={goldLabel}
             positions={positions}
             signals={signals}
           />
