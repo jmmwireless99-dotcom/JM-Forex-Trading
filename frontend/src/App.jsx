@@ -547,10 +547,10 @@ export default function App() {
     <div className="app">
       {(showLoginPanel || authState === 'out') && (
         <section className="panel account-auth-panel account-auth-gate" aria-label="Account login">
-          <h2>{authState === 'in' ? 'Palitan ang account' : 'Mag-login sa JM FX account mo'}</h2>
+          <h2>{authState === 'in' ? 'Switch account' : 'Sign in to your JM FX account'}</h2>
           <p className="meta">
-            Bawat client may sariling <strong>account code</strong> + <strong>token</strong> — private
-            capital, trades, at history. Mag-logout o palitan ang account anumang oras.
+            Each client has a private <strong>account code</strong> + <strong>token</strong> — your
+            capital, trades, and history stay separate. Log out or switch accounts anytime.
           </p>
           <form className="account-auth-form" onSubmit={handleLogin}>
             <label>
@@ -559,7 +559,7 @@ export default function App() {
                 type="text"
                 value={loginCode}
                 onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
-                placeholder="hal. DDDC3D"
+                placeholder="e.g. 3295D7"
                 autoComplete="username"
                 disabled={busy}
               />
@@ -570,14 +570,14 @@ export default function App() {
                 type="password"
                 value={loginToken}
                 onChange={(e) => setLoginToken(e.target.value)}
-                placeholder="I-paste ang token mula sa admin"
+                placeholder="Paste your account token"
                 autoComplete="current-password"
                 disabled={busy}
               />
             </label>
             <div className="account-auth-actions">
               <button type="submit" className="btn-primary" disabled={busy || !loginCode || !loginToken}>
-                Mag-login
+                Sign in
               </button>
               {authState === 'in' ? (
                 <button
@@ -586,7 +586,7 @@ export default function App() {
                   disabled={busy}
                   onClick={() => setShowLoginPanel(false)}
                 >
-                  Kanselahin
+                  Cancel
                 </button>
               ) : null}
               <button
@@ -595,7 +595,7 @@ export default function App() {
                 disabled={busy}
                 onClick={handleCreateDemoAccount}
               >
-                Gumawa ng bagong demo
+                Create new demo account
               </button>
             </div>
           </form>
@@ -623,7 +623,7 @@ export default function App() {
                 disabled={busy}
                 onClick={() => setShowLoginPanel(true)}
               >
-                Palitan ang account
+                Switch account
               </button>
               <button
                 type="button"
@@ -631,7 +631,7 @@ export default function App() {
                 disabled={busy}
                 onClick={handleLogout}
               >
-                Mag-logout
+                Log out
               </button>
             </div>
           ) : null}
