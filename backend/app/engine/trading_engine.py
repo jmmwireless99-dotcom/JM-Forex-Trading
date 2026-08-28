@@ -142,7 +142,9 @@ class TradingEngine:
 
     def register_connected_account(self, account: PaperAccount) -> None:
         """Track an open desk session for single-book auto-fill routing."""
-        if account.is_desk or not account.follow_auto:
+        if account.is_desk:
+            return
+        if not account.follow_auto and not self._is_mt_demo_account(account):
             return
         self._connected_accounts[account.id] = time.time()
 
@@ -150,10 +152,13 @@ class TradingEngine:
         self._connected_accounts.pop(account_id, None)
 
     def _connected_followers(self) -> list[PaperAccount]:
-        followers = self.accounts.auto_followers()
-        if not followers:
+        pool = list(self.accounts.auto_followers())
+        mt_acct = self.mt_demo_account()
+        if mt_acct is not None and mt_acct.id not in {a.id for a in pool}:
+            pool.append(mt_acct)
+        if not pool:
             return []
-        live = [a for a in followers if a.id in self._connected_accounts]
+        live = [a for a in pool if a.id in self._connected_accounts]
         live.sort(
             key=lambda a: self._connected_accounts.get(a.id, 0.0),
             reverse=True,
@@ -1407,27 +1412,42 @@ class TradingEngine:
 
         Default (JM_AUTO_FILL_SINGLE_BOOK=false): every follow_auto client
         gets the same desk signal — one signal, all accounts trade together.
+        The configured MT5 demo account (DDDC3D) is always included even when
+        follow_auto=False so it receives auto signals in paper desk mode.
         Single-book mode remains available for ops that want one fill target.
         """
         if self.using_mt():
             return [self._mt_demo_account()]
+
+        mt_acct = self.mt_demo_account()
         followers = self.accounts.auto_followers()
-        if not followers:
-            return []
+
+        def _append_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
+            if mt_acct is None or mt_acct.id in {a.id for a in pool}:
+                return pool
+            return [*pool, mt_acct]
+
         if not self.settings.auto_fill_single_book:
-            return followers
+            return _append_mt(followers)
+
         code = (self.settings.auto_fill_account_code or "").strip().upper()
         if code:
-            pinned = [a for a in followers if (a.code or "").upper() == code]
+            pinned = [
+                a
+                for a in self.accounts.clients()
+                if (a.code or "").upper() == code
+            ]
             if pinned:
                 return pinned[:1]
-        # Prefer the browser session that is open right now (fixes stale earliest-account routing).
         connected = self._connected_followers()
         if connected:
             return connected[:1]
-        # Fallback when nobody is connected: earliest created auto-follower.
-        followers = sorted(followers, key=lambda a: a.created_at)
-        return followers[:1]
+        if followers:
+            followers = sorted(followers, key=lambda a: a.created_at)
+            return followers[:1]
+        if mt_acct is not None:
+            return [mt_acct]
+        return []
 
     async def _handle_signal(
         self,

@@ -81,6 +81,27 @@ def test_other_accounts_stay_paper(mt5_engine):
     assert snap.paper is True
 
 
+def test_mt_demo_in_auto_fill_targets_despite_follow_auto_false(mt5_engine):
+    """DDDC3D must receive desk auto signals even in paper mode (follow_auto=False)."""
+    engine, acct = mt5_engine
+    assert acct.follow_auto is False
+    other = engine.accounts.create(deposit=500.0, label="Paper follower", follow_auto=True)
+
+    targets = engine._auto_fill_targets()
+    ids = {a.id for a in targets}
+    assert acct.id in ids
+    assert other.id in ids
+
+
+def test_mt_demo_connected_when_logged_in_single_book(mt5_engine):
+    engine, acct = mt5_engine
+    engine.settings = engine.settings.model_copy(update={"auto_fill_single_book": True})
+    engine.register_connected_account(acct)
+    targets = engine._auto_fill_targets()
+    assert len(targets) == 1
+    assert targets[0].code == "DDDC3D"
+
+
 @pytest.mark.asyncio
 async def test_mt_demo_rejects_paper_deposit(mt5_engine):
     engine, acct = mt5_engine
