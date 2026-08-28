@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     auto_fill_single_book: bool = False
     # Optional: pin fills to this account code; else earliest auto-follower
     auto_fill_account_code: str = ""
+    # MT5 demo journal — trade log + UI account when JM_EXECUTION_MODE=mt5
+    mt5_demo_account_code: str = ""
 
     # Investment dashboard (30% / 30 days default yield model)
     invest_secret: str = "jm-fx-invest-dev-secret-change-me"

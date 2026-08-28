@@ -223,6 +223,15 @@ class TradingEngine:
             ),
         }
 
+    def _mt_demo_account(self) -> PaperAccount:
+        """Journal + auto-fill target when execution_mode is mt4/mt5."""
+        code = (self.settings.mt5_demo_account_code or "").strip().upper()
+        if code:
+            for acct in self.accounts.all():
+                if (acct.code or "").upper() == code and not acct.is_desk:
+                    return acct
+        return self._desk
+
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if account is None and self.using_mt():
             return self.mt.snapshot()
@@ -1328,7 +1337,7 @@ class TradingEngine:
         Single-book mode remains available for ops that want one fill target.
         """
         if self.using_mt():
-            return [self._desk]
+            return [self._mt_demo_account()]
         followers = self.accounts.auto_followers()
         if not followers:
             return []
