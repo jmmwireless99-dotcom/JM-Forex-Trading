@@ -92,6 +92,47 @@ def test_smc_enters_on_asia_high_sweep_rejection():
     assert signal.take_profit is not None
 
 
+def test_smc_sl_beyond_swept_level():
+    """Stop must sit beyond the swept pool, not tight to the entry bar only."""
+    from app.strategies.liquidity_sweep_smc import SweepMemory, _smc_structure_levels
+
+    now = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+    bars = []
+    for i in range(84):
+        ts = datetime(2026, 7, 21, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * i)
+        bars.append(_bar(ts, 2352.0, 2355.0, 2348.0, 2352.5))
+    for i in range(84, 95):
+        ts = datetime(2026, 7, 21, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * i)
+        bars.append(_bar(ts, 2353.5, 2354.2, 2353.0, 2353.8))
+    ts = datetime(2026, 7, 21, 7, 55, tzinfo=timezone.utc)
+    bars.append(_bar(ts, 2354.5, 2355.6, 2354.2, 2354.7))
+    atr = 2.11
+    sweep = SweepMemory("SELL", "ASIAN_HIGH sweep", 2355.0, ts, ts.date(), bar_index=len(bars) - 1)
+    entry = 2354.6
+    tight = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        sweep=None,
+        pad=0.08,
+        min_stop_atr=1.8,
+        swing_lookback=3,
+        atr_pad=0.35,
+    )
+    wide = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        sweep=sweep,
+        pad=0.08,
+    )
+    assert wide.stop_loss >= sweep.level
+    assert wide.stop_loss >= tight.stop_loss
+    assert wide.risk >= tight.risk * 0.9
+
+
 def test_smc_choppy_market_can_fire_after_sweep():
     """Sinusoidal chop should eventually produce a sweep + entry."""
     import math
