@@ -563,8 +563,15 @@ export default function App() {
             JM <span>Forex</span>
           </h1>
           <div className="mode-chip">
-            {status?.running ? 'Desk live' : 'Paused'} · {mode.toUpperCase()}
-            {mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''}
+            {status?.running ? 'Desk live' : 'Paused'} ·{' '}
+            {mt5Only ? 'MT5 LIVE' : mode.toUpperCase()}
+            {mt5Only ? (
+              mtOnline ? ' · Sync OK' : ' · Sync offline'
+            ) : mode !== 'paper' ? (
+              mtOnline ? ' · MT online' : ' · MT offline'
+            ) : (
+              ''
+            )}
           </div>
           {authState === 'in' && accountMeta ? (
             <div className="account-session-bar">
@@ -596,6 +603,19 @@ export default function App() {
           Manual Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
+          {mt5Only ? (
+            <>
+              <span className="badge badge-live" style={{ alignSelf: 'center' }}>
+                MT5 · {account.mt5_login || '169250320'} · GOLD#
+              </span>
+              <span className="meta" style={{ alignSelf: 'center' }}>
+                {account.mt5_linked && mtOnline
+                  ? 'Balance synced from XM terminal'
+                  : 'Waiting for PC Agent + MT5 bridge'}
+              </span>
+            </>
+          ) : (
+            <>
           <select value={mode} disabled={busy} onChange={(e) => setMode(e.target.value)}>
             <option value="paper">paper</option>
             <option value="mt4">mt4</option>
@@ -608,6 +628,8 @@ export default function App() {
           >
             Apply mode
           </button>
+            </>
+          )}
           <select
             value={strategy}
             onChange={(e) => markStrategyChoice(e.target.value)}
@@ -687,7 +709,17 @@ export default function App() {
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>
             MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
+            {mt5Only ? (
+              accountMeta?.mt5?.tick_ok || (gold?.bid > 0)
+                ? ' · tick OK'
+                : ' · tick waiting (set InpSymbol=GOLD#)'
+            ) : null}
           </span>
+          {mt5Only ? (
+            <span>
+              Sync: {account.mt5_linked && mtOnline ? 'OK · $' + Number(account.balance || 0).toFixed(2) : 'offline'}
+            </span>
+          ) : null}
           {gold ? <span>XAUUSD {gold.mid}</span> : null}
         </div>
         {autoInfo?.decision ? (
