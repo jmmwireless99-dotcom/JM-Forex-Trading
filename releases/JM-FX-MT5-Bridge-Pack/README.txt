@@ -39,7 +39,7 @@ QUICK START (Windows PC)
 FILES
 -----
 Experts/JM_Forex_Bridge.mq5   — EA para sa MT5 (GOLD# auto-resolve)
-pc-agent/jm_mt5_pc_agent.py   — Sync agent (Python 3, 120ms command poll)
+pc-agent/jm_mt5_pc_agent.py   — Sync agent (Python 3, 80ms command poll)
 pc-agent/start-jm-mt5-agent.bat — Double-click launcher
 XM_MT5_SETUP.md               — Full step-by-step guide
 JM-FX-ACCOUNT.txt             — DDDC3D login token
