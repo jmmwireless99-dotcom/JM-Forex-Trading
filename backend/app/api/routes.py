@@ -8,6 +8,12 @@ from pydantic import BaseModel, Field
 from app.api.account_deps import require_paper_account
 from app.api.deps import get_engine
 from app.brokers.mt_bridge import resolve_mt_bridge
+from app.brokers.remote_bridge import (
+    BRIDGE_FILES,
+    COMMAND_FILE,
+    ensure_remote_bridge_dir,
+    verify_bridge_token,
+)
 from app.core.config import get_settings
 from app.models.domain import OrderRequest, Side, utcnow
 from app.paper_accounts import PaperAccount
@@ -25,6 +31,13 @@ class CreateAccountBody(BaseModel):
     label: str | None = None
     deposit: float | None = Field(default=None, gt=0, le=1_000_000)
     follow_auto: bool = True
+
+
+class LoginAccountBody(BaseModel):
+    """Sign in to an existing paper account with code + token."""
+
+    code: str = Field(..., min_length=4, max_length=12)
+    token: str = Field(..., min_length=8, max_length=128)
 
 
 class StartRequest(BaseModel):
@@ -150,7 +163,7 @@ async def status() -> dict:
 @router.get("/mt/status")
 @router.get("/mt4/status")
 async def mt_status() -> dict:
-    settings = get_settings()
+    settings = get_engine().settings
     engine = get_engine()
     bridge, platform = resolve_mt_bridge(settings)
     info = engine.connection_info()
@@ -184,12 +197,80 @@ async def mt_status() -> dict:
 @router.post("/mt/ping")
 @router.post("/mt4/ping")
 async def mt_ping() -> dict:
-    settings = get_settings()
+    settings = get_engine().settings
     bridge, _ = resolve_mt_bridge(settings)
     if bridge is None:
         raise HTTPException(status_code=400, detail="MT bridge dir not configured")
     ack = bridge.ping()
     return {"ok": ack.ok, "command_id": ack.command_id, "detail": ack.detail}
+
+
+class MtRemoteSyncBody(BaseModel):
+    """PC agent pushes MT5 bridge files; server returns pending command CSV."""
+
+    token: str = Field(..., min_length=8, max_length=128)
+    status: str | None = None
+    ticks: str | None = None
+    positions: str | None = None
+    ack: str | None = None
+
+
+@router.post("/mt/remote/sync")
+async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
+    """Windows PC agent — sync jm_*.csv between MT5 Common\\Files and JM FX cloud."""
+    settings = get_engine().settings
+    if not settings.mt_remote_bridge:
+        raise HTTPException(status_code=400, detail="Remote bridge disabled on server")
+    try:
+        verify_bridge_token(settings, body.token)
+        root = ensure_remote_bridge_dir(settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    written: list[str] = []
+    for name, content in (
+        ("jm_status.csv", body.status),
+        ("jm_ticks.csv", body.ticks),
+        ("jm_positions.csv", body.positions),
+        ("jm_ack.csv", body.ack),
+    ):
+        if content is not None:
+            (root / name).write_text(content, encoding="utf-8")
+            written.append(name)
+
+    command_path = root / COMMAND_FILE
+    command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
+    return {
+        "ok": True,
+        "written": written,
+        "command": command,
+        "bridge_dir": str(root),
+    }
+
+
+@router.get("/mt/remote/status")
+async def mt_remote_agent_status(token: str) -> dict:
+    """Health check for PC sync agent."""
+    settings = get_engine().settings
+    if not settings.mt_remote_bridge:
+        raise HTTPException(status_code=400, detail="Remote bridge disabled")
+    try:
+        verify_bridge_token(settings, token)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    bridge, platform = resolve_mt_bridge(settings)
+    online = bool(bridge and bridge.is_online())
+    return {
+        "ok": True,
+        "remote_bridge": True,
+        "platform": platform,
+        "execution_mode": settings.execution_mode,
+        "mt_online": online,
+        "mt5_demo_account_code": settings.mt5_demo_account_code or None,
+        "symbol": settings.mt_symbol,
+    }
 
 
 @router.post("/execution/mode")
@@ -360,6 +441,27 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
         deposit=body.deposit,
         follow_auto=body.follow_auto,
     )
+
+
+@router.post("/accounts/login")
+async def login_account(body: LoginAccountBody) -> dict:
+    """Validate account code + token (for dashboard login / account switch)."""
+    engine = get_engine()
+    try:
+        acct = engine.accounts.require_by_code(body.code.strip(), body.token)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Account not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Invalid account token") from exc
+    return {
+        "ok": True,
+        "account_id": acct.id,
+        "account_code": acct.code,
+        "account_label": acct.label,
+        "follow_auto": acct.follow_auto,
+        "account": engine.account_payload(acct),
+        "message": "Login OK — save token in this browser to stay signed in",
+    }
 
 
 @router.get("/accounts/me")

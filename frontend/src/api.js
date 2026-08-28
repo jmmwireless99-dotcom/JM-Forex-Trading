@@ -32,6 +32,10 @@ export function clearAccountSession() {
   localStorage.removeItem(ACCOUNT_KEY)
 }
 
+export function logoutAccount() {
+  clearAccountSession()
+}
+
 function accountHeaders() {
   const session = loadAccountSession()
   if (!session) return {}
@@ -74,6 +78,11 @@ export const api = {
     ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
+  loginAccount: ({ code, token }) =>
+    request('/accounts/login', {
+      method: 'POST',
+      body: JSON.stringify({ code: String(code || '').trim(), token: String(token || '').trim() }),
+    }),
   accountMe: () => request('/accounts/me'),
   account: () => request('/account'),
   capitalPreview: (amount) =>

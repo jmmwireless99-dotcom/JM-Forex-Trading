@@ -242,6 +242,27 @@ async def test_apply_strategy_switches(client):
 
 
 @pytest.mark.asyncio
+async def test_account_login(client):
+    body, headers = await _make_account(client, label="Login test")
+    code = body["account"]["account_code"]
+    token = body["token"]
+
+    res = await client.post("/api/accounts/login", json={"code": code, "token": token})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert data["account_code"] == code
+    assert data["account_id"] == body["account"]["account_id"]
+    assert data["account"]["account_code"] == code
+
+    res = await client.post("/api/accounts/login", json={"code": code, "token": "wrong-token"})
+    assert res.status_code == 403
+
+    res = await client.post("/api/accounts/login", json={"code": "ZZZZZZ", "token": token})
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_auto_transfer_session_follow(client):
     res = await client.get("/api/strategies/recommended")
     assert res.status_code == 200
