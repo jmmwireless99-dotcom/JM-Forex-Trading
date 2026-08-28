@@ -350,6 +350,7 @@ async def mt_remote_agent_status(token: str) -> dict:
         "execution_mode": settings.execution_mode,
         "mt_online": online,
         "mt5_demo_account_code": settings.mt5_demo_account_code or None,
+        "mt5_demo_login": settings.mt5_demo_login or None,
         "symbol": settings.mt_symbol,
     }
 
@@ -530,6 +531,7 @@ async def login_account(body: LoginAccountBody) -> dict:
         "account_label": acct.label,
         "follow_auto": acct.follow_auto,
         "account": engine.account_payload(acct),
+        "mt5": engine.mt_demo_link_status(acct),
         "message": "Login OK — save token in this browser to stay signed in",
     }
 

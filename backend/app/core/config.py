@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     auto_fill_account_code: str = ""
     # MT5 demo journal — trade log + UI account when JM_EXECUTION_MODE=mt5
     mt5_demo_account_code: str = ""
+    mt5_demo_login: str = "169250320"
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""

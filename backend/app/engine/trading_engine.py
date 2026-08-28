@@ -222,8 +222,41 @@ class TradingEngine:
             ),
         }
 
+    def _mt_demo_account(self) -> PaperAccount:
+        """Journal + auto-fill target when execution_mode is mt4/mt5."""
+        code = (self.settings.mt5_demo_account_code or "").strip().upper()
+        if code:
+            for acct in self.accounts.all():
+                if (acct.code or "").upper() == code and not acct.is_desk:
+                    return acct
+        return self._desk
+
+    def _is_mt_demo_account(self, account: PaperAccount) -> bool:
+        code = (self.settings.mt5_demo_account_code or "").strip().upper()
+        return bool(code and (account.code or "").upper() == code)
+
+    def _mt_bridge_live(self) -> bool:
+        return bool(self.mt and self.mt.is_online())
+
+    def mt_demo_link_status(self, account: PaperAccount) -> dict[str, Any]:
+        linked = self._is_mt_demo_account(account)
+        live = linked and self._mt_bridge_live()
+        tick = self.mt.read_tick() if live and self.mt else None
+        return {
+            "account_code": account.code if linked else None,
+            "configured_code": (self.settings.mt5_demo_account_code or "").strip().upper() or None,
+            "linked": linked,
+            "bridge_online": self._mt_bridge_live(),
+            "live_balance": live,
+            "mt5_login": self.settings.mt5_demo_login or None,
+            "symbol": self.settings.mt_symbol,
+            "tick_ok": bool(tick and tick.bid > 0),
+        }
+
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if account is None and self.using_mt():
+            return self.mt.snapshot()
+        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
             return self.mt.snapshot()
         acct = account or self._desk
         return acct.broker.snapshot()
@@ -233,6 +266,17 @@ class TradingEngine:
         if account is None and self.using_mt():
             snap = self.mt.snapshot().model_dump(mode="json")
             return {**snap, "account_id": None, "account_code": None}
+        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
+            snap = self.mt.snapshot().model_dump(mode="json")
+            return {
+                **snap,
+                "account_id": acct.id,
+                "account_code": acct.code,
+                "account_label": acct.label,
+                "follow_auto": acct.follow_auto,
+                "mt5_linked": True,
+                "mt5_login": self.settings.mt5_demo_login or None,
+            }
         return acct.snapshot_payload()
 
     def trade_logs(
@@ -262,6 +306,8 @@ class TradingEngine:
 
     def open_positions(self, account: PaperAccount | None = None) -> list[Position]:
         if account is None and self.using_mt():
+            return self.mt.open_positions()
+        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
             return self.mt.open_positions()
         acct = account or self._desk
         return acct.broker.open_positions()
@@ -1287,7 +1333,7 @@ class TradingEngine:
         Single-book mode remains available for ops that want one fill target.
         """
         if self.using_mt():
-            return [self._desk]
+            return [self._mt_demo_account()]
         followers = self.accounts.auto_followers()
         if not followers:
             return []

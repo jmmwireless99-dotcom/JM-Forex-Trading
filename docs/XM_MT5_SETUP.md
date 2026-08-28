@@ -145,7 +145,7 @@ Kung ang JM FX ay nasa **Linux cloud** at ang MT5 ay nasa **Windows PC** mo, gam
 ```bash
 cd /opt/jm-forex-trading
 chmod +x scripts/setup_mt5_remote_bridge.sh
-JM_MT5_DEMO_ACCOUNT_CODE=DDDC3D JM_MT_SYMBOL=GOLD## ./scripts/setup_mt5_remote_bridge.sh
+JM_MT5_DEMO_ACCOUNT_CODE=DDDC3D JM_MT_SYMBOL=GOLD# ./scripts/setup_mt5_remote_bridge.sh
 ```
 
 ### Sa Windows PC mo (isang beses)
