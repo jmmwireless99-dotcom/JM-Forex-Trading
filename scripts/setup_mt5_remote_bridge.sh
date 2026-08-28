@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BRIDGE_DIR="${JM_MT5_BRIDGE_DIR:-/opt/jm-forex-trading/mt5_bridge}"
 ACCOUNT_CODE="${JM_MT5_DEMO_ACCOUNT_CODE:-DDDC3D}"
-SYMBOL="${JM_MT_SYMBOL:-GOLD24-7#}"
+SYMBOL="${JM_MT_SYMBOL:-GOLD#}"
 TOKEN="${JM_MT_BRIDGE_TOKEN:-gTXmD7O-194jS9gveB1I5c9qjmNdqdUv}"
 
 mkdir -p "$BRIDGE_DIR"

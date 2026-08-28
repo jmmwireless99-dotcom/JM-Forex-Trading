@@ -65,7 +65,8 @@ class Settings(BaseSettings):
     mt4_bridge_dir: str = ""
     mt5_bridge_dir: str = ""
     mt4_symbol: str = "XAUUSD"
-    mt_symbol: str = "XAUUSD"
+    # XM MT5 gold symbol (desk still uses XAUUSD internally)
+    mt_symbol: str = "GOLD#"
 
     # Postgres persistence (empty = in-memory only, desk still works)
     # JM_DATABASE_URL=postgresql+psycopg://jm:jm@127.0.0.1:5432/jm_forex

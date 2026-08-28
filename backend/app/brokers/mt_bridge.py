@@ -11,8 +11,12 @@ MetaTraderBridge = MT4FileBridge
 def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     """Return (bridge, platform) where platform is mt4|mt5|paper."""
     mode = (getattr(settings, "execution_mode", "paper") or "paper").lower()
-    symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+    mt_symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "GOLD#")
+    desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
     remote = bool(getattr(settings, "mt_remote_bridge", False))
+
+    def _bridge(path: str) -> MetaTraderBridge:
+        return MetaTraderBridge(path, symbol=mt_symbol, desk_symbol=desk_symbol)
 
     if mode == "mt5":
         path = getattr(settings, "mt5_bridge_dir", "") or getattr(settings, "mt4_bridge_dir", "")
@@ -22,19 +26,19 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
 
                 ensure_remote_bridge_dir(settings)
             if path:
-                return MetaTraderBridge(path, symbol=symbol), "mt5"
+                return _bridge(path), "mt5"
         return None, "mt5"
 
     if mode == "mt4":
         path = getattr(settings, "mt4_bridge_dir", "") or getattr(settings, "mt5_bridge_dir", "")
         if path:
-            return MetaTraderBridge(path, symbol=symbol), "mt4"
+            return _bridge(path), "mt4"
         return None, "mt4"
 
     # Auto-detect configured folder even in paper (for status UI)
     path = getattr(settings, "mt4_bridge_dir", "") or getattr(settings, "mt5_bridge_dir", "")
     if path:
-        return MetaTraderBridge(path, symbol=symbol), "paper"
+        return _bridge(path), "paper"
     return None, "paper"
 
 

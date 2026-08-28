@@ -9,7 +9,7 @@
 
 #include <Trade/Trade.mqh>
 
-input string InpSymbol         = "XAUUSD";
+input string InpSymbol         = "GOLD#";
 input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
 input int    InpPollMs         = 500;

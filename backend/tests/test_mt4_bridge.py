@@ -70,3 +70,51 @@ def test_unconfigured_bridge_dir():
     from app.core.config import Settings
 
     assert resolve_bridge(Settings(mt4_bridge_dir="")) is None
+
+
+def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
+    bridge = MT4FileBridge(tmp_path, symbol="GOLD#", desk_symbol="XAUUSD")
+    (tmp_path / "jm_ticks.csv").write_text("GOLD#,4591.36,4591.66,2026-08-28 15:37:00\n")
+    (tmp_path / "jm_positions.csv").write_text(
+        "ticket,symbol,side,lots,open_price,sl,tp,profit\n"
+        "1,GOLD#,BUY,0.01,4590.00,4580.00,4610.00,1.50\n"
+    )
+
+    tick = bridge.read_tick()
+    assert tick is not None
+    assert tick.symbol == "XAUUSD"
+    assert tick.bid == 4591.36
+
+    positions = bridge.open_positions()
+    assert positions[0].symbol == "XAUUSD"
+
+    def fake_ea():
+        for _ in range(40):
+            if bridge.command_file.exists():
+                text = bridge.command_file.read_text()
+                if "OPEN" in text and "GOLD#" in text:
+                    cmd_id = text.strip().splitlines()[-1].split(",")[0]
+                    bridge.ack_file.write_text(f"{cmd_id},OK,777\n")
+                    return
+            time.sleep(0.05)
+
+    import threading
+
+    t = threading.Thread(target=fake_ea, daemon=True)
+    t.start()
+    order = bridge.place_order(
+        OrderRequest(
+            symbol="XAUUSD",
+            side=Side.BUY,
+            lots=0.01,
+            stop_loss=4580.0,
+            take_profit=4610.0,
+            comment="gold-map",
+        ),
+        timeout=3.0,
+    )
+    t.join(timeout=3)
+    assert order.status.value == "FILLED"
+    cmd = bridge.command_file.read_text()
+    assert "GOLD#" in cmd
+    assert "XAUUSD" not in cmd.split("OPEN")[1].split("\n")[0]

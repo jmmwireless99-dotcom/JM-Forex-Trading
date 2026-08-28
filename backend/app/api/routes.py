@@ -43,7 +43,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
         "github_zip": (
             "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
-            "cursor/asia-only-no-judas-c11c/releases/JM-FX-MT5-Bridge-Pack.zip"
+            "cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-Bridge-Pack.zip"
         ),
     }
 

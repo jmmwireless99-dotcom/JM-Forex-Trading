@@ -11,4 +11,4 @@
 | **All links (JSON)** | https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge |
 
 GitHub mirror:  
-https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/asia-only-no-judas-c11c/releases/JM-FX-MT5-Bridge-Pack.zip
+https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-Bridge-Pack.zip

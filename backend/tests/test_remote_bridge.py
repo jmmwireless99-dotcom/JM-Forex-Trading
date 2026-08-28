@@ -21,7 +21,7 @@ async def remote_client(tmp_path):
             mt_remote_bridge=True,
             mt_bridge_token="test-bridge-token",
             mt5_demo_account_code="ABC123",
-            mt_symbol="GOLD24-7#",
+            mt_symbol="GOLD#",
         )
     )
     app = create_app()
@@ -39,7 +39,7 @@ async def test_remote_sync_writes_files(remote_client):
         json={
             "token": "test-bridge-token",
             "status": "ok,1000.00,1000.00,0,2026-08-28 10:00:00\n",
-            "ticks": "GOLD24-7#,4585.50,4585.80,2026-08-28 10:00:00\n",
+            "ticks": "GOLD#,4585.50,4585.80,2026-08-28 10:00:00\n",
         },
     )
     assert res.status_code == 200

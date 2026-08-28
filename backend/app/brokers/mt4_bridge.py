@@ -40,15 +40,34 @@ class MT4FileBridge:
     Set JM_MT4_BRIDGE_DIR to that path (or a synced folder on this machine).
     """
 
-    def __init__(self, bridge_dir: str | Path, symbol: str = "XAUUSD") -> None:
+    def __init__(
+        self,
+        bridge_dir: str | Path,
+        symbol: str = "XAUUSD",
+        desk_symbol: str | None = None,
+    ) -> None:
         self.bridge_dir = Path(bridge_dir)
-        self.symbol = symbol.upper()
+        self.mt_symbol = symbol
+        self.desk_symbol = (desk_symbol or symbol).upper()
+        self.symbol = self.mt_symbol.upper()
         self.command_file = self.bridge_dir / "jm_command.csv"
         self.status_file = self.bridge_dir / "jm_status.csv"
         self.positions_file = self.bridge_dir / "jm_positions.csv"
         self.tick_file = self.bridge_dir / "jm_ticks.csv"
         self.ack_file = self.bridge_dir / "jm_ack.csv"
         self.bridge_dir.mkdir(parents=True, exist_ok=True)
+
+    def _to_mt_symbol(self, symbol: str) -> str:
+        s = (symbol or "").upper()
+        if s == self.desk_symbol:
+            return self.mt_symbol
+        return symbol
+
+    def _to_desk_symbol(self, symbol: str) -> str:
+        s = (symbol or "").upper()
+        if s == self.mt_symbol.upper():
+            return self.desk_symbol
+        return s.upper()
 
     # --- connectivity -------------------------------------------------
     def is_online(self, max_age_seconds: float = 5.0) -> bool:
@@ -72,7 +91,14 @@ class MT4FileBridge:
             return None
         symbol, bid_s, ask_s = parts[0], parts[1], parts[2]
         bid, ask = float(bid_s), float(ask_s)
-        return Tick(symbol=symbol, bid=bid, ask=ask, mid=round((bid + ask) / 2, 5))
+        desk = self._to_desk_symbol(symbol)
+        decimals = 2 if desk == "XAUUSD" else 5
+        return Tick(
+            symbol=desk,
+            bid=bid,
+            ask=ask,
+            mid=round((bid + ask) / 2, decimals),
+        )
 
     def snapshot(self) -> AccountSnapshot:
         balance = equity = 0.0
@@ -111,7 +137,7 @@ class MT4FileBridge:
                 positions.append(
                     Position(
                         id=str(row["ticket"]),
-                        symbol=row["symbol"],
+                        symbol=self._to_desk_symbol(row["symbol"]),
                         side=Side(row["side"]),
                         lots=float(row["lots"]),
                         entry_price=float(row["open_price"]),
@@ -139,9 +165,10 @@ class MT4FileBridge:
         sl = "" if request.stop_loss is None else f"{request.stop_loss:.5f}"
         tp = "" if request.take_profit is None else f"{request.take_profit:.5f}"
         comment = (request.comment or "JM").replace(",", " ")
+        mt_symbol = self._to_mt_symbol(request.symbol)
         ack = self._send(
             "OPEN",
-            request.symbol,
+            mt_symbol,
             request.side.value,
             f"{request.lots:.2f}",
             sl,
@@ -208,4 +235,6 @@ def resolve_bridge(settings) -> MT4FileBridge | None:
     path = getattr(settings, "mt4_bridge_dir", "") or ""
     if not path:
         return None
-    return MT4FileBridge(path, symbol=settings.symbols[0] if settings.symbols else "XAUUSD")
+    mt_symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+    desk = settings.symbols[0] if settings.symbols else "XAUUSD"
+    return MT4FileBridge(path, symbol=mt_symbol, desk_symbol=desk)

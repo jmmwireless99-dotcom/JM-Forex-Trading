@@ -11,8 +11,8 @@ QUICK START (Windows PC)
    → MT5: File → Open Data Folder → MQL5/Experts/
    → MetaEditor: Compile (F7), zero errors
 
-3. Drag JM_Forex_Bridge sa GOLD chart
-   → InpSymbol = exact XM gold name (GOLD / GOLD24-7# / XAUUSD)
+3. Drag JM_Forex_Bridge sa GOLD# chart
+   → InpSymbol = GOLD# (XM gold symbol)
    → UseCommonFolder = true
    → Algo Trading ON (green)
 

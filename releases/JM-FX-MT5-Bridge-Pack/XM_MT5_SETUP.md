@@ -40,9 +40,9 @@ Ito ang buong guide para i-connect ang **XM MetaTrader 5 demo** sa **JM FX desk*
 1. **View → Market Watch** (Ctrl+M)  
 2. Right-click → **Symbols** → hanapin ang gold  
 3. Karaniwang pangalan sa XM:
-   - `GOLD`  
-   - `XAUUSD`  
-   - `XAUUSD#`  
+   - `GOLD#` ← **gamitin ito** (XM MT5 demo account 169250320)
+   - `GOLD` / `GOLD24-7#`
+   - `XAUUSD` / `XAUUSD#`
 4. I-drag sa chart at **tandaan ang exact name**  
 
 ### Step 4 — Install JM Bridge EA

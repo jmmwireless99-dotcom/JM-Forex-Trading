@@ -40,9 +40,9 @@ Ito ang buong guide para i-connect ang **XM MetaTrader 5 demo** sa **JM FX desk*
 1. **View → Market Watch** (Ctrl+M)  
 2. Right-click → **Symbols** → hanapin ang gold  
 3. Karaniwang pangalan sa XM:
-   - `GOLD`  
-   - `XAUUSD`  
-   - `XAUUSD#`  
+   - `GOLD#` ← **gamitin ito** (XM MT5 demo account 169250320)
+   - `GOLD` / `GOLD24-7#`
+   - `XAUUSD` / `XAUUSD#`
 4. I-drag sa chart at **tandaan ang exact name**  
 
 ### Step 4 — Install JM Bridge EA
@@ -57,7 +57,7 @@ Ito ang buong guide para i-connect ang **XM MetaTrader 5 demo** sa **JM FX desk*
 
 1. I-drag ang **JM_Forex_Bridge** sa **gold chart**  
 2. Sa inputs:
-   - `InpSymbol` = **exact XM symbol** (hal. `GOLD`)  
+   - `InpSymbol` = **`GOLD#`** (exact XM symbol sa chart mo)
    - `UseCommonFolder` = **true**  
    - `InpMagic` = `260719` (default OK)  
 3. **Algo Trading ON** (green button sa toolbar)  
@@ -99,7 +99,7 @@ Sa dashboard: **Sign in** gamit ang account code + token (hindi ang MT5 password
 ```bash
 JM_EXECUTION_MODE=mt5
 JM_MT5_BRIDGE_DIR=C:\Users\YOUR_USER\AppData\Roaming\MetaQuotes\Terminal\Common\Files
-JM_MT_SYMBOL=GOLD
+JM_MT_SYMBOL=GOLD#
 JM_MT5_DEMO_ACCOUNT_CODE=XXXXXX
 
 JM_DEFAULT_STRATEGY=AI_ML
@@ -110,7 +110,7 @@ JM_AI_GATE_ENTRIES=true
 
 Palitan:
 - `YOUR_USER` → Windows username  
-- `GOLD` → exact XM symbol  
+- `GOLD#` → exact XM symbol (desk XAUUSD auto-mapped sa server)
 - `XXXXXX` → account code mula sa create script  
 
 ### Restart JM FX service
@@ -145,7 +145,7 @@ Kung ang JM FX ay nasa **Linux cloud** at ang MT5 ay nasa **Windows PC** mo, gam
 ```bash
 cd /opt/jm-forex-trading
 chmod +x scripts/setup_mt5_remote_bridge.sh
-JM_MT5_DEMO_ACCOUNT_CODE=DDDC3D JM_MT_SYMBOL=GOLD24-7# ./scripts/setup_mt5_remote_bridge.sh
+JM_MT5_DEMO_ACCOUNT_CODE=DDDC3D JM_MT_SYMBOL=GOLD## ./scripts/setup_mt5_remote_bridge.sh
 ```
 
 ### Sa Windows PC mo (isang beses)
@@ -180,7 +180,7 @@ AI_ML signal → Risk check → jm_command.csv → MT5 EA → XM Demo order
 | `online: false` | MT5 open ba? EA attached? Algo Trading ON? |
 | ping timeout | Compile ulit ang EA; check Experts tab |
 | Order rejected | Mali symbol? Market closed? Lots too small? |
-| Wrong symbol | `InpSymbol` at `JM_MT_SYMBOL` dapat pareho sa XM |
+| Wrong symbol | `InpSymbol` at `JM_MT_SYMBOL` dapat **`GOLD#`** (pareho sa XM chart) |
 | Cloud server offline | Kailangan MT5 sa Windows — hindi pwede Linux-only |
 
 ---
@@ -196,7 +196,7 @@ AI_ML signal → Risk check → jm_command.csv → MT5 EA → XM Demo order
 ## Quick checklist
 
 - [ ] XM MT5 installed + demo logged in  
-- [ ] Gold symbol identified (`GOLD` / `XAUUSD`)  
+- [ ] Gold symbol = **`GOLD#`** sa Market Watch at EA inputs
 - [ ] `JM_Forex_Bridge.mq5` compiled + attached  
 - [ ] Algo Trading ON  
 - [ ] `jm_status.csv` updating sa Common\Files  
