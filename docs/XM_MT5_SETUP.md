@@ -153,6 +153,33 @@ Dapat `"online": true` at ping `"OK"`.
 
 ---
 
+## PART D — PC Bridge Agent (Cloud setup — walang Syncthing)
+
+Kung ang JM FX ay nasa **Linux cloud** at ang MT5 ay nasa **Windows PC** mo, gamitin ang **PC Agent**:
+
+### Sa cloud (agent / server — automatic)
+
+```bash
+cd /opt/jm-forex-trading
+chmod +x scripts/setup_mt5_remote_bridge.sh
+JM_MT5_DEMO_ACCOUNT_CODE=DDDC3D JM_MT_SYMBOL=GOLD24-7# ./scripts/setup_mt5_remote_bridge.sh
+```
+
+### Sa Windows PC mo (isang beses)
+
+1. I-download mula sa repo:
+   - `scripts/jm_mt5_pc_agent.py`
+   - `scripts/start-jm-mt5-agent.bat`
+2. MT5 bukas + **JM_Forex_Bridge** attached + **Algo Trading ON**
+3. Double-click **`start-jm-mt5-agent.bat`**
+4. Huwag isara ang window — sync every 0.5s papunta sa cloud
+
+Dapat sa desk: **MT online** (green).
+
+Token default: same as server `JM_MT_BRIDGE_TOKEN` (sa agent script).
+
+---
+
 ## Flow kapag connected
 
 ```
