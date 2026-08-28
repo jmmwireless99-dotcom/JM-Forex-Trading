@@ -11,7 +11,10 @@ MetaTraderBridge = MT4FileBridge
 def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     """Return (bridge, platform) where platform is mt4|mt5|paper."""
     mode = (getattr(settings, "execution_mode", "paper") or "paper").lower()
-    symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+    if mode == "mt5":
+        symbol = getattr(settings, "mt_symbol", None) or getattr(settings, "mt4_symbol", "XAUUSD")
+    else:
+        symbol = getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
     remote = bool(getattr(settings, "mt_remote_bridge", False))
 
     if mode == "mt5":
