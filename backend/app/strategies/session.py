@@ -19,13 +19,15 @@ class SessionWindow:
     reason: str
 
 
-# Asia M3/M5 scalp desk — Philippines local hours
+# PH desk windows (local time = UTC+8)
 ASIA_PH_START = 7
-ASIA_PH_END = 20  # exclusive → active PH 7:00AM–7:59PM
+ASIA_PH_END = 20  # exclusive → PH 7:00AM–7:59PM
 
-# Evening overlap desk — PH 8:00PM–11:59PM (London/NY liquidity)
-EVENING_PH_START = 20
-EVENING_PH_END = 24  # exclusive at midnight PH
+SMC_PH_START = 20  # PH 8:00PM
+SMC_PH_END = 2  # exclusive → through 1:59AM (wraps midnight)
+
+EARLY_EMA_PH_START = 2
+EARLY_EMA_PH_END = 7  # exclusive → PH 2:00AM–6:59AM
 
 
 def ph_hour(utc: datetime) -> int:
@@ -37,88 +39,60 @@ def ph_hour(utc: datetime) -> int:
 _ph_hour = ph_hour
 
 
+def in_smc_ph_window(ph: int) -> bool:
+    """PH 8:00PM–1:59AM — crosses midnight."""
+    return ph >= SMC_PH_START or ph < SMC_PH_END
+
+
+def in_early_ema_ph_window(ph: int) -> bool:
+    """PH 2:00AM–6:59AM."""
+    return EARLY_EMA_PH_START <= ph < EARLY_EMA_PH_END
+
+
+def in_asia_ph_window(ph: int) -> bool:
+    """PH 7:00AM–7:59PM."""
+    return ASIA_PH_START <= ph < ASIA_PH_END
+
+
 def classify_asia_desk(ts: datetime) -> SessionWindow:
-    """PH desk: Asia 7AM–8PM + evening overlap 8PM–11PM; flat outside."""
+    """PH desk: Asia 7AM–8PM · SMC 8PM–2AM · EMA_RSI 2AM–7AM."""
     utc = ts.astimezone(timezone.utc)
     if utc.weekday() >= 5:
         return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
 
     ph = ph_hour(utc)
-    if ASIA_PH_START <= ph < ASIA_PH_END:
+    if in_asia_ph_window(ph):
         return SessionWindow(
             SessionTier.ASIA,
             "asia",
-            "Asia scalp desk (PH 7:00AM–8:00PM) — M5 Support/Resistance",
+            "Asia desk (PH 7:00AM–8:00PM) — EMA_RSI scalp",
         )
-    if EVENING_PH_START <= ph < EVENING_PH_END:
+    if in_smc_ph_window(ph):
         return SessionWindow(
             SessionTier.PRIME,
             "london_ny_overlap",
-            "Evening overlap desk (PH 8:00PM–11:59PM) — Liquidity Sweep SMC",
+            "SMC desk (PH 8:00PM–2:00AM) — Liquidity Sweep",
+        )
+    if in_early_ema_ph_window(ph):
+        return SessionWindow(
+            SessionTier.ASIA,
+            "off_hours",
+            "Early Asia desk (PH 2:00AM–7:00AM) — EMA_RSI scalp",
         )
     return SessionWindow(
         SessionTier.AVOID,
         "outside_asia_desk",
-        "Outside desk hours — next window PH 7:00AM or 8:00PM",
+        "Outside desk hours",
     )
 
 
 def classify_full_sessions(ts: datetime) -> SessionWindow:
-    """Full desk map aligned with strategy clocks (UTC).
-
-    Asia PH 7:00AM–8:00PM — EMA_RSI
-    Evening PH 8:00PM–11:59PM — Liquidity_Sweep_SMC
-    London 07:00–12:59 UTC — stand aside (Judas removed)
-    Overlap 13:00–17:59 — SMC
-    New York 18:00–19:59 — EMA_VWAP
-    Off-hours / weekend — stand aside
-    """
-    utc = ts.astimezone(timezone.utc)
-    if utc.weekday() >= 5:
-        return SessionWindow(SessionTier.AVOID, "weekend", "Gold market closed / thin weekend tape")
-
-    hour = utc.hour
-    ph = ph_hour(utc)
-
-    if ASIA_PH_START <= ph < ASIA_PH_END:
-        return SessionWindow(
-            SessionTier.ASIA,
-            "asia",
-            "Asia session (PH 7:00AM–8:00PM) — EMA_RSI + Asia range box",
-        )
-    if EVENING_PH_START <= ph < EVENING_PH_END:
-        return SessionWindow(
-            SessionTier.PRIME,
-            "london_ny_overlap",
-            "Evening overlap (PH 8:00PM–11:59PM) — Liquidity Sweep SMC",
-        )
-    if 7 <= hour < 13:
-        return SessionWindow(
-            SessionTier.AVOID,
-            "london",
-            "London session (UTC 07:00–12:59) — stand aside",
-        )
-    if 13 <= hour < 18:
-        return SessionWindow(
-            SessionTier.PRIME,
-            "london_ny_overlap",
-            "London/NY overlap — best XAUUSD liquidity (SMC window)",
-        )
-    if 18 <= hour < 20:
-        return SessionWindow(
-            SessionTier.ALLOWED,
-            "new_york",
-            "New York session — USD-driven gold continuation",
-        )
-    return SessionWindow(
-        SessionTier.AVOID,
-        "off_hours",
-        "Off-hours — spreads widen, skip new entries",
-    )
+    """Full desk map — same PH windows when hybrid mode is off."""
+    return classify_asia_desk(ts)
 
 
 def classify_session(ts: datetime) -> SessionWindow:
-    """Active session map — Asia desk by default; full hybrid if configured off."""
+    """Active session map — PH desk by default; same map if hybrid off."""
     from app.core.config import get_settings
 
     if get_settings().asia_desk_only:
@@ -168,13 +142,13 @@ def next_session_hint(ts: datetime) -> dict:
 _SESSION_STRATEGY = {
     "asia": "AI_ML",
     "london_ny_overlap": "AI_ML",
-    "new_york": "AI_ML",
+    "off_hours": "AI_ML",
 }
 
 _SESSION_CHILD = {
     "asia": "EMA_RSI_Scalp",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
-    "new_york": "EMA_VWAP_Scalp",
+    "off_hours": "EMA_RSI_Scalp",
 }
 
 

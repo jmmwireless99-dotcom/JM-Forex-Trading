@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = PH desk 7AM–8PM + 8PM–11PM (flat midnight–7AM). false = full UTC map
+    # true = PH desk 7AM–8PM · 8PM–2AM SMC · 2AM–7AM EMA_RSI
     # JM_ASIA_DESK_ONLY=true
     asia_desk_only: bool = True
 

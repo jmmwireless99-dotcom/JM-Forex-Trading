@@ -4,7 +4,6 @@ from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import (
     SessionTier,
     classify_asia_desk,
-    classify_full_sessions,
     classify_session,
     next_session_hint,
     session_allows_asia_scalp,
@@ -37,8 +36,8 @@ def test_evening_ph_still_asia():
     assert window.label == "asia"
 
 
-def test_8pm_ph_starts_evening_overlap():
-    # 12:00 UTC = 8:00PM PH — evening SMC window
+def test_8pm_ph_starts_smc():
+    # 12:00 UTC = 8:00PM PH — SMC window
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.PRIME
@@ -46,29 +45,40 @@ def test_8pm_ph_starts_evening_overlap():
     assert session_allows_entry(ts, prime_only=True) is True
 
 
-def test_10pm_ph_evening_overlap():
-    ts = datetime(2026, 7, 20, 14, 30, tzinfo=timezone.utc)  # 10:30PM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.PRIME
-    assert window.label == "london_ny_overlap"
-
-
-def test_midnight_ph_stand_aside():
+def test_midnight_ph_still_smc():
     ts = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)  # 12:00AM PH
     window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
-    assert window.label == "outside_asia_desk"
-
-
-def test_asia_desk_evening_is_smc():
-    ts = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)  # 9PM PH
-    window = classify_asia_desk(ts)
     assert window.tier == SessionTier.PRIME
     assert window.label == "london_ny_overlap"
-    assert classify_full_sessions(ts).label == "london_ny_overlap"
 
 
-def test_next_session_after_asia_is_evening():
+def test_130am_ph_still_smc():
+    ts = datetime(2026, 7, 20, 17, 30, tzinfo=timezone.utc)  # 1:30AM PH
+    window = classify_session(ts)
+    assert window.tier == SessionTier.PRIME
+    assert window.label == "london_ny_overlap"
+
+
+def test_2am_ph_starts_early_ema():
+    ts = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)  # 2:00AM PH
+    window = classify_session(ts)
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "off_hours"
+
+
+def test_5am_ph_early_ema():
+    ts = datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc)  # 5:00AM PH
+    window = classify_session(ts)
+    assert window.tier == SessionTier.ASIA
+    assert window.label == "off_hours"
+
+
+def test_asia_desk_smc_through_2am():
+    ts = datetime(2026, 7, 20, 17, 0, tzinfo=timezone.utc)  # 1:00AM PH
+    assert classify_asia_desk(ts).label == "london_ny_overlap"
+
+
+def test_next_session_after_asia_is_smc():
     ts = datetime(2026, 7, 20, 11, 0, tzinfo=timezone.utc)  # 7PM PH Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "london_ny_overlap"
@@ -76,16 +86,24 @@ def test_next_session_after_asia_is_evening():
     assert nxt["hour_utc"] == 12
 
 
-def test_next_session_after_evening_is_morning_asia():
-    ts = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)  # midnight PH off-hours
+def test_next_session_after_smc_is_early_ema():
+    ts = datetime(2026, 7, 20, 17, 30, tzinfo=timezone.utc)  # 1:30AM PH SMC
+    nxt = next_session_hint(ts)
+    assert nxt["session"] == "off_hours"
+    assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 18
+
+
+def test_next_session_after_early_ema_is_asia():
+    ts = datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc)  # 5AM PH early EMA
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
     assert nxt["hour_utc"] == 23
 
 
-def test_friday_night_next_is_asia():
-    # Fri 22:00 UTC = 6:00AM PH off-hours; next Asia at UTC 23
+def test_friday_pre_dawn_next_is_asia():
+    # Fri 22:00 UTC = 6:00AM PH early EMA; next Asia at UTC 23
     ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
@@ -112,14 +130,12 @@ def test_quiet_day_not_blocked():
 
 
 def test_core_pce_not_every_late_month_day():
-    # Tue Jul 21 2026 is NOT last Friday — must not blackout for Core PCE
     ts = datetime(2026, 7, 21, 12, 20, tzinfo=timezone.utc)
     result = check_news_blackout(ts, before_minutes=45, after_minutes=30)
     assert result.blocked is False
 
 
 def test_core_pce_last_friday_blackout():
-    # Last Friday of July 2026 = Jul 31
     ts = datetime(2026, 7, 31, 12, 20, tzinfo=timezone.utc)
     result = check_news_blackout(ts, before_minutes=45, after_minutes=30)
     assert result.blocked is True

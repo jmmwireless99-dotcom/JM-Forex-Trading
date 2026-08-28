@@ -38,11 +38,11 @@ function sessionLabel(raw) {
   const map = {
     asia: 'Asia (PH 7AM–8PM)',
     london: 'London',
-    london_ny_overlap: 'Evening overlap (PH 8PM–11PM)',
+    london_ny_overlap: 'SMC (PH 8PM–2AM)',
     new_york: 'New York',
     friday_late: 'Friday late',
     weekend: 'Weekend',
-    off_hours: 'Off-hours',
+    off_hours: 'Early Asia (PH 2AM–7AM)',
     outside_asia_desk: 'Outside Asia desk',
     asia_off: 'Asia / off',
   }

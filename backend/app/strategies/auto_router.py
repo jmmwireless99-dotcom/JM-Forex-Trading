@@ -44,7 +44,7 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 _CHILD_BY_SESSION = {
     "asia": "EMA_RSI_Scalp",
     "london_ny_overlap": "Liquidity_Sweep_SMC",
-    "new_york": "EMA_VWAP_Scalp",
+    "off_hours": "EMA_RSI_Scalp",
 }
 
 
@@ -63,10 +63,10 @@ class AutoStrategyRouter:
             "london_close": None,
             "london_wind_down": None,
             "london_ny_overlap": "AI_ML",
+            "off_hours": "AI_ML",
             "new_york": "AI_ML",
             "friday_late": None,
             "weekend": None,
-            "off_hours": None,
             "outside_asia_desk": None,
         }
         self.child_map = dict(_CHILD_BY_SESSION)
@@ -143,6 +143,14 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
+                "utc": "18:00-22:59",
+                "ph": "02:00-06:59",
+                "slot": "Early Asia",
+                "session": "off_hours",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
+            },
+            {
+                "days": "Mon-Fri",
                 "utc": "23:00-11:59",
                 "ph": "07:00-19:59",
                 "slot": "Asia",
@@ -151,18 +159,10 @@ class AutoStrategyRouter:
             },
             {
                 "days": "Mon-Fri",
-                "utc": "12:00-15:59",
-                "ph": "20:00-23:59",
-                "slot": "Evening overlap",
+                "utc": "12:00-17:59",
+                "ph": "20:00-01:59",
+                "slot": "SMC overlap",
                 "session": "london_ny_overlap",
                 "strategies": "AI_ML → Liquidity_Sweep_SMC",
-            },
-            {
-                "days": "Mon-Fri",
-                "utc": "16:00-22:59",
-                "ph": "00:00-06:59",
-                "slot": "Off-hours",
-                "session": "outside_asia_desk",
-                "strategies": "Stand aside",
             },
         ]
