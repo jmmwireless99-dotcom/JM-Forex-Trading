@@ -465,6 +465,27 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
     )
 
 
+@router.post("/accounts/login")
+async def login_account(body: LoginAccountBody) -> dict:
+    """Validate account code + token (for dashboard login / account switch)."""
+    engine = get_engine()
+    try:
+        acct = engine.accounts.require_by_code(body.code.strip(), body.token)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Account not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Invalid account token") from exc
+    return {
+        "ok": True,
+        "account_id": acct.id,
+        "account_code": acct.code,
+        "account_label": acct.label,
+        "follow_auto": acct.follow_auto,
+        "account": engine.account_payload(acct),
+        "message": "Login OK — save token in this browser to stay signed in",
+    }
+
+
 @router.get("/accounts/me")
 async def account_me(account: PaperAccount = Depends(require_paper_account)) -> dict:
     """Return the caller's private account (requires X-JM-Account-Id + token)."""
