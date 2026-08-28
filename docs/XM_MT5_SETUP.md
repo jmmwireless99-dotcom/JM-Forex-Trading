@@ -27,13 +27,20 @@ Ito ang buong guide para i-connect ang **XM MetaTrader 5 demo** sa **JM FX desk*
 ### Step 2 — Login sa XM Demo
 
 1. **File → Login to Trade Account**  
-2. Ilagay ang credentials mula sa **XM welcome email**:
-   - **Login:** account number (hal. `169250320`)  
-   - **Password:** demo password  
-   - **Server:** hal. `XMGlobal-MT5 5` / `XM.com-Demo` (exact name sa email)  
+2. Ilagay ang credentials:
+   - **Login:** `169250320`  
+   - **Password:** your XM demo password *(MT5 terminal only — never type this on jmtechsolution.cloud)*  
+   - **Server:** `XMGlobal-MT5 2` (or exact server name shown in MT5)  
 3. Dapat connected (green bars sa ibaba)  
 
-> Kung hindi makalogin: i-reset ang demo password sa XM Members Area.
+> **JM FX desk pairing:** after MT5 login, sign in on https://jmtechsolution.cloud/fx/ with JM FX account code **`DDDC3D`** + your JM FX token (not the XM password).
+
+| Where | Login | Password |
+|-------|--------|----------|
+| **XM MT5 terminal** (PC) | `169250320` | XM demo password |
+| **JM FX website** (desk) | Account code `DDDC3D` | JM FX **token** (from admin) |
+
+> Kung hindi makalogin sa MT5: i-reset ang demo password sa XM Members Area.
 
 ### Step 3 — Hanapin ang Gold symbol sa XM
 
