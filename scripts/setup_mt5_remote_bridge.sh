@@ -32,15 +32,17 @@ upsert_systemd() {
 }
 
 ENV_FILE="$ROOT/.env"
-upsert_env_file "$ENV_FILE" JM_EXECUTION_MODE mt5
 upsert_env_file "$ENV_FILE" JM_MT5_BRIDGE_DIR "$BRIDGE_DIR"
 upsert_env_file "$ENV_FILE" JM_MT5_DEMO_ACCOUNT_CODE "$ACCOUNT_CODE"
 upsert_env_file "$ENV_FILE" JM_MT_SYMBOL "$SYMBOL"
 upsert_env_file "$ENV_FILE" JM_MT_REMOTE_BRIDGE true
 upsert_env_file "$ENV_FILE" JM_MT_BRIDGE_TOKEN "$TOKEN"
+# Keep paper until PC agent + MT5 EA are online; set JM_EXECUTION_MODE=mt5 manually when ready
+if [[ "${JM_FORCE_MT5_MODE:-}" == "1" ]]; then
+  upsert_env_file "$ENV_FILE" JM_EXECUTION_MODE mt5
+fi
 
 for kv in \
-  "JM_EXECUTION_MODE=mt5" \
   "JM_MT5_BRIDGE_DIR=${BRIDGE_DIR}" \
   "JM_MT5_DEMO_ACCOUNT_CODE=${ACCOUNT_CODE}" \
   "JM_MT_SYMBOL=${SYMBOL}" \
@@ -48,6 +50,9 @@ for kv in \
   "JM_MT_BRIDGE_TOKEN=${TOKEN}"; do
   upsert_systemd "${kv%%=*}" "${kv#*=}"
 done
+if [[ "${JM_FORCE_MT5_MODE:-}" == "1" ]]; then
+  upsert_systemd "JM_EXECUTION_MODE" "mt5"
+fi
 
 systemctl daemon-reload
 systemctl restart jm-forex.service

@@ -28,8 +28,8 @@ Ito ang buong guide para i-connect ang **XM MetaTrader 5 demo** sa **JM FX desk*
 
 1. **File → Login to Trade Account**  
 2. Ilagay ang credentials mula sa **XM welcome email**:
-   - **Login:** account number (hal. `169250320`)  
-   - **Password:** demo password  
+   - **Login:** `169250320`  
+   - **Password:** ilagay sa MT5 terminal lang (hindi sa JM FX cloud)  
    - **Server:** hal. `XMGlobal-MT5 5` / `XM.com-Demo` (exact name sa email)  
 3. Dapat connected (green bars sa ibaba)  
 
@@ -84,34 +84,17 @@ Kung wala: check `UseCommonFolder=true` at naka-ON ang Algo Trading.
 
 Gumagawa ng **hiwalay na JM FX account** para sa trade log at dashboard mo.
 
-### Sa server (kung may SSH access):
+### JM FX account (already created)
 
-```bash
-cd /opt/jm-forex-trading   # o path ng JM FX
-python3 scripts/create_xm_mt5_demo_account.py
-```
+| Field | Value |
+|-------|--------|
+| **Account code** | `DDDC3D` |
+| **MT5 login** | `169250320` |
+| **Label** | XM MT5 Demo · Login 169250320 |
 
-I-save ang output:
-- **Account code** (6 chars, hal. `A1B2C3`)  
-- **Account token** (secret — huwag i-share publicly)  
-- **Account ID**  
+Sa dashboard: **Sign in** gamit ang account code + token (hindi ang MT5 password).
 
-### Sa dashboard (browser):
-
-1. Buksan https://jmtechsolution.cloud/fx/  
-2. Ang bagong account ay naka-save sa browser via `localStorage` kapag ginamit mo ang token  
-3. O manually: gamitin ang **account id + token** sa API headers  
-
----
-
-## PART C — I-connect ang JM FX backend sa MT5
-
-Ang backend kailangan **makita** ang `Common\Files` folder. Karaniwang:
-
-- **Same Windows PC** na may MT5, o  
-- **Windows VPS** na may MT5 + synced folder  
-
-### `.env` settings (sa machine na may bridge access):
+### `.env` settings (sa server — remote bridge):
 
 ```bash
 JM_EXECUTION_MODE=mt5
