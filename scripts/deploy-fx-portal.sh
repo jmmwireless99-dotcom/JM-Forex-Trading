@@ -40,6 +40,7 @@ upsert_env JM_AI_SMC_SELL_OVERLAP_MIN_N 5
 upsert_env JM_AUTO_FILL_SINGLE_BOOK false
 upsert_env JM_EXECUTION_MODE paper
 upsert_env JM_DEFAULT_SYMBOLS XAUUSD
+upsert_env JM_ASIA_DESK_ONLY true
 # Investment dashboard (do not overwrite JM_INVEST_SECRET if present)
 grep -q '^JM_INVEST_SECRET=' "$ENV_FILE" 2>/dev/null || upsert_env JM_INVEST_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 upsert_env JM_INVEST_ADMIN_EMAIL admin@jmfx.local
