@@ -238,6 +238,26 @@ class TradingEngine:
     def _mt_bridge_live(self) -> bool:
         return bool(self.mt and self.mt.is_online())
 
+    def _empty_mt_snapshot(self) -> AccountSnapshot:
+        return AccountSnapshot(
+            balance=0.0,
+            equity=0.0,
+            margin_used=0.0,
+            free_margin=0.0,
+            open_positions=0,
+            daily_pnl=0.0,
+            deposit=0.0,
+            paper=False,
+        )
+
+    def _mt_account_snapshot(self) -> AccountSnapshot:
+        if self.mt and self._mt_bridge_live():
+            return self.mt.snapshot()
+        return self._empty_mt_snapshot()
+
+    def _account_executes_via_mt(self, account: PaperAccount) -> bool:
+        return self._is_mt_demo_account(account)
+
     def mt_demo_link_status(self, account: PaperAccount) -> dict[str, Any]:
         linked = self._is_mt_demo_account(account)
         live = linked and self._mt_bridge_live()
@@ -246,6 +266,7 @@ class TradingEngine:
             "account_code": account.code if linked else None,
             "configured_code": (self.settings.mt5_demo_account_code or "").strip().upper() or None,
             "linked": linked,
+            "mt5_only": linked,
             "bridge_online": self._mt_bridge_live(),
             "live_balance": live,
             "mt5_login": self.settings.mt5_demo_login or None,
@@ -256,8 +277,8 @@ class TradingEngine:
     def account_snapshot(self, account: PaperAccount | None = None) -> AccountSnapshot:
         if account is None and self.using_mt():
             return self.mt.snapshot()
-        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
-            return self.mt.snapshot()
+        if account and self._is_mt_demo_account(account):
+            return self._mt_account_snapshot()
         acct = account or self._desk
         return acct.broker.snapshot()
 
@@ -266,15 +287,16 @@ class TradingEngine:
         if account is None and self.using_mt():
             snap = self.mt.snapshot().model_dump(mode="json")
             return {**snap, "account_id": None, "account_code": None}
-        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
-            snap = self.mt.snapshot().model_dump(mode="json")
+        if account and self._is_mt_demo_account(account):
+            snap = self._mt_account_snapshot().model_dump(mode="json")
             return {
                 **snap,
                 "account_id": acct.id,
                 "account_code": acct.code,
                 "account_label": acct.label,
                 "follow_auto": acct.follow_auto,
-                "mt5_linked": True,
+                "mt5_only": True,
+                "mt5_linked": self._mt_bridge_live(),
                 "mt5_login": self.settings.mt5_demo_login or None,
             }
         return acct.snapshot_payload()
@@ -307,8 +329,8 @@ class TradingEngine:
     def open_positions(self, account: PaperAccount | None = None) -> list[Position]:
         if account is None and self.using_mt():
             return self.mt.open_positions()
-        if account and self._is_mt_demo_account(account) and self._mt_bridge_live():
-            return self.mt.open_positions()
+        if account and self._is_mt_demo_account(account):
+            return self.mt.open_positions() if self._mt_bridge_live() and self.mt else []
         acct = account or self._desk
         return acct.broker.open_positions()
 
@@ -992,9 +1014,21 @@ class TradingEngine:
         deposit: float | None = None,
         account: PaperAccount | None = None,
     ) -> dict:
-        """Show how risk / lot sizing scales with a paper deposit amount."""
+        """Show how risk / lot sizing scales with account capital."""
         acct = account or self._desk
-        amount = float(deposit if deposit is not None else acct.broker.deposit)
+        if account and self._is_mt_demo_account(account):
+            snap = self._mt_account_snapshot()
+            amount = float(deposit if deposit is not None else snap.equity or snap.balance)
+            note = (
+                "MT5 live account — balance from XM demo terminal"
+                if self._mt_bridge_live()
+                else "MT5 offline — connect JM_Forex_Bridge on GOLD# chart"
+            )
+            paper = False
+        else:
+            amount = float(deposit if deposit is not None else acct.broker.deposit)
+            note = "Paper demo capital for this account only — other clients cannot see it"
+            paper = not self.using_mt()
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
         stop_pips = float(self.settings.default_stop_loss_pips)
@@ -1007,7 +1041,8 @@ class TradingEngine:
         return {
             "deposit": round(amount, 2),
             "currency": self.settings.base_currency,
-            "paper": not self.using_mt(),
+            "paper": paper,
+            "mt5_only": bool(account and self._is_mt_demo_account(account)),
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
@@ -1018,7 +1053,7 @@ class TradingEngine:
             "suggested_lots": suggested_lots,
             "account_id": acct.id,
             "presets": [100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-            "note": "Paper demo capital for this account only — other clients cannot see it",
+            "note": note,
         }
 
     async def set_paper_deposit(
@@ -1034,6 +1069,10 @@ class TradingEngine:
         closed (and journaled) then balance is set to the new deposit.
         """
         acct = account or self._desk
+        if self._is_mt_demo_account(acct):
+            raise ValueError(
+                f"Account {acct.code} is MT5-only — balance comes from XM terminal, not paper deposit"
+            )
         if self.using_mt():
             raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
         async with self._lock:
@@ -1111,7 +1150,7 @@ class TradingEngine:
         """Attach / update SL & TP on an open position (manual desk helper)."""
         acct = account or self._desk
         async with self._lock:
-            if self.using_mt():
+            if self.using_mt() or self._account_executes_via_mt(acct):
                 return None  # MT modify not supported via file bridge yet
             pos = next(
                 (p for p in acct.broker.open_positions() if p.id == position_id),
@@ -1217,6 +1256,8 @@ class TradingEngine:
 
                 if not self.using_mt():
                     for acct in self.accounts.all():
+                        if self._is_mt_demo_account(acct):
+                            continue
                         closed = acct.broker.update_tick(tick)
                         for position in closed:
                             acct.risk.record_realized_pnl(position.realized_pnl)
@@ -1392,6 +1433,7 @@ class TradingEngine:
         if (
             signal.order_type == OrderType.LIMIT
             and not self.using_mt()
+            and not self._account_executes_via_mt(account)
             and account.broker.pending_orders()
         ):
             return
@@ -1487,8 +1529,9 @@ class TradingEngine:
     ) -> Order:
         acct = account or self._desk
         tick = tick or self._recent_ticks.get(request.symbol)
+        via_mt = self.using_mt() or self._account_executes_via_mt(acct)
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
-        if tick is not None and not self.using_mt():
+        if tick is not None and not via_mt:
             acct.broker._last_ticks[tick.symbol] = tick
         decision = acct.risk.evaluate(
             request,
@@ -1524,7 +1567,27 @@ class TradingEngine:
 
         request.lots = decision.adjusted_lots or request.lots
 
-        if self.using_mt():
+        if via_mt:
+            if not self.mt_online():
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason="MT5 bridge offline — open MT5, attach JM_Forex_Bridge on GOLD#",
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": acct.id},
+                )
+                return rejected
             order = self.mt.place_order(request)
             pos = (
                 self._latest_open(request.symbol, request.side, acct)

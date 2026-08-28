@@ -109,6 +109,7 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const mt5Only = Boolean(account?.mt5_only || accountMeta?.mt5?.mt5_only)
   const [authState, setAuthState] = useState('loading') // loading | in | out
   const [showLoginPanel, setShowLoginPanel] = useState(false)
   const [loginCode, setLoginCode] = useState('')
@@ -136,8 +137,18 @@ export default function App() {
     if (acc) {
       setAccount(acc)
       setCapital(acc.capital || null)
-      if (acc.deposit != null) setDepositInput(String(acc.deposit))
-      else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+      if (acc.mt5_only) {
+        setAccountMeta((prev) => ({
+          ...(prev || {}),
+          code: acc.account_code || session.code,
+          label: acc.account_label || session.label,
+          mt5: { mt5_only: true, mt5_login: acc.mt5_login, linked: acc.mt5_linked },
+        }))
+      }
+      if (!acc.mt5_only) {
+        if (acc.deposit != null) setDepositInput(String(acc.deposit))
+        else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+      }
     }
     if (pos) setPositions(pos.open || [])
     if (tradeInfo) {
@@ -162,6 +173,7 @@ export default function App() {
         code: res.account_code,
         label: res.account_label,
       }
+      setAccountMeta({ code: res.account_code, label: res.account_label, mt5: res.mt5 })
       saveAccountSession(session)
       await loadAccountBook(session)
       setLoginCode('')
@@ -782,7 +794,7 @@ export default function App() {
       <>
       <section className="metrics" aria-label="Account metrics">
         <div className="metric">
-          <label>Demo acct</label>
+          <label>{mt5Only ? 'MT5 acct' : 'Demo acct'}</label>
           <strong>{accountMeta?.code || account.account_code || '—'}</strong>
           {accountMeta?.label ? (
             <span className="meta" style={{ display: 'block', marginTop: '0.2rem' }}>
@@ -863,6 +875,7 @@ export default function App() {
         )
       })()}
 
+        {!mt5Only ? (
       <section className="panel deposit-panel" aria-label="Paper deposit">
         <div className="deposit-head">
           <div>
@@ -958,6 +971,42 @@ export default function App() {
           </div>
         ) : null}
       </section>
+      ) : (
+      <section className="panel deposit-panel" aria-label="MT5 account">
+        <div className="deposit-head">
+          <div>
+            <h2>XM MT5 live account</h2>
+            <p className="meta">
+              <strong>{accountMeta?.code || account.account_code}</strong> uses your XM MT5 demo
+              balance only — no paper money. Login <strong>{account.mt5_login || accountMeta?.mt5?.mt5_login || '169250320'}</strong>
+              · symbol <strong>{accountMeta?.mt5?.symbol || 'GOLD#'}</strong>.
+              Keep MT5 open with JM_Forex_Bridge on the GOLD# chart.
+            </p>
+          </div>
+          <span className="badge badge-live">MT5 LIVE</span>
+        </div>
+        {capital ? (
+          <div className="capital-calc" aria-label="Capital calculation">
+            <div>
+              <label>Risk / trade</label>
+              <strong>
+                ${money(capital.risk_per_trade_usd)}{' '}
+                <span className="meta">({capital.risk_per_trade_pct}%)</span>
+              </strong>
+            </div>
+            <div>
+              <label>Suggested lots</label>
+              <strong>
+                {Number(capital.suggested_lots).toFixed(2)}{' '}
+                <span className="meta">
+                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                </span>
+              </strong>
+            </div>
+          </div>
+        ) : null}
+      </section>
+      )}
 
       <section className="manual-trade" aria-label="Manual buy sell">
         <div className="manual-trade-head">

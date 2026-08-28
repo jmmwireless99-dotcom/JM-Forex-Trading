@@ -9,6 +9,7 @@ import pytest
 from app.brokers.mt4_bridge import MT4FileBridge
 from app.core.config import Settings
 from app.engine.trading_engine import TradingEngine
+from app.models.domain import OrderRequest, Side
 from app.paper_accounts.registry import PaperAccountRegistry
 
 
@@ -39,7 +40,7 @@ def mt5_engine(tmp_path: Path):
     return engine, acct
 
 
-def test_mt_demo_account_shows_live_mt5_balance(mt5_engine):
+def test_mt_demo_account_shows_live_mt5_balance_not_paper(mt5_engine):
     engine, acct = mt5_engine
     snap = engine.account_snapshot(acct)
     assert snap.balance == 1000.0
@@ -48,19 +49,28 @@ def test_mt_demo_account_shows_live_mt5_balance(mt5_engine):
 
     payload = engine.account_payload(acct)
     assert payload["account_code"] == "DDDC3D"
-    assert payload["mt5_linked"] is True
+    assert payload["mt5_only"] is True
     assert payload["mt5_login"] == "169250320"
     assert payload["balance"] == 1000.0
+    assert payload["balance"] != 994.36
+
+
+def test_mt_demo_offline_shows_zero_not_paper_balance(mt5_engine):
+    engine, acct = mt5_engine
+    engine.mt.status_file.unlink()
+    snap = engine.account_snapshot(acct)
+    assert snap.balance == 0.0
+    assert snap.paper is False
 
 
 def test_mt_demo_link_status(mt5_engine):
     engine, acct = mt5_engine
     status = engine.mt_demo_link_status(acct)
     assert status["linked"] is True
+    assert status["mt5_only"] is True
     assert status["bridge_online"] is True
     assert status["live_balance"] is True
     assert status["tick_ok"] is True
-    assert status["mt5_login"] == "169250320"
 
 
 def test_other_accounts_stay_paper(mt5_engine):
@@ -69,3 +79,46 @@ def test_other_accounts_stay_paper(mt5_engine):
     snap = engine.account_snapshot(other)
     assert snap.balance == 500.0
     assert snap.paper is True
+
+
+@pytest.mark.asyncio
+async def test_mt_demo_rejects_paper_deposit(mt5_engine):
+    engine, acct = mt5_engine
+    with pytest.raises(ValueError, match="MT5-only"):
+        await engine.set_paper_deposit(2000.0, account=acct)
+
+
+@pytest.mark.asyncio
+async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
+    engine, acct = mt5_engine
+
+    def fake_ea():
+        import time
+
+        for _ in range(40):
+            if engine.mt.command_file.exists():
+                text = engine.mt.command_file.read_text()
+                if "OPEN" in text and "GOLD#" in text:
+                    cmd_id = text.strip().splitlines()[-1].split(",")[0]
+                    engine.mt.ack_file.write_text(f"{cmd_id},OK,888\n")
+                    return
+            time.sleep(0.05)
+
+    import threading
+
+    t = threading.Thread(target=fake_ea, daemon=True)
+    t.start()
+    order = await engine.manual_order(
+        OrderRequest(
+            symbol="XAUUSD",
+            side=Side.BUY,
+            lots=0.01,
+            stop_loss=4580.0,
+            take_profit=4610.0,
+            comment="mt5-only",
+        ),
+        account=acct,
+    )
+    t.join(timeout=3)
+    assert "GOLD#" in engine.mt.command_file.read_text()
+    assert order.status.value == "FILLED"
