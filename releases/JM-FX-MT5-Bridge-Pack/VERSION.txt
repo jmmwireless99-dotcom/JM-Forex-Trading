@@ -1,0 +1,7 @@
+JM FX MT5 Bridge Pack
+Version: 2026.08.28
+Branch: cursor/gold-symbol-mt5-c11c
+
+Symbol: GOLD# (XM MT5 demo 169250320)
+JM account: DDDC3D
+Fast command poll: 120ms | Full sync: 800ms
