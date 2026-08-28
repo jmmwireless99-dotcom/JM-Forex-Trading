@@ -545,6 +545,63 @@ export default function App() {
 
   return (
     <div className="app">
+      {(showLoginPanel || authState === 'out') && (
+        <section className="panel account-auth-panel account-auth-gate" aria-label="Account login">
+          <h2>{authState === 'in' ? 'Palitan ang account' : 'Mag-login sa JM FX account mo'}</h2>
+          <p className="meta">
+            Bawat client may sariling <strong>account code</strong> + <strong>token</strong> — private
+            capital, trades, at history. Mag-logout o palitan ang account anumang oras.
+          </p>
+          <form className="account-auth-form" onSubmit={handleLogin}>
+            <label>
+              Account code
+              <input
+                type="text"
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                placeholder="hal. DDDC3D"
+                autoComplete="username"
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Token (secret key)
+              <input
+                type="password"
+                value={loginToken}
+                onChange={(e) => setLoginToken(e.target.value)}
+                placeholder="I-paste ang token mula sa admin"
+                autoComplete="current-password"
+                disabled={busy}
+              />
+            </label>
+            <div className="account-auth-actions">
+              <button type="submit" className="btn-primary" disabled={busy || !loginCode || !loginToken}>
+                Mag-login
+              </button>
+              {authState === 'in' ? (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={busy}
+                  onClick={() => setShowLoginPanel(false)}
+                >
+                  Kanselahin
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={handleCreateDemoAccount}
+              >
+                Gumawa ng bagong demo
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       <header className="hero">
         <div className="brand-lockup">
           <h1 className="brand">
@@ -566,7 +623,7 @@ export default function App() {
                 disabled={busy}
                 onClick={() => setShowLoginPanel(true)}
               >
-                Switch account
+                Palitan ang account
               </button>
               <button
                 type="button"
@@ -574,7 +631,7 @@ export default function App() {
                 disabled={busy}
                 onClick={handleLogout}
               >
-                Log out
+                Mag-logout
               </button>
             </div>
           ) : null}
@@ -723,63 +780,6 @@ export default function App() {
           )
         })()}
       </header>
-
-      {(showLoginPanel || authState === 'out') && (
-        <section className="panel account-auth-panel" aria-label="Account login">
-          <h2>{authState === 'in' ? 'Switch account' : 'Sign in to your JM FX account'}</h2>
-          <p className="meta">
-            Use your <strong>account code</strong> + <strong>token</strong> to open your private
-            trade log. Log out anytime to switch accounts (e.g. XM MT5 Demo).
-          </p>
-          <form className="account-auth-form" onSubmit={handleLogin}>
-            <label>
-              Account code
-              <input
-                type="text"
-                value={loginCode}
-                onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
-                placeholder="e.g. DDDC3D"
-                autoComplete="username"
-                disabled={busy}
-              />
-            </label>
-            <label>
-              Token
-              <input
-                type="password"
-                value={loginToken}
-                onChange={(e) => setLoginToken(e.target.value)}
-                placeholder="Paste your account token"
-                autoComplete="current-password"
-                disabled={busy}
-              />
-            </label>
-            <div className="account-auth-actions">
-              <button type="submit" className="btn-primary" disabled={busy || !loginCode || !loginToken}>
-                Sign in
-              </button>
-              {authState === 'in' ? (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={busy}
-                  onClick={() => setShowLoginPanel(false)}
-                >
-                  Cancel
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={busy}
-                onClick={handleCreateDemoAccount}
-              >
-                Create new demo account
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
 
       {authState === 'in' ? (
       <>

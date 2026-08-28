@@ -119,6 +119,15 @@ button:disabled {
   animation: rise 700ms 80ms ease both;
 }
 
+.account-auth-gate {
+  border-color: rgba(125, 255, 179, 0.35);
+  box-shadow: 0 0 0 1px rgba(125, 255, 179, 0.08);
+}
+
+.account-auth-gate h2 {
+  color: var(--mint);
+}
+
 .account-auth-form {
   display: grid;
   gap: 0.85rem;
