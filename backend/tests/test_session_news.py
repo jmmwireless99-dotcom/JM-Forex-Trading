@@ -37,29 +37,47 @@ def test_evening_ph_still_asia():
     assert window.label == "asia"
 
 
-def test_8pm_ph_closes_asia_desk():
-    # 12:00 UTC = 8:00PM PH — desk flat
+def test_8pm_ph_starts_evening_overlap():
+    # 12:00 UTC = 8:00PM PH — evening SMC window
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.PRIME
+    assert window.label == "london_ny_overlap"
+    assert session_allows_entry(ts, prime_only=True) is True
+
+
+def test_10pm_ph_evening_overlap():
+    ts = datetime(2026, 7, 20, 14, 30, tzinfo=timezone.utc)  # 10:30PM PH
+    window = classify_session(ts)
+    assert window.tier == SessionTier.PRIME
+    assert window.label == "london_ny_overlap"
+
+
+def test_midnight_ph_stand_aside():
+    ts = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)  # 12:00AM PH
     window = classify_session(ts)
     assert window.tier == SessionTier.AVOID
     assert window.label == "outside_asia_desk"
 
 
-def test_after_8pm_ph_stand_aside():
-    ts = datetime(2026, 7, 20, 14, 30, tzinfo=timezone.utc)  # 10:30PM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.AVOID
-    assert session_allows_entry(ts) is False
-
-
-def test_asia_desk_only_blocks_after_8pm():
+def test_asia_desk_evening_is_smc():
     ts = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)  # 9PM PH
-    assert classify_asia_desk(ts).tier == SessionTier.AVOID
+    window = classify_asia_desk(ts)
+    assert window.tier == SessionTier.PRIME
+    assert window.label == "london_ny_overlap"
     assert classify_full_sessions(ts).label == "london_ny_overlap"
 
 
+def test_next_session_after_asia_is_evening():
+    ts = datetime(2026, 7, 20, 11, 0, tzinfo=timezone.utc)  # 7PM PH Asia
+    nxt = next_session_hint(ts)
+    assert nxt["session"] == "london_ny_overlap"
+    assert nxt["strategy"] == "AI_ML"
+    assert nxt["hour_utc"] == 12
+
+
 def test_next_session_after_evening_is_morning_asia():
-    ts = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)  # 9PM PH off-hours
+    ts = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)  # midnight PH off-hours
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"

@@ -151,8 +151,16 @@ class AutoStrategyRouter:
             },
             {
                 "days": "Mon-Fri",
-                "utc": "12:00-22:59",
-                "ph": "20:00-06:59",
+                "utc": "12:00-15:59",
+                "ph": "20:00-23:59",
+                "slot": "Evening overlap",
+                "session": "london_ny_overlap",
+                "strategies": "AI_ML → Liquidity_Sweep_SMC",
+            },
+            {
+                "days": "Mon-Fri",
+                "utc": "16:00-22:59",
+                "ph": "00:00-06:59",
                 "slot": "Off-hours",
                 "session": "outside_asia_desk",
                 "strategies": "Stand aside",

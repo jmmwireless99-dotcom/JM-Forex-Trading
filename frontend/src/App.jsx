@@ -38,7 +38,7 @@ function sessionLabel(raw) {
   const map = {
     asia: 'Asia (PH 7AM–8PM)',
     london: 'London',
-    london_ny_overlap: 'London / NY overlap',
+    london_ny_overlap: 'Evening overlap (PH 8PM–11PM)',
     new_york: 'New York',
     friday_late: 'Friday late',
     weekend: 'Weekend',
