@@ -27,6 +27,13 @@ class CreateAccountBody(BaseModel):
     follow_auto: bool = True
 
 
+class LoginAccountBody(BaseModel):
+    """Sign in to an existing paper account with code + token."""
+
+    code: str = Field(..., min_length=4, max_length=12)
+    token: str = Field(..., min_length=8, max_length=128)
+
+
 class StartRequest(BaseModel):
     strategy: str | None = None
 
@@ -360,6 +367,27 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
         deposit=body.deposit,
         follow_auto=body.follow_auto,
     )
+
+
+@router.post("/accounts/login")
+async def login_account(body: LoginAccountBody) -> dict:
+    """Validate account code + token (for dashboard login / account switch)."""
+    engine = get_engine()
+    try:
+        acct = engine.accounts.require_by_code(body.code.strip(), body.token)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Account not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Invalid account token") from exc
+    return {
+        "ok": True,
+        "account_id": acct.id,
+        "account_code": acct.code,
+        "account_label": acct.label,
+        "follow_auto": acct.follow_auto,
+        "account": engine.account_payload(acct),
+        "message": "Login OK — save token in this browser to stay signed in",
+    }
 
 
 @router.get("/accounts/me")

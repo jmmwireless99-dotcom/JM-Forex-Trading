@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, connectFeed, ensureAccountSession } from './api'
+import { api, connectFeed, loadAccountSession, logoutAccount, saveAccountSession } from './api'
 import CandleChart from './CandleChart'
 import TradingViewGoldChart from './TradingViewGoldChart'
 import './App.css'
@@ -109,7 +109,101 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const [authState, setAuthState] = useState('loading') // loading | in | out
+  const [showLoginPanel, setShowLoginPanel] = useState(false)
+  const [loginCode, setLoginCode] = useState('')
+  const [loginToken, setLoginToken] = useState('')
   const accountIdRef = useRef(null)
+
+  async function loadAccountBook(session) {
+    accountIdRef.current = session.id
+    setAccountMeta({
+      id: session.id,
+      code: session.code,
+      label: session.label,
+    })
+    const bookResults = await Promise.allSettled([
+      api.account(),
+      api.positions(),
+      api.trades(100),
+      api.aiAdvice().catch(() => null),
+    ])
+    const bval = (i) => (bookResults[i].status === 'fulfilled' ? bookResults[i].value : null)
+    const acc = bval(0)
+    const pos = bval(1)
+    const tradeInfo = bval(2)
+    const advice = bval(3)
+    if (acc) {
+      setAccount(acc)
+      setCapital(acc.capital || null)
+      if (acc.deposit != null) setDepositInput(String(acc.deposit))
+      else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+    }
+    if (pos) setPositions(pos.open || [])
+    if (tradeInfo) {
+      setTrades(tradeInfo.trades || [])
+      setTradeSummary(tradeInfo.summary || null)
+    }
+    if (advice?.advice) setAiAdvice(advice.advice)
+    if (advice?.status) setAiStatus(advice.status)
+    setAuthState('in')
+    setShowLoginPanel(false)
+  }
+
+  async function handleLogin(e) {
+    e?.preventDefault?.()
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.loginAccount({ code: loginCode, token: loginToken })
+      const session = {
+        id: res.account_id,
+        token: loginToken.trim(),
+        code: res.account_code,
+        label: res.account_label,
+      }
+      saveAccountSession(session)
+      await loadAccountBook(session)
+      setLoginCode('')
+      setLoginToken('')
+    } catch (err) {
+      setError(err.message || 'Login failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleLogout() {
+    logoutAccount()
+    setAuthState('out')
+    setShowLoginPanel(true)
+    setAccountMeta(null)
+    setAccount(emptyAccount)
+    setPositions([])
+    setTrades([])
+    setTradeSummary(null)
+    accountIdRef.current = null
+  }
+
+  async function handleCreateDemoAccount() {
+    setBusy(true)
+    setError('')
+    try {
+      const created = await api.createAccount({ deposit: 1000, label: 'Client demo', follow_auto: true })
+      const session = {
+        id: created.account.account_id,
+        token: created.token,
+        code: created.account.account_code,
+        label: created.account.account_label,
+      }
+      saveAccountSession(session)
+      await loadAccountBook(session)
+    } catch (err) {
+      setError(err.message || 'Could not create account')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -278,43 +372,28 @@ export default function App() {
 
       // 2) Private paper book for this browser (capital / positions / fills)
       try {
-        const session = await ensureAccountSession({ deposit: 1000, label: 'Client demo' })
-        if (!alive) return
-        accountIdRef.current = session.id
-        setAccountMeta({
-          id: session.id,
-          code: session.code,
-          label: session.label,
-        })
-        const bookResults = await Promise.allSettled([
-          api.account(),
-          api.positions(),
-          api.trades(100),
-          api.aiAdvice().catch(() => null),
-        ])
-        if (!alive) return
-        const bval = (i) =>
-          bookResults[i].status === 'fulfilled' ? bookResults[i].value : null
-        const acc = bval(0)
-        const pos = bval(1)
-        const tradeInfo = bval(2)
-        const advice = bval(3)
-        if (acc) {
-          setAccount(acc)
-          setCapital(acc.capital || null)
-          if (acc.deposit != null) setDepositInput(String(acc.deposit))
-          else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
+        const session = loadAccountSession()
+        if (!session) {
+          if (alive) {
+            setAuthState('out')
+            setShowLoginPanel(true)
+          }
+        } else {
+          try {
+            await loadAccountBook(session)
+          } catch {
+            logoutAccount()
+            if (alive) {
+              setAuthState('out')
+              setShowLoginPanel(true)
+            }
+          }
         }
-        if (pos) setPositions(pos.open || [])
-        if (tradeInfo) {
-          setTrades(tradeInfo.trades || [])
-          setTradeSummary(tradeInfo.summary || null)
-        }
-        if (advice?.advice) setAiAdvice(advice.advice)
-        if (advice?.status) setAiStatus(advice.status)
       } catch (err) {
         if (alive) {
           setError((prev) => prev || err.message || 'Failed to load paper account')
+          setAuthState('out')
+          setShowLoginPanel(true)
         }
       }
 
@@ -475,6 +554,30 @@ export default function App() {
             {status?.running ? 'Desk live' : 'Paused'} · {mode.toUpperCase()}
             {mode !== 'paper' ? (mtOnline ? ' · MT online' : ' · MT offline') : ''}
           </div>
+          {authState === 'in' && accountMeta ? (
+            <div className="account-session-bar">
+              <span className="meta">
+                Signed in · <strong>{accountMeta.code}</strong>
+                {accountMeta.label ? ` · ${accountMeta.label}` : ''}
+              </span>
+              <button
+                type="button"
+                className="btn-ghost account-session-btn"
+                disabled={busy}
+                onClick={() => setShowLoginPanel(true)}
+              >
+                Switch account
+              </button>
+              <button
+                type="button"
+                className="btn-ghost account-session-btn"
+                disabled={busy}
+                onClick={handleLogout}
+              >
+                Log out
+              </button>
+            </div>
+          ) : null}
         </div>
         <p>
           XAUUSD scalp desk — EMA+RSI momentum or SMC liquidity sweep.
@@ -621,10 +724,74 @@ export default function App() {
         })()}
       </header>
 
+      {(showLoginPanel || authState === 'out') && (
+        <section className="panel account-auth-panel" aria-label="Account login">
+          <h2>{authState === 'in' ? 'Switch account' : 'Sign in to your JM FX account'}</h2>
+          <p className="meta">
+            Use your <strong>account code</strong> + <strong>token</strong> to open your private
+            trade log. Log out anytime to switch accounts (e.g. XM MT5 Demo).
+          </p>
+          <form className="account-auth-form" onSubmit={handleLogin}>
+            <label>
+              Account code
+              <input
+                type="text"
+                value={loginCode}
+                onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                placeholder="e.g. DDDC3D"
+                autoComplete="username"
+                disabled={busy}
+              />
+            </label>
+            <label>
+              Token
+              <input
+                type="password"
+                value={loginToken}
+                onChange={(e) => setLoginToken(e.target.value)}
+                placeholder="Paste your account token"
+                autoComplete="current-password"
+                disabled={busy}
+              />
+            </label>
+            <div className="account-auth-actions">
+              <button type="submit" className="btn-primary" disabled={busy || !loginCode || !loginToken}>
+                Sign in
+              </button>
+              {authState === 'in' ? (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={busy}
+                  onClick={() => setShowLoginPanel(false)}
+                >
+                  Cancel
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={handleCreateDemoAccount}
+              >
+                Create new demo account
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {authState === 'in' ? (
+      <>
       <section className="metrics" aria-label="Account metrics">
         <div className="metric">
           <label>Demo acct</label>
           <strong>{accountMeta?.code || account.account_code || '—'}</strong>
+          {accountMeta?.label ? (
+            <span className="meta" style={{ display: 'block', marginTop: '0.2rem' }}>
+              {accountMeta.label}
+            </span>
+          ) : null}
         </div>
         <div className="metric">
           <label>Equity</label>
@@ -1212,6 +1379,8 @@ export default function App() {
         </section>
 
       </div>
+      </>
+      ) : null}
 
       <p className="footer-note">
         Part of{' '}
