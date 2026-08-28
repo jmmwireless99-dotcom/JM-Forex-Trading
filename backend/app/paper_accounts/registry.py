@@ -220,6 +220,21 @@ class PaperAccountRegistry:
             raise PermissionError("Invalid account token")
         return acc
 
+    def require_by_code(self, code: str, token: str) -> PaperAccount:
+        """Resolve client account by public code + secret token."""
+        code_u = (code or "").strip().upper()
+        if not code_u:
+            raise KeyError("Account not found")
+        with self._lock:
+            for acc in self._accounts.values():
+                if acc.is_desk:
+                    continue
+                if (acc.code or "").upper() == code_u:
+                    if acc.token != token:
+                        raise PermissionError("Invalid account token")
+                    return acc
+        raise KeyError("Account not found")
+
     def list_public(self) -> list[dict]:
         with self._lock:
             return [a.public_info() for a in self._accounts.values() if not a.is_desk]
