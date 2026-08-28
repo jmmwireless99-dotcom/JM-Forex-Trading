@@ -1410,15 +1410,10 @@ class TradingEngine:
     def _auto_fill_targets(self) -> list[PaperAccount]:
         """Accounts that receive auto strategy fills.
 
-        Default (JM_AUTO_FILL_SINGLE_BOOK=false): every follow_auto client
-        gets the same desk signal — one signal, all accounts trade together.
-        The configured MT5 demo account (DDDC3D) is always included even when
-        follow_auto=False so it receives auto signals in paper desk mode.
-        Single-book mode remains available for ops that want one fill target.
+        One desk strategy signal fans out to every auto-follow client — same
+        AI_ML / EMA_RSI / SMC setup for all books. MT5 demo (DDDC3D) executes
+        on the bridge; paper accounts fill on their own book.
         """
-        if self.using_mt():
-            return [self._mt_demo_account()]
-
         mt_acct = self.mt_demo_account()
         followers = self.accounts.auto_followers()
 

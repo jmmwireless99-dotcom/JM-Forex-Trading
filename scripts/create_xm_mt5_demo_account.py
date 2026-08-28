@@ -67,7 +67,7 @@ def main() -> None:
         acct = existing
         created = False
     else:
-        acct = reg.create(deposit=args.deposit, label=label, follow_auto=False, is_desk=False)
+        acct = reg.create(deposit=args.deposit, label=label, follow_auto=True, is_desk=False)
         reg.save()
         created = True
 

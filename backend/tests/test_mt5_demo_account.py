@@ -30,7 +30,7 @@ def mt5_engine(tmp_path: Path):
         mt_symbol="GOLD#",
     )
     reg = PaperAccountRegistry(settings, store_path=store)
-    acct = reg.create(deposit=994.36, label="XM MT5 Demo", follow_auto=False)
+    acct = reg.create(deposit=994.36, label="XM MT5 Demo", follow_auto=True)
     acct.code = "DDDC3D"
     reg.save()
 
@@ -81,11 +81,22 @@ def test_other_accounts_stay_paper(mt5_engine):
     assert snap.paper is True
 
 
-def test_mt_demo_in_auto_fill_targets_despite_follow_auto_false(mt5_engine):
-    """DDDC3D must receive desk auto signals even in paper mode (follow_auto=False)."""
+def test_mt_demo_in_auto_fill_targets_with_paper_followers(mt5_engine):
+    """DDDC3D and paper followers share the same desk auto strategy."""
     engine, acct = mt5_engine
-    assert acct.follow_auto is False
     other = engine.accounts.create(deposit=500.0, label="Paper follower", follow_auto=True)
+
+    targets = engine._auto_fill_targets()
+    ids = {a.id for a in targets}
+    assert acct.id in ids
+    assert other.id in ids
+
+
+def test_mt_online_still_fans_out_to_all_followers(mt5_engine):
+    """MT bridge online must not exclusive-route signals to DDDC3D only."""
+    engine, acct = mt5_engine
+    other = engine.accounts.create(deposit=500.0, label="Paper follower", follow_auto=True)
+    engine.settings = engine.settings.model_copy(update={"execution_mode": "mt5"})
 
     targets = engine._auto_fill_targets()
     ids = {a.id for a in targets}

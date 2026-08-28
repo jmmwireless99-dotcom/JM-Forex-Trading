@@ -437,4 +437,20 @@ class PaperAccountRegistry:
                 self._by_token[acc.token] = acc.id
             except Exception:  # noqa: BLE001
                 log.exception("skip corrupt paper account row")
+        if self._sync_mt_demo_follow_auto():
+            self._save()
         log.info("loaded %s paper accounts from %s", len(self._accounts), self.store_path)
+
+    def _sync_mt_demo_follow_auto(self) -> bool:
+        """MT5 demo book follows the same desk auto strategy as paper clients."""
+        code = (self.settings.mt5_demo_account_code or "").strip().upper()
+        if not code:
+            return False
+        changed = False
+        for acc in self._accounts.values():
+            if acc.is_desk:
+                continue
+            if (acc.code or "").upper() == code and not acc.follow_auto:
+                acc.follow_auto = True
+                changed = True
+        return changed
