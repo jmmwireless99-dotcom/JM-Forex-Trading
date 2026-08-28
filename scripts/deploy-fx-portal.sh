@@ -81,6 +81,11 @@ echo "[5/6] Sync systemd env (systemd overrides .env for jm-forex)..."
 UNIT="/etc/systemd/system/jm-forex.service"
 if [[ -f "$UNIT" ]]; then
   sed -i 's/^Environment=JM_AUTO_FILL_SINGLE_BOOK=.*/Environment=JM_AUTO_FILL_SINGLE_BOOK=false/' "$UNIT"
+  if grep -q '^Environment=JM_ASIA_DESK_ONLY=' "$UNIT"; then
+    sed -i 's/^Environment=JM_ASIA_DESK_ONLY=.*/Environment=JM_ASIA_DESK_ONLY=true/' "$UNIT"
+  else
+    sed -i '/^Environment=JM_AUTO_FILL/a Environment=JM_ASIA_DESK_ONLY=true' "$UNIT"
+  fi
   systemctl daemon-reload
 fi
 
