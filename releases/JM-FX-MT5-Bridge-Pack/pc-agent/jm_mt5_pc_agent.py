@@ -26,8 +26,8 @@ FILES = {
 COMMAND_FILE = "jm_command.csv"
 
 # Fast command poll (JM FX → MT5) vs full file upload (MT5 → JM FX)
-CMD_INTERVAL = 0.12
-FULL_INTERVAL = 0.8
+CMD_INTERVAL = 0.08
+FULL_INTERVAL = 0.4
 
 
 def read_text(path: Path) -> str | None:
@@ -92,7 +92,7 @@ def apply_command(bridge_dir: Path, command: str) -> tuple[bool, str | None]:
 def burst_upload_ack(base_url: str, token: str, bridge_dir: Path, cmd_id: str) -> None:
     """Background: push MT5 ack to cloud quickly after command delivery."""
     ack_path = bridge_dir / FILES["ack"]
-    deadline = time.time() + 35.0
+    deadline = time.time() + 45.0
     while time.time() < deadline:
         try:
             sync_once(base_url, token, bridge_dir)
@@ -102,7 +102,7 @@ def burst_upload_ack(base_url: str, token: str, bridge_dir: Path, cmd_id: str) -
         first = ack.strip().splitlines()[0] if ack.strip() else ""
         if first.startswith(cmd_id + ","):
             return
-        time.sleep(0.15)
+        time.sleep(0.08)
 
 
 def main() -> int:
@@ -150,6 +150,10 @@ def main() -> int:
             command = (cmd_data.get("command") or "").strip()
             written, cmd_id = apply_command(bridge_dir, command)
             if written and cmd_id:
+                try:
+                    sync_once(args.url, args.token, bridge_dir)
+                except Exception:
+                    pass
                 t = threading.Thread(
                     target=burst_upload_ack,
                     args=(args.url, args.token, bridge_dir, cmd_id),
@@ -171,6 +175,10 @@ def main() -> int:
                 full_cmd = (result.get("command") or "").strip()
                 w2, cid2 = apply_command(bridge_dir, full_cmd)
                 if w2 and cid2:
+                    try:
+                        sync_once(args.url, args.token, bridge_dir)
+                    except Exception:
+                        pass
                     threading.Thread(
                         target=burst_upload_ack,
                         args=(args.url, args.token, bridge_dir, cid2),

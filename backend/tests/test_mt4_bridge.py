@@ -113,6 +113,31 @@ def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
     assert "XAUUSD" not in cmd.split("OPEN")[1].split("\n")[0]
 
 
+def test_remote_online_uses_any_heartbeat_file(tmp_path: Path):
+    import os
+
+    bridge = MT4FileBridge(tmp_path, symbol="GOLD#", desk_symbol="XAUUSD", remote_mode=True)
+    status = tmp_path / "jm_status.csv"
+    ticks = tmp_path / "jm_ticks.csv"
+    status.write_text("ok,1000,1000,0,t\n")
+    ticks.write_text("GOLD#,4591.00,4591.30,t\n")
+
+    stale = time.time() - 20.0
+    os.utime(status, (stale, stale))
+    assert bridge.is_online() is True
+
+    very_stale = time.time() - 60.0
+    os.utime(status, (very_stale, very_stale))
+    os.utime(ticks, (very_stale, very_stale))
+    assert bridge.is_online() is False
+
+
+def test_remote_defaults_longer_order_timeout(tmp_path: Path):
+    bridge = MT4FileBridge(tmp_path, symbol="GOLD#", remote_mode=True)
+    assert bridge.online_max_age == 45.0
+    assert bridge.order_timeout == 60.0
+
+
 def test_repair_legacy_xauusd_zero_tick(tmp_path: Path):
     from app.brokers.mt4_bridge import repair_mt_tick_csv
 

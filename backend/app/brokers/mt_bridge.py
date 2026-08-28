@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.brokers.mt4_bridge import BridgeAck, MT4FileBridge
+from app.brokers.mt4_bridge import BridgeAck, MT4FileBridge, _bridge_timeouts
 
 # Alias — MT4 and MT5 EAs share the same file contract
 MetaTraderBridge = MT4FileBridge
@@ -23,8 +23,17 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
     remote = bool(getattr(settings, "mt_remote_bridge", False))
 
+    remote_cfg, online_max_age, order_timeout = _bridge_timeouts(settings)
+
     def _bridge(path: str) -> MetaTraderBridge:
-        return MetaTraderBridge(path, symbol=mt_symbol, desk_symbol=desk_symbol)
+        return MetaTraderBridge(
+            path,
+            symbol=mt_symbol,
+            desk_symbol=desk_symbol,
+            remote_mode=remote_cfg,
+            online_max_age=online_max_age,
+            order_timeout=order_timeout,
+        )
 
     if mode == "mt5":
         path = getattr(settings, "mt5_bridge_dir", "") or getattr(settings, "mt4_bridge_dir", "")

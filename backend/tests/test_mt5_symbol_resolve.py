@@ -16,6 +16,8 @@ def test_mt5_bridge_prefers_gold_symbol_over_mt4_default():
     bridge, platform = resolve_mt_bridge(settings)
     assert bridge is not None
     assert bridge.mt_symbol == "GOLD#"
+    assert bridge.remote_mode is True
+    assert bridge.online_max_age == 45.0
     assert platform == "mt5"
 
 

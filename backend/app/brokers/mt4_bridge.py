@@ -101,11 +101,26 @@ class MT4FileBridge:
         bridge_dir: str | Path,
         symbol: str = "XAUUSD",
         desk_symbol: str | None = None,
+        *,
+        remote_mode: bool = False,
+        online_max_age: float | None = None,
+        order_timeout: float | None = None,
     ) -> None:
         self.bridge_dir = Path(bridge_dir)
         self.mt_symbol = symbol
         self.desk_symbol = (desk_symbol or symbol).upper()
         self.symbol = self.mt_symbol.upper()
+        self.remote_mode = remote_mode
+        self.online_max_age = (
+            online_max_age
+            if online_max_age is not None
+            else (45.0 if remote_mode else 5.0)
+        )
+        self.order_timeout = (
+            order_timeout
+            if order_timeout is not None
+            else (60.0 if remote_mode else 45.0)
+        )
         self.command_file = self.bridge_dir / "jm_command.csv"
         self.status_file = self.bridge_dir / "jm_status.csv"
         self.positions_file = self.bridge_dir / "jm_positions.csv"
@@ -126,11 +141,35 @@ class MT4FileBridge:
         return s.upper()
 
     # --- connectivity -------------------------------------------------
-    def is_online(self, max_age_seconds: float = 5.0) -> bool:
-        if not self.status_file.exists():
-            return False
-        age = time.time() - self.status_file.stat().st_mtime
-        return age <= max_age_seconds
+    def _file_age(self, path: Path) -> float | None:
+        if not path.exists():
+            return None
+        return time.time() - path.stat().st_mtime
+
+    def is_online(self, max_age_seconds: float | None = None) -> bool:
+        """True when bridge heartbeat files were updated recently.
+
+        Local bridge: jm_status.csv only (EA writes every tick).
+        Remote bridge: any of status/ticks/positions — PC agent may sync
+        files on slightly different cadences, so one stale file should not
+        mark the whole bridge offline.
+        """
+        max_age = self.online_max_age if max_age_seconds is None else max_age_seconds
+        if self.remote_mode:
+            ages = [
+                age
+                for age in (
+                    self._file_age(self.status_file),
+                    self._file_age(self.tick_file),
+                    self._file_age(self.positions_file),
+                )
+                if age is not None
+            ]
+            if not ages:
+                return False
+            return min(ages) <= max_age
+        age = self._file_age(self.status_file)
+        return age is not None and age <= max_age
 
     def ping(self, timeout: float = 5.0) -> BridgeAck:
         return self._send("PING", timeout=timeout)
@@ -222,7 +261,9 @@ class MT4FileBridge:
             return f"MT5 error {detail}"
         return detail or "MT5 bridge error"
 
-    def place_order(self, request: OrderRequest, timeout: float = 45.0) -> Order:
+    def place_order(self, request: OrderRequest, timeout: float | None = None) -> Order:
+        if timeout is None:
+            timeout = self.order_timeout
         order = Order(
             symbol=request.symbol,
             side=request.side,
@@ -301,10 +342,27 @@ class MT4FileBridge:
         )
 
 
+def _bridge_timeouts(settings) -> tuple[bool, float | None, float | None]:
+    remote = bool(getattr(settings, "mt_remote_bridge", False))
+    raw_online = float(getattr(settings, "mt_bridge_online_max_age", 0.0) or 0.0)
+    raw_order = float(getattr(settings, "mt_bridge_order_timeout", 0.0) or 0.0)
+    online = raw_online if raw_online > 0 else None
+    order = raw_order if raw_order > 0 else None
+    return remote, online, order
+
+
 def resolve_bridge(settings) -> MT4FileBridge | None:
     path = getattr(settings, "mt4_bridge_dir", "") or ""
     if not path:
         return None
     mt_symbol = getattr(settings, "mt_symbol", None) or getattr(settings, "mt4_symbol", "GOLD#")
     desk = settings.symbols[0] if settings.symbols else "XAUUSD"
-    return MT4FileBridge(path, symbol=mt_symbol, desk_symbol=desk)
+    remote, online, order = _bridge_timeouts(settings)
+    return MT4FileBridge(
+        path,
+        symbol=mt_symbol,
+        desk_symbol=desk,
+        remote_mode=remote,
+        online_max_age=online,
+        order_timeout=order,
+    )
