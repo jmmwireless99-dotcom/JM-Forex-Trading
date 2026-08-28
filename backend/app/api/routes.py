@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.api.account_deps import require_paper_account
@@ -23,6 +25,84 @@ from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import classify_session
 
 router = APIRouter()
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_RELEASES = _REPO_ROOT / "releases"
+
+
+@router.get("/downloads/mt5-bridge")
+async def downloads_mt5_bridge_index() -> dict:
+    """Direct download links for XM MT5 bridge pack (Windows PC)."""
+    base = "https://jmtechsolution.cloud/fx/api/downloads"
+    return {
+        "zip": f"{base}/mt5-bridge.zip",
+        "bat": f"{base}/start-jm-mt5-agent.bat",
+        "agent_py": f"{base}/jm_mt5_pc_agent.py",
+        "ea_mq5": f"{base}/JM_Forex_Bridge.mq5",
+        "readme": f"{base}/mt5-readme.txt",
+        "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
+        "github_zip": (
+            "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
+            "cursor/asia-only-no-judas-c11c/releases/JM-FX-MT5-Bridge-Pack.zip"
+        ),
+    }
+
+
+def _release_file(name: str) -> Path:
+    candidates = [
+        _RELEASES / "JM-FX-MT5-Bridge-Pack" / name,
+        _RELEASES / name,
+    ]
+    mapping = {
+        "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
+        "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/start-jm-mt5-agent.bat",
+        "jm_mt5_pc_agent.py": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/jm_mt5_pc_agent.py",
+        "JM_Forex_Bridge.mq5": _RELEASES / "JM-FX-MT5-Bridge-Pack/Experts/JM_Forex_Bridge.mq5",
+        "mt5-readme.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/README.txt",
+        "JM-FX-ACCOUNT.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/JM-FX-ACCOUNT.txt",
+    }
+    if name in mapping:
+        candidates.insert(0, mapping[name])
+    for path in candidates:
+        if path.is_file():
+            return path
+    raise HTTPException(status_code=404, detail=f"Download not found: {name}")
+
+
+@router.get("/downloads/mt5-bridge.zip")
+async def download_mt5_bridge_zip() -> FileResponse:
+    path = _release_file("mt5-bridge.zip")
+    return FileResponse(path, filename="JM-FX-MT5-Bridge-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/start-jm-mt5-agent.bat")
+async def download_mt5_agent_bat() -> FileResponse:
+    path = _release_file("start-jm-mt5-agent.bat")
+    return FileResponse(path, filename="start-jm-mt5-agent.bat", media_type="application/octet-stream")
+
+
+@router.get("/downloads/jm_mt5_pc_agent.py")
+async def download_mt5_agent_py() -> FileResponse:
+    path = _release_file("jm_mt5_pc_agent.py")
+    return FileResponse(path, filename="jm_mt5_pc_agent.py", media_type="text/x-python")
+
+
+@router.get("/downloads/JM_Forex_Bridge.mq5")
+async def download_mt5_ea() -> FileResponse:
+    path = _release_file("JM_Forex_Bridge.mq5")
+    return FileResponse(path, filename="JM_Forex_Bridge.mq5", media_type="text/plain")
+
+
+@router.get("/downloads/mt5-readme.txt")
+async def download_mt5_readme() -> FileResponse:
+    path = _release_file("mt5-readme.txt")
+    return FileResponse(path, filename="README.txt", media_type="text/plain")
+
+
+@router.get("/downloads/JM-FX-ACCOUNT.txt")
+async def download_jm_account_txt() -> FileResponse:
+    path = _release_file("JM-FX-ACCOUNT.txt")
+    return FileResponse(path, filename="JM-FX-ACCOUNT.txt", media_type="text/plain")
 
 
 class CreateAccountBody(BaseModel):
