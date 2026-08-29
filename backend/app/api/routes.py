@@ -327,6 +327,43 @@ async def mt4_status() -> dict:
     }
 
 
+@router.get("/mt4/real/status")
+async def mt4_real_status() -> dict:
+    settings = get_engine().settings
+    engine = get_engine()
+    bridge, platform = resolve_platform_bridge(settings, "mt4_real")
+    info = engine.connection_info()
+    if bridge is None:
+        return {
+            "configured": False,
+            "online": False,
+            "execution_mode": settings.execution_mode,
+            "platform": "mt4_real",
+            "account_kind": "real",
+            "bridge_dir": "",
+            "hint": "Set JM_MT4_REAL_BRIDGE_DIR to REAL MT4 Terminal Common\\Files",
+            **info,
+        }
+    online = bridge.is_online()
+    tick = bridge.read_tick() if online else None
+    snap = bridge.snapshot() if online else None
+    return {
+        "configured": True,
+        "online": online,
+        "execution_mode": settings.execution_mode,
+        "platform": "mt4_real",
+        "account_kind": "real",
+        "bridge_dir": str(bridge.bridge_dir),
+        "symbol": bridge.symbol,
+        "tick": tick.model_dump(mode="json") if tick else None,
+        "account": snap.model_dump(mode="json") if snap else None,
+        "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+        "mt4_real_account_code": settings.mt4_real_account_code or None,
+        "mt4_real_login": settings.mt4_real_login or None,
+        **info,
+    }
+
+
 @router.post("/mt/ping")
 @router.post("/mt4/ping")
 async def mt_ping() -> dict:
@@ -440,6 +477,8 @@ async def mt_remote_agent_status(token: str) -> dict:
         "mt5_demo_login": settings.mt5_demo_login or None,
         "mt4_demo_account_code": settings.mt4_demo_account_code or None,
         "mt4_demo_login": settings.mt4_demo_login or None,
+        "mt4_real_account_code": settings.mt4_real_account_code or None,
+        "mt4_real_login": settings.mt4_real_login or None,
         "symbol": settings.mt_symbol,
     }
 
@@ -615,11 +654,14 @@ async def login_account(body: LoginAccountBody) -> dict:
         raise HTTPException(status_code=403, detail="Invalid account token") from exc
     mt5_code = (engine.settings.mt5_demo_account_code or "").upper()
     mt4_code = (engine.settings.mt4_demo_account_code or "").upper()
+    mt4_real_code = (engine.settings.mt4_real_account_code or "").upper()
     code_u = acct.code.upper()
     if code_u == mt5_code:
-        login_msg = "Login OK — MT5 account; balance syncs from XM MT5 when bridge is online"
+        login_msg = "Login OK — MT5 demo; balance syncs from XM MT5 when bridge is online"
     elif code_u == mt4_code:
-        login_msg = "Login OK — MT4 account; balance syncs from XM MT4 when bridge is online"
+        login_msg = "Login OK — MT4 demo; balance syncs from XM MT4 when bridge is online"
+    elif code_u == mt4_real_code:
+        login_msg = "Login OK — MT4 REAL account; balance syncs from live MT4 terminal"
     else:
         login_msg = "Login OK — save token in this browser to stay signed in"
     return {

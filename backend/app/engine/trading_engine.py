@@ -100,6 +100,7 @@ class TradingEngine:
         )
         self.mt, detected = resolve_mt_bridge(settings)
         self.mt4, _ = resolve_platform_bridge(settings, "mt4")
+        self.mt4_real, _ = resolve_platform_bridge(settings, "mt4_real")
         self.mode = settings.execution_mode if settings.execution_mode in {"paper", "mt4", "mt5"} else "paper"
         self.running = False
         self.ticks_processed = 0
@@ -119,6 +120,7 @@ class TradingEngine:
         self._journaled_limit_ids: set[str] = set()
         self._last_mt_journal_sync_at: float = 0.0
         self._last_mt4_journal_sync_at: float = 0.0
+        self._last_mt4_real_journal_sync_at: float = 0.0
         self._london_signal_ids: dict[str, str] = {}  # order.id -> london_signal uuid
         self.advisor = TradeAdvisor(
             history_path=settings.ai_history_path,
@@ -162,7 +164,11 @@ class TradingEngine:
 
     def _connected_followers(self) -> list[PaperAccount]:
         pool = list(self.accounts.auto_followers())
-        for demo_acct in (self.mt_demo_account(), self.mt4_demo_account()):
+        for demo_acct in (
+            self.mt_demo_account(),
+            self.mt4_demo_account(),
+            self.mt4_real_account(),
+        ):
             if demo_acct is not None and demo_acct.id not in {a.id for a in pool}:
                 pool.append(demo_acct)
         if not pool:
@@ -253,12 +259,22 @@ class TradingEngine:
         code = (self.settings.mt4_demo_account_code or "").strip().upper()
         return bool(code and (account.code or "").upper() == code)
 
+    def _is_mt4_real_account(self, account: PaperAccount) -> bool:
+        code = (self.settings.mt4_real_account_code or "").strip().upper()
+        return bool(code and (account.code or "").upper() == code)
+
     def _is_mt_demo_account(self, account: PaperAccount) -> bool:
-        return self._is_mt5_demo_account(account) or self._is_mt4_demo_account(account)
+        return (
+            self._is_mt5_demo_account(account)
+            or self._is_mt4_demo_account(account)
+            or self._is_mt4_real_account(account)
+        )
 
     def _demo_platform(self, account: PaperAccount) -> str | None:
         if self._is_mt5_demo_account(account):
             return "mt5"
+        if self._is_mt4_real_account(account):
+            return "mt4_real"
         if self._is_mt4_demo_account(account):
             return "mt4"
         return None
@@ -269,6 +285,8 @@ class TradingEngine:
         platform = self._demo_platform(account)
         if platform == "mt4":
             return self.mt4
+        if platform == "mt4_real":
+            return self.mt4_real
         if platform == "mt5":
             return self.mt
         return self.mt if self.using_mt() else None
@@ -316,6 +334,15 @@ class TradingEngine:
                 return acct
         return None
 
+    def mt4_real_account(self) -> PaperAccount | None:
+        code = (self.settings.mt4_real_account_code or "").strip().upper()
+        if not code:
+            return None
+        for acct in self.accounts.all():
+            if (acct.code or "").upper() == code and not acct.is_desk:
+                return acct
+        return None
+
     async def notify_mt_demo_sync(self) -> None:
         """Push live MT5 balance/positions to DDDC3D clients after bridge sync."""
         acct = self.mt_demo_account()
@@ -347,7 +374,10 @@ class TradingEngine:
         platform = self._demo_platform(account) or "mt5"
         if not bridge or not self._mt_bridge_live(bridge):
             return {"skipped": True}
-        throttle_key = "_last_mt4_journal_sync_at" if platform == "mt4" else "_last_mt_journal_sync_at"
+        throttle_key = {
+            "mt4": "_last_mt4_journal_sync_at",
+            "mt4_real": "_last_mt4_real_journal_sync_at",
+        }.get(platform, "_last_mt_journal_sync_at")
         now = time.time()
         if not force and (now - getattr(self, throttle_key)) < 2.0:
             return {"skipped": True, "reason": "throttled"}
@@ -390,6 +420,17 @@ class TradingEngine:
             await self._emit("ai", self.ai_status())
         return result
 
+    def _configured_code_for_platform(self, platform: str | None) -> str | None:
+        if platform == "mt5":
+            code = self.settings.mt5_demo_account_code
+        elif platform == "mt4_real":
+            code = self.settings.mt4_real_account_code
+        elif platform == "mt4":
+            code = self.settings.mt4_demo_account_code
+        else:
+            return None
+        return (code or "").strip().upper() or None
+
     def mt_demo_link_status(self, account: PaperAccount) -> dict[str, Any]:
         linked = self._is_mt_demo_account(account)
         platform = self._demo_platform(account)
@@ -398,26 +439,29 @@ class TradingEngine:
         tick = bridge.read_tick() if live and bridge else None
         login = None
         symbol = self.settings.mt_symbol
-        if platform == "mt4":
-            login = self.settings.mt4_demo_login or None
+        if platform in {"mt4", "mt4_real"}:
             symbol = self.settings.mt4_symbol
+            login = (
+                self.settings.mt4_real_login
+                if platform == "mt4_real"
+                else self.settings.mt4_demo_login
+            ) or None
         elif platform == "mt5":
             login = self.settings.mt5_demo_login or None
         return {
             "account_code": account.code if linked else None,
-            "configured_code": (
-                (self.settings.mt5_demo_account_code if platform == "mt5" else self.settings.mt4_demo_account_code)
-                or ""
-            ).strip().upper()
-            or None,
+            "configured_code": self._configured_code_for_platform(platform),
             "linked": linked,
             "platform": platform,
+            "account_kind": "real" if platform == "mt4_real" else ("demo" if linked else None),
             "mt5_only": platform == "mt5" and linked,
-            "mt4_only": platform == "mt4" and linked,
+            "mt4_only": platform in {"mt4", "mt4_real"} and linked,
+            "mt4_real": platform == "mt4_real" and linked,
             "bridge_online": live,
             "live_balance": live,
             "mt5_login": self.settings.mt5_demo_login or None if platform == "mt5" else None,
             "mt4_login": self.settings.mt4_demo_login or None if platform == "mt4" else None,
+            "mt4_real_login": self.settings.mt4_real_login or None if platform == "mt4_real" else None,
             "login": login,
             "symbol": symbol,
             "tick_ok": bool(tick and tick.bid > 0),
@@ -446,12 +490,16 @@ class TradingEngine:
                 "account_label": acct.label,
                 "follow_auto": acct.follow_auto,
                 "mt_platform": platform,
+                "account_kind": "real" if platform == "mt4_real" else ("demo" if platform else None),
                 "mt5_only": platform == "mt5",
-                "mt4_only": platform == "mt4",
+                "mt4_only": platform in {"mt4", "mt4_real"},
+                "mt4_real": platform == "mt4_real",
                 "mt5_linked": platform == "mt5" and self._mt_bridge_live(self.mt),
                 "mt4_linked": platform == "mt4" and self._mt_bridge_live(self.mt4),
+                "mt4_real_linked": platform == "mt4_real" and self._mt_bridge_live(self.mt4_real),
                 "mt5_login": self.settings.mt5_demo_login or None if platform == "mt5" else None,
                 "mt4_login": self.settings.mt4_demo_login or None if platform == "mt4" else None,
+                "mt4_real_login": self.settings.mt4_real_login or None if platform == "mt4_real" else None,
             }
         return acct.snapshot_payload()
 
@@ -507,6 +555,7 @@ class TradingEngine:
         self.settings.execution_mode = mode
         self.mt, self._mt_platform = resolve_mt_bridge(self.settings)
         self.mt4, _ = resolve_platform_bridge(self.settings, "mt4")
+        self.mt4_real, _ = resolve_platform_bridge(self.settings, "mt4_real")
         if mode == "paper" and self.settings.paper_sync_live_gold:
             self.market.set_live_mid_provider(self._live_gold_mid)
         else:
@@ -1178,10 +1227,16 @@ class TradingEngine:
             platform = self._demo_platform(account) or "mt5"
             bridge = self._bridge_for_account(account)
             symbol = self.settings.mt_symbol if platform == "mt5" else self.settings.mt4_symbol
+            kind = "real" if platform == "mt4_real" else "demo"
             if self._mt_bridge_live(bridge):
-                note = f"{platform.upper()} live account — balance from XM demo terminal"
+                note = f"MT4 {kind} — balance from XM terminal"
             else:
-                note = f"{platform.upper()} offline — attach JM_Forex_Bridge on {symbol} chart"
+                note = f"MT4 {kind} offline — attach JM_Forex_Bridge on {symbol} chart"
+            if platform == "mt5":
+                if self._mt_bridge_live(bridge):
+                    note = "MT5 live account — balance from XM demo terminal"
+                else:
+                    note = f"MT5 offline — attach JM_Forex_Bridge on {symbol} chart"
             paper = False
         else:
             amount = float(deposit if deposit is not None else acct.broker.deposit)
@@ -1202,6 +1257,7 @@ class TradingEngine:
             "paper": paper,
             "mt5_only": bool(account and self._is_mt5_demo_account(account)),
             "mt4_only": bool(account and self._is_mt4_demo_account(account)),
+            "mt4_real": bool(account and self._is_mt4_real_account(account)),
             "risk_per_trade_pct": risk_pct,
             "risk_per_trade_usd": round(risk_usd, 2),
             "max_daily_loss_pct": daily_pct,
@@ -1230,8 +1286,9 @@ class TradingEngine:
         acct = account or self._desk
         if self._is_mt_demo_account(acct):
             platform = self._demo_platform(acct) or "MT"
+            label = platform.upper().replace("_", " ")
             raise ValueError(
-                f"Account {acct.code} is {platform.upper()}-only — balance comes from XM terminal, not paper deposit"
+                f"Account {acct.code} is {label}-only — balance comes from XM terminal, not paper deposit"
             )
         if self.using_mt():
             raise ValueError("Deposit amount is paper-only. Switch execution mode to paper first.")
@@ -1449,6 +1506,9 @@ class TradingEngine:
                     mt4_acct = self.mt4_demo_account()
                     if mt4_acct is not None and self._mt_bridge_live(self.mt4):
                         await self._sync_mt_demo_journal(mt4_acct, tick=tick)
+                    mt4_real_acct = self.mt4_real_account()
+                    if mt4_real_acct is not None and self._mt_bridge_live(self.mt4_real):
+                        await self._sync_mt_demo_journal(mt4_real_acct, tick=tick)
                     await self._london_kill_switch(tick)
 
                 closed_candle, forming = self.candles.update(tick)
@@ -1759,6 +1819,7 @@ class TradingEngine:
             bridge = self._bridge_for_account(acct)
             platform = self._demo_platform(acct) or self._mt_platform
             symbol = self.settings.mt_symbol if platform == "mt5" else self.settings.mt4_symbol
+            label = platform.upper().replace("_", " ")
             if not self._mt_bridge_live(bridge):
                 rejected = Order(
                     symbol=request.symbol,
@@ -1767,7 +1828,7 @@ class TradingEngine:
                     strategy=request.strategy,
                     comment=request.comment,
                     status=OrderStatus.REJECTED,
-                    reject_reason=f"{platform.upper()} bridge offline — attach JM_Forex_Bridge on {symbol}",
+                    reject_reason=f"{label} bridge offline — attach JM_Forex_Bridge on {symbol}",
                     stop_loss=request.stop_loss,
                     take_profit=request.take_profit,
                 )

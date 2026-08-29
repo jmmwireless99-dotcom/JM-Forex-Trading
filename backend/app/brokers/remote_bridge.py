@@ -14,6 +14,8 @@ def remote_bridge_dir(settings: Settings, platform: str = "mt5") -> Path | None:
     platform = (platform or "mt5").lower()
     if platform == "mt4":
         path = (settings.mt4_bridge_dir or "").strip()
+    elif platform == "mt4_real":
+        path = (settings.mt4_real_bridge_dir or "").strip()
     else:
         path = (settings.mt5_bridge_dir or settings.mt4_bridge_dir or "").strip()
     if not path:
@@ -24,7 +26,10 @@ def remote_bridge_dir(settings: Settings, platform: str = "mt5") -> Path | None:
 def ensure_remote_bridge_dir(settings: Settings, platform: str = "mt5") -> Path:
     root = remote_bridge_dir(settings, platform=platform)
     if root is None:
-        label = "JM_MT4_BRIDGE_DIR" if platform == "mt4" else "JM_MT5_BRIDGE_DIR"
+        label = {
+            "mt4": "JM_MT4_BRIDGE_DIR",
+            "mt4_real": "JM_MT4_REAL_BRIDGE_DIR",
+        }.get(platform, "JM_MT5_BRIDGE_DIR")
         raise ValueError(f"JM_MT_REMOTE_BRIDGE requires {label}")
     root.mkdir(parents=True, exist_ok=True)
     return root

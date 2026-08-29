@@ -28,6 +28,9 @@ def resolve_platform_bridge(
     if platform == "mt4":
         path = getattr(settings, "mt4_bridge_dir", "") or ""
         mt_symbol = getattr(settings, "mt4_symbol", None) or "XAUUSD"
+    elif platform == "mt4_real":
+        path = getattr(settings, "mt4_real_bridge_dir", "") or ""
+        mt_symbol = getattr(settings, "mt4_symbol", None) or "XAUUSD"
     else:
         path = getattr(settings, "mt5_bridge_dir", "") or ""
         mt_symbol = getattr(settings, "mt_symbol", None) or "GOLD#"

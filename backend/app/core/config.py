@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # MT4 demo journal — separate JM FX account linked to MT4 bridge
     mt4_demo_account_code: str = ""
     mt4_demo_login: str = ""
+    # MT4 real/live — separate JM FX account + bridge dir (do not share with demo)
+    mt4_real_account_code: str = ""
+    mt4_real_login: str = ""
+    mt4_real_bridge_dir: str = ""
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""
