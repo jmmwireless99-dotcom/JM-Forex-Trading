@@ -1,0 +1,11 @@
+JM FX Dashboard Login (DDDC3D)
+==============================
+
+URL:    https://jmtechsolution.cloud/fx/
+Code:   DDDC3D
+Token:  Wx5LEXzg8J8Bgok7Z3kTLEd6n2T0s3MI
+
+Paired MT5 login: 169250320 (XM Demo)
+Symbol: GOLD#
+
+NOTE: Ang XM MT5 password ay sa MetaTrader 5 terminal LANG.

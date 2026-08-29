@@ -36,12 +36,17 @@ async def downloads_mt5_bridge_index() -> dict:
     """Direct download links for XM MT5 bridge pack (Windows PC)."""
     base = "https://jmtechsolution.cloud/fx/api/downloads"
     return {
+        "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
         "agent_py": f"{base}/jm_mt5_pc_agent.py",
         "ea_mq5": f"{base}/JM_Forex_Bridge.mq5",
         "readme": f"{base}/mt5-readme.txt",
         "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
+        "github_ea_v2_zip": (
+            "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
+            "cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-EA-v2.zip"
+        ),
         "github_zip": (
             "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
             "cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-Bridge-Pack.zip"
@@ -55,6 +60,7 @@ def _release_file(name: str) -> Path:
         _RELEASES / name,
     ]
     mapping = {
+        "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/start-jm-mt5-agent.bat",
         "jm_mt5_pc_agent.py": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/jm_mt5_pc_agent.py",
@@ -68,6 +74,12 @@ def _release_file(name: str) -> Path:
         if path.is_file():
             return path
     raise HTTPException(status_code=404, detail=f"Download not found: {name}")
+
+
+@router.get("/downloads/mt5-ea-v2.zip")
+async def download_mt5_ea_v2_zip() -> FileResponse:
+    path = _release_file("mt5-ea-v2.zip")
+    return FileResponse(path, filename="JM-FX-MT5-EA-v2.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt5-bridge.zip")

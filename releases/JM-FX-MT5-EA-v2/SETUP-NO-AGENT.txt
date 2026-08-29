@@ -1,0 +1,41 @@
+JM FX MT5 EA v2 — Walang PC Agent (DDDC3D)
+============================================
+
+DOWNLOAD: JM-FX-MT5-EA-v2.zip
+Version: 2.00 | Account: DDDC3D | Symbol: GOLD#
+
+INSTALL (5 minutos)
+-------------------
+1. Isara ang start-jm-mt5-agent.bat kung bukas (HUWAG gamitin ang agent)
+
+2. MT5 → File → Open Data Folder → MQL5\Experts\
+   Kopyahin ang Experts\JM_Forex_Bridge.mq5
+
+3. MetaEditor → Compile (F7) → 0 errors, version 2.00
+
+4. MT5 → Tools → Options → Expert Advisors:
+   [x] Allow algorithmic trading
+   [x] Allow WebRequest for listed URL
+   Add URL: https://jmtechsolution.cloud
+
+5. Drag JM_Forex_Bridge sa GOLD# chart. Inputs:
+   InpSymbol          = GOLD#
+   InpUseCloudBridge  = true
+   InpApiUrl          = https://jmtechsolution.cloud/fx/api
+   InpBridgeToken     = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+   Algo Trading ON (green)
+
+6. Login: https://jmtechsolution.cloud/fx/
+   Code:  DDDC3D
+   Token: (see JM-FX-ACCOUNT.txt)
+
+7. Dapat MT online (green) sa dashboard.
+
+EXPERTS TAB — dapat makita:
+  JM Forex MT5 Bridge v2 — CLOUD mode (no PC agent)
+
+TROUBLESHOOT
+------------
+Error 4060     → Step 4: allow WebRequest URL
+MT offline     → Algo Trading ON? EA v2 attached?
+HTTP 403       → check InpBridgeToken
