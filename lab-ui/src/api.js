@@ -145,6 +145,10 @@ export const labTradeApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deposit, start_auto: startAuto }),
     }),
+  clearPairSuiteLogs: () =>
+    labRequest('/accounts/pair-suite/clear-logs', { method: 'POST' }),
+  clearAccountLogs: (session) =>
+    labRequestAs(session, '/account/clear-logs', { method: 'POST' }),
   account: (session) => labRequestAs(session, '/account'),
   positions: (session) => labRequestAs(session, '/positions'),
   trades: (session) => labRequestAs(session, '/trades'),

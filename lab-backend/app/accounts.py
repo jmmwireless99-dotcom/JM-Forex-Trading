@@ -17,7 +17,7 @@ from app.pair_strategies import preset_for
 log = logging.getLogger(__name__)
 
 SUITE_LABEL_PREFIX = "Pair suite · "
-PAIR_SUITE_SYMBOLS = ("EURUSD", "GBPUSD", "AUDNZD", "EURCHF")
+PAIR_SUITE_SYMBOLS = ("EURUSD", "GBPUSD", "AUDNZD", "EURCHF", "XAUUSD")
 
 
 def _now() -> datetime:
@@ -125,6 +125,7 @@ class LabAccountStore:
             if start_auto:
                 acc.auto.enabled = True
                 acc.auto.last_bar_time = 0
+                acc.auto.last_loss_bar_time = 0
                 acc.auto.last_block_reason = None
             rows.append(
                 {
@@ -140,6 +141,27 @@ class LabAccountStore:
             )
         self.persist()
         return rows
+
+    def clear_pair_suite_logs(self) -> list[dict[str, Any]]:
+        """Clear trade/signal logs for all 5 pair-suite accounts."""
+        cleared: list[dict[str, Any]] = []
+        for sym in PAIR_SUITE_SYMBOLS:
+            acc = self.find_suite_account(sym)
+            if acc is None:
+                continue
+            acc.broker.clear_logs()
+            acc.auto.clear_logs()
+            cleared.append(
+                {
+                    "symbol": sym,
+                    "code": acc.code,
+                    "account_id": acc.account_id,
+                    "balance": acc.broker.balance,
+                    "open_positions": 0,
+                }
+            )
+        self.persist()
+        return cleared
 
     def persist(self) -> None:
         rows = []

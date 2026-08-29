@@ -72,11 +72,23 @@ class LabBroker:
     def open_positions(self) -> list[Position]:
         return [p for p in self.positions if p.status == "OPEN"]
 
+    def clear_logs(self) -> None:
+        """Reset trade log, positions, and balance to deposit (paper demo fresh start)."""
+        self.trades.clear()
+        self.positions.clear()
+        self.balance = round(float(self.deposit), 2)
+
     def _pip(self, symbol: str) -> float:
         return 0.01 if symbol == "XAUUSD" else 0.0001
 
     def _half_spread(self, symbol: str) -> float:
         return self._pip(symbol) * self.SPREAD_PIPS.get(symbol, 1.0) / 2
+
+    def entry_price(self, symbol: str, side: Side, mid: float) -> float:
+        """Fill price for side — ask for BUY, bid for SELL."""
+        hs = self._half_spread(symbol)
+        px = mid + hs if side == "BUY" else mid - hs
+        return round(px, 5 if symbol != "XAUUSD" else 2)
 
     def update_tick(self, symbol: str, mid: float) -> list[Position]:
         hs = self._half_spread(symbol)

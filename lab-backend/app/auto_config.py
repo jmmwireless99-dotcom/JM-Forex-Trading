@@ -14,6 +14,7 @@ class AutoConfig:
     tp_pips: float = 30.0
     strategy: str = "EMA_RSI"
     last_bar_time: int = 0
+    last_loss_bar_time: int = 0
     last_signal_at: str | None = None
     last_block_reason: str | None = None
     signals: deque = field(default_factory=lambda: deque(maxlen=30))
@@ -27,6 +28,7 @@ class AutoConfig:
             "tp_pips": self.tp_pips,
             "strategy": self.strategy,
             "last_bar_time": self.last_bar_time,
+            "last_loss_bar_time": self.last_loss_bar_time,
             "last_signal_at": self.last_signal_at,
             "last_block_reason": self.last_block_reason,
             "recent_signals": list(self.signals),
@@ -45,7 +47,15 @@ class AutoConfig:
             tp_pips=float(data.get("tp_pips") or 30),
             strategy=str(data.get("strategy") or "EMA_RSI"),
             last_bar_time=int(data.get("last_bar_time") or 0),
+            last_loss_bar_time=int(data.get("last_loss_bar_time") or 0),
             last_signal_at=data.get("last_signal_at"),
             last_block_reason=data.get("last_block_reason"),
             signals=sigs,
         )
+
+    def clear_logs(self) -> None:
+        self.signals.clear()
+        self.last_signal_at = None
+        self.last_block_reason = None
+        self.last_bar_time = 0
+        self.last_loss_bar_time = 0
