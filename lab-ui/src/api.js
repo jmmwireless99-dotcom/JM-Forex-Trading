@@ -157,6 +157,12 @@ export const labTradeApi = {
     }),
   closePosition: (id) =>
     labRequest(`/positions/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+  updatePositionStops: (id, body, session) =>
+    labRequestAs(session, `/positions/${encodeURIComponent(id)}/stops`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   setAuto: (body, session) =>
     labRequestAs(session, '/auto', {
       method: 'POST',

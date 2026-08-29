@@ -141,6 +141,44 @@ class LabBroker:
         self.positions.append(pos)
         return pos
 
+    def _round_price(self, symbol: str, price: float) -> float:
+        digits = 2 if symbol == "XAUUSD" else 5
+        return round(price, digits)
+
+    def update_stops(
+        self,
+        position_id: str,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        clear_stop_loss: bool = False,
+        clear_take_profit: bool = False,
+    ) -> Position | None:
+        for p in self.positions:
+            if p.id != position_id or p.status != "OPEN":
+                continue
+            entry = p.entry_price
+            new_sl = None if clear_stop_loss else (stop_loss if stop_loss is not None else p.stop_loss)
+            new_tp = None if clear_take_profit else (take_profit if take_profit is not None else p.take_profit)
+            if new_sl is not None:
+                new_sl = self._round_price(p.symbol, float(new_sl))
+            if new_tp is not None:
+                new_tp = self._round_price(p.symbol, float(new_tp))
+            if p.side == "BUY":
+                if new_sl is not None and new_sl >= entry:
+                    raise ValueError("BUY stop loss must be below entry")
+                if new_tp is not None and new_tp <= entry:
+                    raise ValueError("BUY take profit must be above entry")
+            else:
+                if new_sl is not None and new_sl <= entry:
+                    raise ValueError("SELL stop loss must be above entry")
+                if new_tp is not None and new_tp >= entry:
+                    raise ValueError("SELL take profit must be below entry")
+            p.stop_loss = new_sl
+            p.take_profit = new_tp
+            return p
+        return None
+
     def close_position(
         self, position_id: str, exit_price: float | None = None, reason: str = "manual"
     ) -> Position | None:
