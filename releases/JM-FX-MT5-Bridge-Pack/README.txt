@@ -11,8 +11,32 @@ PC Agent:     https://jmtechsolution.cloud/fx/api/downloads/jm_mt5_pc_agent.py
 Start BAT:    https://jmtechsolution.cloud/fx/api/downloads/start-jm-mt5-agent.bat
 All links:    https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge
 
-QUICK START (Windows PC)
-------------------------
+QUICK START (Windows PC — NO AGENT, recommended)
+-----------------------------------------------
+1. Install XM MT5 + login (169250320)
+
+2. Copy Experts/JM_Forex_Bridge.mq5 → MQL5/Experts/ → Compile (v2.00)
+
+3. MT5 → Tools → Options → Expert Advisors:
+   - Allow WebRequest → add: https://jmtechsolution.cloud
+
+4. Attach EA sa GOLD# chart:
+   - InpSymbol = GOLD#
+   - InpUseCloudBridge = true
+   - InpBridgeToken = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+   - Algo Trading ON
+
+5. HUWAG buksan ang PC agent (start-jm-mt5-agent.bat)
+
+6. Login sa https://jmtechsolution.cloud/fx/
+   Code DDDC3D + token (see JM-FX-ACCOUNT.txt)
+
+7. Dapat MT online (green) within ~5 sec
+
+Full guide: docs/MT5_NO_AGENT_SETUP.md in repo
+
+QUICK START (legacy — PC agent, optional fallback)
+--------------------------------------------------
 1. Install XM MetaTrader 5 at mag-login (169250320 + password sa MT5 lang).
 
 2. Copy Experts/JM_Forex_Bridge.mq5
