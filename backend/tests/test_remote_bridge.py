@@ -116,6 +116,44 @@ async def test_remote_command_endpoint(remote_client):
 
 
 @pytest.mark.asyncio
+async def test_mt4_real_remote_sync(tmp_path):
+    bridge_dir = tmp_path / "mt4_real_bridge"
+    reset_engine(
+        Settings(
+            tick_interval_seconds=0.05,
+            auto_strategy=False,
+            execution_mode="paper",
+            mt4_real_bridge_dir=str(bridge_dir),
+            mt_remote_bridge=True,
+            mt_bridge_token="test-bridge-token",
+            mt4_real_account_code="REALFX",
+            mt4_symbol="XAUUSD",
+        )
+    )
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/mt4/remote/sync",
+            json={
+                "token": "test-bridge-token",
+                "status": "ok,5000.00,5010.00,0,2026-08-28 10:00:00\n",
+                "ticks": "XAUUSD,4585.50,4585.80,2026-08-28 10:00:00\n",
+            },
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["ok"] is True
+        assert body["platform"] == "mt4_real"
+        assert (bridge_dir / "jm_status.csv").exists()
+
+        cmd = await client.get("/api/mt4/remote/command?token=test-bridge-token")
+        assert cmd.status_code == 200
+        assert cmd.json()["platform"] == "mt4_real"
+    await reset_engine(Settings()).stop()
+
+
+@pytest.mark.asyncio
 async def test_remote_sync_rejects_bad_token(remote_client):
     client, _ = remote_client
     res = await client.post(

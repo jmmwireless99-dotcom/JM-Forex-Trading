@@ -343,6 +343,23 @@ class TradingEngine:
                 return acct
         return None
 
+    async def notify_mt4_real_sync(self) -> None:
+        """Push live MT4 real balance/positions after EA cloud sync."""
+        acct = self.mt4_real_account()
+        if acct is None:
+            return
+        tick = self._recent_ticks.get(self.settings.symbols[0])
+        await self._sync_mt_demo_journal(acct, tick=tick, force=True)
+        await self._emit("account", self.account_payload(acct))
+        await self._emit(
+            "positions",
+            {
+                "account_id": acct.id,
+                "positions": [p.model_dump(mode="json") for p in self.open_positions(acct)],
+            },
+        )
+        await self._emit("connection", self.connection_info())
+
     async def notify_mt_demo_sync(self) -> None:
         """Push live MT5 balance/positions to DDDC3D clients after bridge sync."""
         acct = self.mt_demo_account()

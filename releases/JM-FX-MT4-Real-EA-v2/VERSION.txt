@@ -1,0 +1,5 @@
+JM-FX-MT4-Real-EA-v2
+Built: 2026-08-29T08:27:31Z
+EA version: 2.00
+Mode: cloud direct (no PC agent)
+Symbol: XAUUSD

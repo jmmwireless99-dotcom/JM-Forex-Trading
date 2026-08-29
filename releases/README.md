@@ -1,5 +1,17 @@
 # JM FX Downloads
 
+## MT4 Real EA v2 — No PC Agent (direct cloud URL)
+
+| File | Link |
+|------|------|
+| **MT4 Real EA v2 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt4-real-ea-v2.zip |
+| GitHub mirror | https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-MT4-Real-EA-v2.zip |
+| MT4 EA (.mq4) | https://jmtechsolution.cloud/fx/api/downloads/JM_Forex_Bridge.mq4 |
+
+Contents: `JM_Forex_Bridge.mq4` v2.00 + setup guide for MT4 **real** account (direct HTTP, walang PC agent)
+
+---
+
 ## Complete Windows Pack (recommended — lahat ng files + Python)
 
 | File | Link |

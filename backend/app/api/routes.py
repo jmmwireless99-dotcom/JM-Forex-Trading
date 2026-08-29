@@ -38,6 +38,7 @@ async def downloads_mt5_bridge_index() -> dict:
     gh = "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases"
     return {
         "complete_zip": f"{base}/jmfx-complete.zip",
+        "mt4_real_ea_v2_zip": f"{base}/mt4-real-ea-v2.zip",
         "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
@@ -48,6 +49,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "readme": f"{base}/mt5-readme.txt",
         "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
         "github_complete_zip": f"{gh}/JM-FX-Complete-Pack.zip",
+        "github_mt4_real_ea_v2_zip": f"{gh}/JM-FX-MT4-Real-EA-v2.zip",
         "github_ea_v2_zip": f"{gh}/JM-FX-MT5-EA-v2.zip",
         "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
     }
@@ -61,13 +63,14 @@ def _release_file(name: str) -> Path:
     mapping = {
         "jmfx-complete.zip": _RELEASES / "JM-FX-Complete-Pack.zip",
         "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
+        "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
         "install-python.bat": _RELEASES / "JM-FX-Complete-Pack/install-python.bat",
         "install-python.ps1": _RELEASES / "JM-FX-Complete-Pack/install-python.ps1",
         "jm_mt5_pc_agent.py": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/jm_mt5_pc_agent.py",
         "JM_Forex_Bridge.mq5": _RELEASES / "JM-FX-MT5-Bridge-Pack/Experts/JM_Forex_Bridge.mq5",
-        "JM_Forex_Bridge.mq4": _REPO_ROOT / "mt4/Experts/JM_Forex_Bridge.mq4",
+        "JM_Forex_Bridge.mq4": _RELEASES / "JM-FX-MT4-Real-EA-v2/Experts/JM_Forex_Bridge.mq4",
         "mt5-readme.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/README.txt",
         "JM-FX-ACCOUNT.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/JM-FX-ACCOUNT.txt",
         "complete-readme.txt": _RELEASES / "JM-FX-Complete-Pack/README.txt",
@@ -85,6 +88,12 @@ def _release_file(name: str) -> Path:
 async def download_jmfx_complete_zip() -> FileResponse:
     path = _release_file("jmfx-complete.zip")
     return FileResponse(path, filename="JM-FX-Complete-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-real-ea-v2.zip")
+async def download_mt4_real_ea_v2_zip() -> FileResponse:
+    path = _release_file("mt4-real-ea-v2.zip")
+    return FileResponse(path, filename="JM-FX-MT4-Real-EA-v2.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt5-ea-v2.zip")
@@ -426,15 +435,14 @@ class MtRemoteSyncBody(BaseModel):
     ack: str | None = None
 
 
-@router.post("/mt/remote/sync")
-async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
-    """Windows PC agent — sync jm_*.csv between MT5 Common\\Files and JM FX cloud."""
+async def _remote_sync_handler(body: "MtRemoteSyncBody", platform: str) -> dict:
+    """Shared handler — EA cloud sync for MT5 or MT4 real bridge dirs."""
     settings = get_engine().settings
     if not settings.mt_remote_bridge:
         raise HTTPException(status_code=400, detail="Remote bridge disabled on server")
     try:
         verify_bridge_token(settings, body.token)
-        root = ensure_remote_bridge_dir(settings)
+        root = ensure_remote_bridge_dir(settings, platform=platform)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -442,11 +450,12 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
 
     written: list[str] = []
     engine = get_engine()
+    mt_symbol = settings.mt_symbol if platform == "mt5" else settings.mt4_symbol
     tick_content = body.ticks
     if tick_content is not None:
         tick_content = repair_mt_tick_csv(
             tick_content,
-            mt_symbol=settings.mt_symbol,
+            mt_symbol=mt_symbol,
             live_mid=engine._live_gold_mid("XAUUSD"),
         )
     for name, content in (
@@ -462,24 +471,26 @@ async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
     command_path = root / COMMAND_FILE
     command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
     if "jm_status.csv" in written or "jm_ticks.csv" in written:
-        await engine.notify_mt_demo_sync()
+        if platform == "mt4_real":
+            await engine.notify_mt4_real_sync()
+        else:
+            await engine.notify_mt_demo_sync()
     return {
         "ok": True,
         "written": written,
         "command": command,
         "bridge_dir": str(root),
+        "platform": platform,
     }
 
 
-@router.get("/mt/remote/command")
-async def mt_remote_command(token: str) -> dict:
-    """Lightweight poll — PC agent fetches pending jm_command.csv only (fast JM FX → MT5)."""
+def _remote_command_handler(token: str, platform: str) -> dict:
     settings = get_engine().settings
     if not settings.mt_remote_bridge:
         raise HTTPException(status_code=400, detail="Remote bridge disabled")
     try:
         verify_bridge_token(settings, token)
-        root = ensure_remote_bridge_dir(settings)
+        root = ensure_remote_bridge_dir(settings, platform=platform)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -493,7 +504,32 @@ async def mt_remote_command(token: str) -> dict:
         "command": command,
         "has_command": bool(body),
         "pending": has_open,
+        "platform": platform,
     }
+
+
+@router.post("/mt/remote/sync")
+async def mt_remote_sync(body: MtRemoteSyncBody) -> dict:
+    """MT5 EA v2 cloud sync — no PC agent."""
+    return await _remote_sync_handler(body, "mt5")
+
+
+@router.post("/mt4/remote/sync")
+async def mt4_remote_sync(body: MtRemoteSyncBody) -> dict:
+    """MT4 real EA v2 cloud sync — no PC agent."""
+    return await _remote_sync_handler(body, "mt4_real")
+
+
+@router.get("/mt/remote/command")
+async def mt_remote_command(token: str) -> dict:
+    """MT5 EA v2 — fetch pending jm_command.csv."""
+    return _remote_command_handler(token, "mt5")
+
+
+@router.get("/mt4/remote/command")
+async def mt4_remote_command(token: str) -> dict:
+    """MT4 real EA v2 — fetch pending jm_command.csv."""
+    return _remote_command_handler(token, "mt4_real")
 
 
 @router.get("/mt/remote/status")

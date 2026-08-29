@@ -1,0 +1,54 @@
+JM FX MT4 Real — Walang PC Agent (Direct Cloud)
+================================================
+
+DOWNLOAD: JM-FX-MT4-Real-EA-v2.zip
+Version: 2.00 | Symbol: XAUUSD | Platform: MT4 REAL
+
+Kailangan ng hiwalay na JM FX account code para sa MT4 real.
+(Gawin sa VPS: python3 scripts/create_xm_mt4_real_account.py)
+
+INSTALL (5 minuto)
+------------------
+1. HUWAG gamitin ang PC agent — diretso ang EA sa cloud URL
+
+2. MT4 → File → Open Data Folder → MQL4\Experts\
+   Kopyahin ang Experts\JM_Forex_Bridge.mq4
+
+3. MetaEditor → Compile (F7) → 0 errors, version 2.00
+
+4. MT4 → Tools → Options → Expert Advisors:
+   [x] Allow automated trading
+   [x] Allow WebRequest for listed URL
+   Add URL: https://jmtechsolution.cloud
+
+5. Drag JM_Forex_Bridge sa XAUUSD chart (REAL account). Inputs:
+   InpSymbol          = XAUUSD   (o exact gold symbol ng broker)
+   InpUseCloudBridge  = true
+   InpApiUrl          = https://jmtechsolution.cloud/fx/api
+   InpBridgeToken     = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+   AutoTrading ON
+
+6. Login: https://jmtechsolution.cloud/fx/
+   Code + Token: (see JM-FX-MT4-REAL-ACCOUNT.txt)
+
+7. Check: https://jmtechsolution.cloud/fx/api/mt4/real/status
+   Dapat "online": true
+
+SERVER .env (VPS — isang beses lang)
+------------------------------------
+JM_MT_REMOTE_BRIDGE=true
+JM_MT_BRIDGE_TOKEN=gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+JM_MT4_REAL_BRIDGE_DIR=/opt/jm-forex-trading/data/mt4_real_bridge
+JM_MT4_REAL_ACCOUNT_CODE=<your code>
+JM_MT4_REAL_LOGIN=<your MT4 live login>
+JM_MT4_SYMBOL=XAUUSD
+
+EXPERTS TAB — dapat makita:
+  JM Forex MT4 Bridge v2 — CLOUD mode (no PC agent)
+
+TROUBLESHOOT
+------------
+Error 4060     → Step 4: allow WebRequest URL
+MT4 offline    → AutoTrading ON? EA v2 attached sa REAL terminal?
+HTTP 403       → check InpBridgeToken
+Wrong account  → gamitin MT4 REAL code, hindi DDDC3D (MT5)

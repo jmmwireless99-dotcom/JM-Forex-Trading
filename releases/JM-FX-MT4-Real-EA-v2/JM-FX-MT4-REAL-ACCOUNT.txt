@@ -1,0 +1,17 @@
+JM FX Dashboard Login — MT4 REAL Account
+=========================================
+
+URL:    https://jmtechsolution.cloud/fx/
+
+Code:   (set after create_xm_mt4_real_account.py on VPS)
+Token:  (from script output)
+
+MT4 live login: (your broker — sa MT4 terminal LANG ilagay ang password)
+
+Bridge token (EA input InpBridgeToken):
+  gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+
+NOTE:
+- DDDC3D = MT5 demo lang — HUWAG gamitin para sa MT4 real
+- MT4 real = hiwalay na account code + token
+- Walang PC agent — EA v2 diretso sa https://jmtechsolution.cloud/fx/api
