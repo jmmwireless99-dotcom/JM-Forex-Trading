@@ -119,6 +119,7 @@ export default function App() {
       accountMeta?.mt5?.platform === 'mt4_real',
   )
   const mtLinkedOnly = mt5Only || mt4Real
+  const scaleInMode = Boolean(account?.scale_in_mode || accountMeta?.scale_in_mode)
   const mt4RealRef = useRef(false)
   const mtLinkedOnlyRef = useRef(false)
   const [authState, setAuthState] = useState('loading') // loading | in | out
@@ -231,6 +232,29 @@ export default function App() {
     setTrades([])
     setTradeSummary(null)
     accountIdRef.current = null
+  }
+
+  async function handleCreateScaleInDemoAccount() {
+    setBusy(true)
+    setError('')
+    try {
+      const created = await api.createScaleInAccount({
+        deposit: 1000,
+        label: 'Scale-in demo (3 legs)',
+      })
+      const session = {
+        id: created.account.account_id,
+        token: created.token,
+        code: created.account.account_code,
+        label: created.account.account_label,
+      }
+      saveAccountSession(session)
+      await loadAccountBook(session)
+    } catch (err) {
+      setError(err.message || 'Could not create scale-in account')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleCreateDemoAccount() {
@@ -621,6 +645,8 @@ export default function App() {
             {status?.running ? 'Desk live' : 'Paused'} · {mtLinkedLabel}
             {mtLinkedOnly ? (
               mtLinkedOnline ? ' · Sync OK' : ' · Sync offline'
+            ) : scaleInMode ? (
+              ' · Scale-in 3L'
             ) : mode !== 'paper' ? (
               mtOnline ? ' · MT online' : ' · MT offline'
             ) : (
@@ -899,6 +925,14 @@ export default function App() {
                 type="button"
                 className="btn-ghost"
                 disabled={busy}
+                onClick={handleCreateScaleInDemoAccount}
+              >
+                Create scale-in demo (3 legs)
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
                 onClick={handleCreateDemoAccount}
               >
                 Create new demo account
@@ -912,8 +946,13 @@ export default function App() {
       <>
       <section className="metrics" aria-label="Account metrics">
         <div className="metric">
-          <label>{mt5Only ? 'MT5 acct' : mt4Real ? 'MT4 acct' : 'Demo acct'}</label>
+          <label>{mt5Only ? 'MT5 acct' : mt4Real ? 'MT4 acct' : scaleInMode ? 'Scale-in acct' : 'Demo acct'}</label>
           <strong>{accountMeta?.code || account.account_code || '—'}</strong>
+          {scaleInMode ? (
+            <span className="badge badge-live" style={{ display: 'block', marginTop: '0.35rem' }}>
+              3-leg scale-in · 0.01/0.02/0.03 per $1k
+            </span>
+          ) : null}
           {accountMeta?.label ? (
             <span className="meta" style={{ display: 'block', marginTop: '0.2rem' }}>
               {accountMeta.label}

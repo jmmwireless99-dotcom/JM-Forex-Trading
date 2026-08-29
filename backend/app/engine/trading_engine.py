@@ -38,6 +38,13 @@ from app.models.domain import (
 )
 from app.paper_accounts import PaperAccount, PaperAccountRegistry
 from app.risk.manager import RiskManager
+from app.risk.scale_in import (
+    evaluate_scale_in,
+    leg_add_cooldown_ok,
+    mark_leg_added,
+    open_legs,
+    plan_scale_in_entry,
+)
 from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
 from app.strategies.auto_router import AutoStrategyRouter
 
@@ -222,6 +229,7 @@ class TradingEngine:
         label: str | None = None,
         deposit: float | None = None,
         follow_auto: bool = True,
+        scale_in_mode: bool = False,
     ) -> dict[str, Any]:
         """Provision an isolated paper account for one client browser/session."""
         acct = self.accounts.create(
@@ -229,6 +237,7 @@ class TradingEngine:
             label=label,
             follow_auto=follow_auto,
             is_desk=False,
+            scale_in_mode=scale_in_mode,
         )
         return {
             "ok": True,
@@ -237,10 +246,28 @@ class TradingEngine:
             "capital": self.capital_preview(acct.broker.deposit, account=acct),
             "trades": self._trades_payload(acct),
             "message": (
-                "New demo account created. Only this account id + token can see "
-                "its capital, trades, and history."
+                "New scale-in demo account created (up to 3 legs, tier lots)."
+                if scale_in_mode
+                else (
+                    "New demo account created. Only this account id + token can see "
+                    "its capital, trades, and history."
+                )
             ),
         }
+
+    def create_scale_in_demo_account(
+        self,
+        *,
+        label: str | None = None,
+        deposit: float | None = None,
+    ) -> dict[str, Any]:
+        """Dedicated paper book for 3-leg scale-in testing — does not alter other accounts."""
+        return self.create_client_account(
+            label=label or "Scale-in demo (3 legs)",
+            deposit=deposit or 1000.0,
+            follow_auto=True,
+            scale_in_mode=True,
+        )
 
     def _mt_demo_account(self) -> PaperAccount:
         """Journal + auto-fill target when execution_mode is mt4/mt5."""
@@ -268,6 +295,14 @@ class TradingEngine:
             self._is_mt5_demo_account(account)
             or self._is_mt4_demo_account(account)
             or self._is_mt4_real_account(account)
+        )
+
+    def _is_scale_in_account(self, account: PaperAccount) -> bool:
+        """Paper scale-in book — isolated from MT-linked and standard demo accounts."""
+        return bool(
+            getattr(account, "scale_in_mode", False)
+            and not account.is_desk
+            and not self._is_mt_demo_account(account)
         )
 
     def _demo_platform(self, account: PaperAccount) -> str | None:
@@ -1257,7 +1292,16 @@ class TradingEngine:
             paper = False
         else:
             amount = float(deposit if deposit is not None else acct.broker.deposit)
-            note = "Paper demo capital for this account only — other clients cannot see it"
+            if self._is_scale_in_account(acct):
+                from app.risk.scale_in import scale_in_lots
+
+                note = (
+                    "Scale-in demo — up to 3 legs on pullbacks "
+                    f"({self.settings.scale_in_step_pips:g}p steps). "
+                    "Other accounts unchanged."
+                )
+            else:
+                note = "Paper demo capital for this account only — other clients cannot see it"
             paper = not self.using_mt()
         risk_pct = float(self.settings.max_risk_per_trade_pct)
         daily_pct = float(self.settings.max_daily_loss_pct)
@@ -1268,10 +1312,26 @@ class TradingEngine:
         pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
         suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
         suggested_lots = max(0.01, round(suggested, 2))
+        scale_in_lots_preview = None
+        if account and self._is_scale_in_account(acct):
+            from app.risk.scale_in import scale_in_lots as si_lots
+
+            scale_in_lots_preview = [
+                si_lots(amount, leg, self.settings)
+                for leg in range(1, int(self.settings.scale_in_max_legs) + 1)
+            ]
         return {
             "deposit": round(amount, 2),
             "currency": self.settings.base_currency,
             "paper": paper,
+            "scale_in_mode": bool(account and self._is_scale_in_account(acct)),
+            "scale_in_max_legs": int(self.settings.scale_in_max_legs)
+            if account and self._is_scale_in_account(acct)
+            else None,
+            "scale_in_lots": scale_in_lots_preview,
+            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            if account and self._is_scale_in_account(acct)
+            else None,
             "mt5_only": bool(account and self._is_mt5_demo_account(account)),
             "mt4_only": bool(account and self._is_mt4_demo_account(account)),
             "mt4_real": bool(account and self._is_mt4_real_account(account)),
@@ -1531,6 +1591,7 @@ class TradingEngine:
                 closed_candle, forming = self.candles.update(tick)
                 if closed_candle is not None:
                     await self._emit("candle_closed", closed_candle.model_dump(mode="json"))
+                    await self._maybe_scale_in_adds(tick)
                 await self._emit("candle", forming.model_dump(mode="json"))
 
                 closed_signal, _forming_signal = self.signal_candles.update(tick)
@@ -1658,6 +1719,174 @@ class TradingEngine:
             return [mt_acct]
         return []
 
+    async def _handle_scale_in_signal_for_account(
+        self,
+        signal: Signal,
+        tick: Tick,
+        *,
+        account: PaperAccount,
+        signal_db_id: str | None = None,
+        london_signal_id: str | None = None,
+    ) -> None:
+        """Up to 3 same-side legs on pullbacks — scale-in paper account only."""
+        opens = self.open_positions(account)
+        for position in opens:
+            if position.symbol == signal.symbol and position.side != signal.side:
+                return
+
+        legs = open_legs(opens, symbol=signal.symbol, side=signal.side)
+        plan = plan_scale_in_entry(
+            symbol=signal.symbol,
+            side=signal.side,
+            balance=self._balance(account),
+            open_positions=opens,
+            tick=tick,
+            settings=self.settings,
+            require_depth=len(legs) > 0,
+        )
+        if not plan.allowed:
+            return
+
+        if plan.leg == 1 and time.time() < self._entry_cooldown_until:
+            return
+
+        if plan.leg > 1 and not leg_add_cooldown_ok(
+            account.id, float(self.settings.scale_in_leg_cooldown_seconds)
+        ):
+            return
+
+        entry_px = tick.ask if signal.side == Side.BUY else tick.bid if tick else None
+        if signal.limit_price is not None:
+            entry_px = signal.limit_price
+        advice = None
+        if self.advisor.enabled:
+            try:
+                advice = self.advisor.advise_signal(signal, entry=entry_px)
+                self._last_advice = advice.as_dict()
+                await self._emit("ai_advice", self._last_advice)
+            except Exception:
+                advice = None
+        if advice is not None and self.advisor.should_block(advice):
+            rejected = Order(
+                symbol=signal.symbol,
+                side=signal.side,
+                lots=plan.lots,
+                strategy=signal.strategy,
+                comment=(signal.reason or "")[:60],
+                status=OrderStatus.REJECTED,
+                reject_reason=(
+                    f"AI_ML_SKIP p={advice.win_probability:.0%} · "
+                    + (advice.reasons[0] if advice.reasons else "low ML win probability")
+                ),
+                stop_loss=signal.stop_loss,
+                take_profit=signal.take_profit,
+            )
+            await self._journal_fill(
+                rejected, signal_db_id=signal_db_id, account=account
+            )
+            return
+
+        request = OrderRequest(
+            symbol=signal.symbol,
+            side=signal.side,
+            lots=plan.lots,
+            strategy=signal.strategy,
+            comment=f"{(signal.reason or '')[:48]}|L{plan.leg}",
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
+            order_type=signal.order_type or OrderType.MARKET,
+            limit_price=signal.limit_price,
+            expire_at=signal.expire_at,
+            attach_stops=signal.order_type != OrderType.LIMIT,
+            setup_id=plan.setup_id,
+            leg_index=plan.leg,
+        )
+        if request.stop_loss is None and signal.stop_loss_pips and tick:
+            pip = account.risk.pip_size(signal.symbol)
+            entry = tick.ask if signal.side.value == "BUY" else tick.bid
+            if signal.side.value == "BUY":
+                request.stop_loss = entry - signal.stop_loss_pips * pip
+                if signal.take_profit_pips:
+                    request.take_profit = entry + signal.take_profit_pips * pip
+            else:
+                request.stop_loss = entry + signal.stop_loss_pips * pip
+                if signal.take_profit_pips:
+                    request.take_profit = entry - signal.take_profit_pips * pip
+
+        order = await self._execute(
+            request,
+            tick=tick,
+            signal_db_id=signal_db_id,
+            account=account,
+        )
+        if order.status == OrderStatus.FILLED:
+            mark_leg_added(account.id)
+            if plan.leg == 1:
+                self._arm_entry_cooldown()
+
+        if london_signal_id and order:
+            key = f"{account.id}:{order.id}"
+            self._london_signal_ids[key] = london_signal_id
+            if order.status == OrderStatus.PENDING:
+                self._journaled_limit_ids.discard(key)
+            elif order.status == OrderStatus.FILLED:
+                self._journaled_limit_ids.add(key)
+                try:
+                    from app.db.repository import mark_london_signal
+
+                    mark_london_signal(
+                        london_signal_id,
+                        status="EXECUTED",
+                        execution_timestamp=order.filled_at,
+                    )
+                except Exception:
+                    pass
+
+    async def _maybe_scale_in_adds(self, tick: Tick) -> None:
+        """M1 pullback adds for scale-in demo accounts (legs 2–3, no new M5 signal)."""
+        for acct in self.accounts.auto_followers():
+            if not self._is_scale_in_account(acct):
+                continue
+            if not leg_add_cooldown_ok(
+                acct.id, float(self.settings.scale_in_leg_cooldown_seconds)
+            ):
+                continue
+            opens = self.open_positions(acct)
+            if not opens:
+                continue
+            seen: set[tuple[str, str]] = set()
+            for pos in opens:
+                key = (pos.symbol, pos.side.value)
+                if key in seen:
+                    continue
+                seen.add(key)
+                legs = open_legs(opens, symbol=pos.symbol, side=pos.side)
+                if len(legs) >= int(self.settings.scale_in_max_legs):
+                    continue
+                plan = plan_scale_in_entry(
+                    symbol=pos.symbol,
+                    side=pos.side,
+                    balance=self._balance(acct),
+                    open_positions=opens,
+                    tick=tick,
+                    settings=self.settings,
+                    require_depth=True,
+                )
+                if not plan.allowed or plan.leg <= 1:
+                    continue
+                request = OrderRequest(
+                    symbol=pos.symbol,
+                    side=pos.side,
+                    lots=plan.lots,
+                    strategy=legs[0].strategy or "scale_in",
+                    comment=f"scale_in_pullback|L{plan.leg}",
+                    setup_id=plan.setup_id,
+                    leg_index=plan.leg,
+                )
+                order = await self._execute(request, tick=tick, account=acct)
+                if order.status == OrderStatus.FILLED:
+                    mark_leg_added(acct.id)
+
     async def _handle_signal(
         self,
         signal: Signal,
@@ -1688,6 +1917,16 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
+        if self._is_scale_in_account(account):
+            await self._handle_scale_in_signal_for_account(
+                signal,
+                tick,
+                account=account,
+                signal_db_id=signal_db_id,
+                london_signal_id=london_signal_id,
+            )
+            return
+
         # Do NOT reverse open trades on opposite signals — that was the main
         # paper loss driver (EMA flip every M5). Hold until SL/TP / manual close.
         for position in self.open_positions(account):
@@ -1798,12 +2037,21 @@ class TradingEngine:
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
         if tick is not None and not via_mt:
             acct.broker._last_ticks[tick.symbol] = tick
-        decision = acct.risk.evaluate(
-            request,
-            balance=self._balance(acct),
-            open_positions=self.open_positions(acct),
-            tick=tick,
-        )
+        if self._is_scale_in_account(acct) and not via_mt:
+            decision = evaluate_scale_in(
+                request,
+                balance=self._balance(acct),
+                open_positions=self.open_positions(acct),
+                tick=tick,
+                settings=self.settings,
+            )
+        else:
+            decision = acct.risk.evaluate(
+                request,
+                balance=self._balance(acct),
+                open_positions=self.open_positions(acct),
+                tick=tick,
+            )
         if not decision.approved:
             rejected = Order(
                 symbol=request.symbol,

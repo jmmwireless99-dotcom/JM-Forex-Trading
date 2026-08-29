@@ -176,6 +176,13 @@ class CreateAccountBody(BaseModel):
     follow_auto: bool = True
 
 
+class CreateScaleInAccountBody(BaseModel):
+    """Create a paper account with 3-leg scale-in (does not affect other accounts)."""
+
+    label: str | None = None
+    deposit: float | None = Field(default=1000.0, gt=0, le=1_000_000)
+
+
 class LoginAccountBody(BaseModel):
     """Sign in to an existing paper account with code + token."""
 
@@ -761,6 +768,18 @@ async def create_account(body: CreateAccountBody | None = None) -> dict:
         label=body.label,
         deposit=body.deposit,
         follow_auto=body.follow_auto,
+    )
+
+
+@router.post("/accounts/scale-in-demo")
+async def create_scale_in_demo_account(
+    body: CreateScaleInAccountBody | None = None,
+) -> dict:
+    """Create a paper account with 3-leg scale-in — isolated from MT/live accounts."""
+    body = body or CreateScaleInAccountBody()
+    return get_engine().create_scale_in_demo_account(
+        label=body.label,
+        deposit=body.deposit,
     )
 
 

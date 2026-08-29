@@ -165,6 +165,8 @@ class PaperBroker:
                         stop_loss=request.stop_loss,
                         take_profit=request.take_profit,
                         strategy=request.strategy,
+                        setup_id=request.setup_id,
+                        leg_index=request.leg_index,
                     )
                 )
                 return order
@@ -183,6 +185,8 @@ class PaperBroker:
                         stop_loss=request.stop_loss,
                         take_profit=request.take_profit,
                         strategy=request.strategy,
+                        setup_id=request.setup_id,
+                        leg_index=request.leg_index,
                     )
                 )
                 return order
@@ -205,6 +209,8 @@ class PaperBroker:
             stop_loss=request.stop_loss,
             take_profit=request.take_profit,
             strategy=request.strategy,
+            setup_id=request.setup_id,
+            leg_index=request.leg_index,
         )
         self.positions.append(position)
         return order

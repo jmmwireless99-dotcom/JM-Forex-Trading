@@ -79,6 +79,8 @@ export const api = {
     ),
   createAccount: (body = {}) =>
     request('/accounts', { method: 'POST', body: JSON.stringify(body) }),
+  createScaleInAccount: (body = {}) =>
+    request('/accounts/scale-in-demo', { method: 'POST', body: JSON.stringify(body) }),
   loginAccount: ({ code, token }) =>
     request('/accounts/login', {
       method: 'POST',
