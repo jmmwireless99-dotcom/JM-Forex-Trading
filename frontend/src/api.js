@@ -67,7 +67,8 @@ export const api = {
   desk: () => request('/desk'),
   auto: () => request('/auto'),
   mtStatus: () => request('/mt/status'),
-  mt4Status: () => request('/mt/status'),
+  mt4Status: () => request('/mt4/real/status'),
+  mt4StatusLegacy: () => request('/mt/status'),
   setExecutionMode: (mode) =>
     request('/execution/mode', { method: 'POST', body: JSON.stringify({ mode }) }),
   candles: (symbol = 'XAUUSD', limit = 200) =>

@@ -109,7 +109,18 @@ export default function App() {
   const [depositInput, setDepositInput] = useState('1000')
   const [capital, setCapital] = useState(null)
   const [accountMeta, setAccountMeta] = useState(null)
+  const [mt4Bridge, setMt4Bridge] = useState(null)
   const mt5Only = Boolean(account?.mt5_only || accountMeta?.mt5?.mt5_only)
+  const mt4Real = Boolean(
+    account?.mt4_real ||
+      (account?.mt4_only && account?.account_kind === 'real') ||
+      accountMeta?.mt4?.mt4_real ||
+      accountMeta?.mt5?.mt4_real ||
+      accountMeta?.mt5?.platform === 'mt4_real',
+  )
+  const mtLinkedOnly = mt5Only || mt4Real
+  const mt4RealRef = useRef(false)
+  const mtLinkedOnlyRef = useRef(false)
   const [authState, setAuthState] = useState('loading') // loading | in | out
   const [showLoginPanel, setShowLoginPanel] = useState(false)
   const [loginCode, setLoginCode] = useState('')
@@ -144,8 +155,23 @@ export default function App() {
           label: acc.account_label || session.label,
           mt5: { mt5_only: true, mt5_login: acc.mt5_login, linked: acc.mt5_linked },
         }))
+      } else if (acc.mt4_real || acc.mt4_only) {
+        setAccountMeta((prev) => ({
+          ...(prev || {}),
+          code: acc.account_code || session.code,
+          label: acc.account_label || session.label,
+          mt4: {
+            mt4_real: true,
+            mt4_login: acc.mt4_real_login,
+            linked: acc.mt4_real_linked,
+            platform: acc.mt_platform || 'mt4_real',
+            symbol: acc.mt4_symbol || 'XAUUSD',
+          },
+        }))
+        setMode('mt4')
+        api.mt4Status().then(setMt4Bridge).catch(() => {})
       }
-      if (!acc.mt5_only) {
+      if (!acc.mt5_only && !acc.mt4_real && !acc.mt4_only) {
         if (acc.deposit != null) setDepositInput(String(acc.deposit))
         else if (acc.capital?.deposit != null) setDepositInput(String(acc.capital.deposit))
       }
@@ -173,7 +199,17 @@ export default function App() {
         code: res.account_code,
         label: res.account_label,
       }
-      setAccountMeta({ code: res.account_code, label: res.account_label, mt5: res.mt5 })
+      const isMt4Real = Boolean(res.mt5?.mt4_real || res.mt5?.platform === 'mt4_real')
+      setAccountMeta({
+        code: res.account_code,
+        label: res.account_label,
+        mt5: res.mt5?.mt5_only ? res.mt5 : null,
+        mt4: isMt4Real ? res.mt5 : null,
+      })
+      if (isMt4Real) {
+        setMode('mt4')
+        api.mt4Status().then(setMt4Bridge).catch(() => {})
+      }
       saveAccountSession(session)
       await loadAccountBook(session)
       setLoginCode('')
@@ -242,7 +278,7 @@ export default function App() {
       }
       if (msg.event === 'engine') {
         setStatus(msg.data)
-        if (msg.data?.mode) setMode(msg.data.mode)
+        if (msg.data?.mode && !mtLinkedOnlyRef.current) setMode(msg.data.mode)
         if (msg.data?.active_strategy) syncStrategyFromServer(msg.data.active_strategy)
       }
       if (msg.event === 'account') setAccount(msg.data)
@@ -280,7 +316,7 @@ export default function App() {
       }
       if (msg.event === 'connection') {
         setMt((prev) => ({ ...(prev || {}), ...msg.data }))
-        if (msg.data?.mode) setMode(msg.data.mode)
+        if (msg.data?.mode && !mtLinkedOnlyRef.current) setMode(msg.data.mode)
       }
       if (msg.event === 'candles') {
         setCandles(msg.data.candles || [])
@@ -357,7 +393,9 @@ export default function App() {
         const auto = val(7)
         if (st) {
           setStatus(st)
-          setMode(st.mode || st.connection?.mode || 'paper')
+          if (!mtLinkedOnlyRef.current) {
+            setMode(st.mode || st.connection?.mode || 'paper')
+          }
           clearStrategyDirty(st.active_strategy)
         }
         if (sig) applySignals(sig.signals || [])
@@ -415,7 +453,11 @@ export default function App() {
 
     const deskTimer = setInterval(() => {
       api.desk().then((d) => alive && setDesk(d)).catch(() => {})
-      api.mtStatus().then((m) => alive && setMt(m)).catch(() => {})
+      if (mt4RealRef.current) {
+        api.mt4Status().then((m) => alive && setMt4Bridge(m)).catch(() => {})
+      } else {
+        api.mtStatus().then((m) => alive && setMt(m)).catch(() => {})
+      }
       // Refresh shared signal tape so other browsers stay in sync even if a WS event was missed
       api
         .signals()
@@ -429,6 +471,11 @@ export default function App() {
       clearInterval(deskTimer)
     }
   }, [])
+
+  useEffect(() => {
+    mt4RealRef.current = mt4Real
+    mtLinkedOnlyRef.current = mtLinkedOnly
+  }, [mt4Real, mtLinkedOnly])
 
   async function run(action) {
     setBusy(true)
@@ -552,6 +599,12 @@ export default function App() {
   const sessionTier = desk?.session?.tier || '—'
   const newsBlocked = Boolean(desk?.news?.blocked)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
+  const mt4Online = Boolean(mt4Bridge?.online)
+  const mtLinkedOnline = mt5Only ? mtOnline : mt4Real ? mt4Online : mtOnline
+  const mtLinkedLabel = mt5Only ? 'MT5 LIVE' : mt4Real ? 'MT4 LIVE' : mode.toUpperCase()
+  const mt4Linked = Boolean(
+    account.mt4_real_linked || accountMeta?.mt4?.linked || accountMeta?.mt5?.linked,
+  )
   const gold = ticks.XAUUSD
   const goldLabel = mt5Only ? 'GOLD#' : 'XAUUSD'
   const hasOpen = positions.length > 0
@@ -564,10 +617,9 @@ export default function App() {
             JM <span>Forex</span>
           </h1>
           <div className="mode-chip">
-            {status?.running ? 'Desk live' : 'Paused'} ·{' '}
-            {mt5Only ? 'MT5 LIVE' : mode.toUpperCase()}
-            {mt5Only ? (
-              mtOnline ? ' · Sync OK' : ' · Sync offline'
+            {status?.running ? 'Desk live' : 'Paused'} · {mtLinkedLabel}
+            {mtLinkedOnly ? (
+              mtLinkedOnline ? ' · Sync OK' : ' · Sync offline'
             ) : mode !== 'paper' ? (
               mtOnline ? ' · MT online' : ' · MT offline'
             ) : (
@@ -604,16 +656,31 @@ export default function App() {
           Manual Buy/Sell with auto SL/TP anytime.
         </p>
         <div className="controls">
-          {mt5Only ? (
+          {mtLinkedOnly ? (
             <>
-              <span className="badge badge-live" style={{ alignSelf: 'center' }}>
-                MT5 · {account.mt5_login || '169250320'} · GOLD#
-              </span>
-              <span className="meta" style={{ alignSelf: 'center' }}>
-                {account.mt5_linked && mtOnline
-                  ? 'Balance synced from XM terminal'
-                  : 'Waiting for PC Agent + MT5 bridge'}
-              </span>
+              {mt5Only ? (
+                <>
+                  <span className="badge badge-live" style={{ alignSelf: 'center' }}>
+                    MT5 · {account.mt5_login || '169250320'} · GOLD#
+                  </span>
+                  <span className="meta" style={{ alignSelf: 'center' }}>
+                    {account.mt5_linked && mtOnline
+                      ? 'Balance synced from XM terminal'
+                      : 'Waiting for PC Agent + MT5 bridge'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="badge badge-live" style={{ alignSelf: 'center' }}>
+                    MT4 · {account.mt4_real_login || accountMeta?.mt4?.mt4_login || accountMeta?.mt4?.login || 'live'} · XAUUSD
+                  </span>
+                  <span className="meta" style={{ alignSelf: 'center' }}>
+                    {mt4Linked && mt4Online
+                      ? 'Balance synced from XM MT4 live terminal'
+                      : 'Waiting for JM_Forex_Bridge EA on MT4'}
+                  </span>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -709,16 +776,33 @@ export default function App() {
           </span>
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>
-            MT: {mtOnline ? 'online' : mt?.configured || mt?.mt_configured ? 'offline' : 'not configured'}
+            MT:{' '}
+            {mtLinkedOnly
+              ? mtLinkedOnline
+                ? 'online'
+                : 'offline'
+              : mtOnline
+                ? 'online'
+                : mt?.configured || mt?.mt_configured
+                  ? 'offline'
+                  : 'not configured'}
             {mt5Only ? (
-              accountMeta?.mt5?.tick_ok || (gold?.bid > 0)
+              accountMeta?.mt5?.tick_ok || gold?.bid > 0
                 ? ' · tick OK'
                 : ' · tick waiting (set InpSymbol=GOLD#)'
+            ) : mt4Real ? (
+              mt4Bridge?.tick?.bid > 0 || gold?.bid > 0
+                ? ' · tick OK'
+                : ' · tick waiting (set InpSymbol=XAUUSD)'
             ) : null}
           </span>
           {mt5Only ? (
             <span>
               Sync: {account.mt5_linked && mtOnline ? 'OK · $' + Number(account.balance || 0).toFixed(2) : 'offline'}
+            </span>
+          ) : mt4Real ? (
+            <span>
+              Sync: {mt4Linked && mt4Online ? 'OK · $' + Number(account.balance || 0).toFixed(2) : 'offline'}
             </span>
           ) : null}
           {gold ? <span>{goldLabel} {gold.mid}</span> : null}
@@ -827,7 +911,7 @@ export default function App() {
       <>
       <section className="metrics" aria-label="Account metrics">
         <div className="metric">
-          <label>{mt5Only ? 'MT5 acct' : 'Demo acct'}</label>
+          <label>{mt5Only ? 'MT5 acct' : mt4Real ? 'MT4 acct' : 'Demo acct'}</label>
           <strong>{accountMeta?.code || account.account_code || '—'}</strong>
           {accountMeta?.label ? (
             <span className="meta" style={{ display: 'block', marginTop: '0.2rem' }}>
@@ -908,7 +992,7 @@ export default function App() {
         )
       })()}
 
-        {!mt5Only ? (
+        {!mtLinkedOnly ? (
       <section className="panel deposit-panel" aria-label="Paper deposit">
         <div className="deposit-head">
           <div>
@@ -1004,7 +1088,7 @@ export default function App() {
           </div>
         ) : null}
       </section>
-      ) : (
+      ) : mt5Only ? (
       <section className="panel deposit-panel" aria-label="MT5 account">
         <div className="deposit-head">
           <div>
@@ -1017,6 +1101,47 @@ export default function App() {
             </p>
           </div>
           <span className="badge badge-live">MT5 LIVE</span>
+        </div>
+        {capital ? (
+          <div className="capital-calc" aria-label="Capital calculation">
+            <div>
+              <label>Risk / trade</label>
+              <strong>
+                ${money(capital.risk_per_trade_usd)}{' '}
+                <span className="meta">({capital.risk_per_trade_pct}%)</span>
+              </strong>
+            </div>
+            <div>
+              <label>Suggested lots</label>
+              <strong>
+                {Number(capital.suggested_lots).toFixed(2)}{' '}
+                <span className="meta">
+                  SL {capital.default_stop_loss_pips}p / TP {capital.default_take_profit_pips}p
+                </span>
+              </strong>
+            </div>
+          </div>
+        ) : null}
+      </section>
+      ) : (
+      <section className="panel deposit-panel" aria-label="MT4 account">
+        <div className="deposit-head">
+          <div>
+            <h2>XM MT4 live account</h2>
+            <p className="meta">
+              <strong>{accountMeta?.code || account.account_code}</strong> uses your XM MT4 live
+              balance only — no paper money. Login{' '}
+              <strong>
+                {account.mt4_real_login ||
+                  accountMeta?.mt4?.mt4_login ||
+                  accountMeta?.mt4?.login ||
+                  '—'}
+              </strong>
+              · symbol <strong>{accountMeta?.mt4?.symbol || mt4Bridge?.symbol || 'XAUUSD'}</strong>.
+              Keep MT4 open with JM_Forex_Bridge EA v2 (cloud bridge) on the XAUUSD chart.
+            </p>
+          </div>
+          <span className="badge badge-live">MT4 LIVE</span>
         </div>
         {capital ? (
           <div className="capital-calc" aria-label="Capital calculation">
@@ -1139,14 +1264,16 @@ export default function App() {
               }
             }}
           >
-            Desk tape ({mt5Only ? 'MT5' : mode})
+            Desk tape ({mt5Only ? 'MT5' : mt4Real ? 'MT4' : mode})
           </button>
           <span className="meta chart-mode-hint">
             {chartMode === 'tradingview'
               ? 'Live COMEX gold candles · strategies still use paper/MT feed'
               : mt5Only
                 ? 'GOLD# desk tape — synced from XM MT5 · M5 · M15 · H1 · 1M Daily'
-                : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
+                : mt4Real
+                  ? 'XAUUSD desk tape — synced from XM MT4 live · M5 · M15 · H1 · 1M Daily'
+                  : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
