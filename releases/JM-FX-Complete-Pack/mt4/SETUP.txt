@@ -1,0 +1,18 @@
+JM FX MT4 Setup — Demo + Real
+=============================
+
+1. MT4 → File → Open Data Folder → MQL4\Experts\
+2. Kopyahin ang Experts\JM_Forex_Bridge.mq4 → Compile (F7)
+3. Attach sa XAUUSD chart:
+   InpSymbol = XAUUSD
+   UseCommonFolder = true
+4. AutoTrading ON
+
+DEMO vs REAL — hiwalay na bridge folder at JM FX account:
+  Demo: JM_MT4_BRIDGE_DIR + JM_MT4_DEMO_ACCOUNT_CODE
+  Real: JM_MT4_REAL_BRIDGE_DIR + JM_MT4_REAL_ACCOUNT_CODE
+
+Common Files path:
+  C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files
+
+See docs\MT4_SETUP.md and docs\VANTAGE_MT4_CHECKLIST.md

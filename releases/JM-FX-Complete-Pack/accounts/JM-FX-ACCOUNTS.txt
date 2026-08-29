@@ -1,0 +1,28 @@
+JM FX Account Logins
+====================
+
+MT5 Demo (DDDC3D) — recommended, walang PC agent
+--------------------------------------------------
+URL:    https://jmtechsolution.cloud/fx/
+Code:   DDDC3D
+Token:  Wx5LEXzg8J8Bgok7Z3kTLEd6n2T0s3MI
+MT5:    169250320  |  Symbol: GOLD#
+
+MT4 Demo — hiwalay na account (after server setup)
+--------------------------------------------------
+URL:    https://jmtechsolution.cloud/fx/
+Code:   (from scripts/create_xm_mt4_demo_account.py on VPS)
+Token:  (from script output)
+MT4:    demo login  |  Symbol: XAUUSD
+
+MT4 Real — hiwalay na account (live money)
+------------------------------------------
+URL:    https://jmtechsolution.cloud/fx/
+Code:   (from scripts/create_xm_mt4_real_account.py on VPS)
+Token:  (from script output)
+MT4:    live login  |  Symbol: XAUUSD
+
+Bridge token (EA v2 cloud / PC agent):
+  gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+
+NOTE: Broker passwords (XM MT4/MT5) — sa terminal LANG, hindi sa JM FX website.

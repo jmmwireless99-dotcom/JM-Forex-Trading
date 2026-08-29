@@ -35,22 +35,21 @@ _RELEASES = _REPO_ROOT / "releases"
 async def downloads_mt5_bridge_index() -> dict:
     """Direct download links for XM MT5 bridge pack (Windows PC)."""
     base = "https://jmtechsolution.cloud/fx/api/downloads"
+    gh = "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases"
     return {
+        "complete_zip": f"{base}/jmfx-complete.zip",
         "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
         "agent_py": f"{base}/jm_mt5_pc_agent.py",
         "ea_mq5": f"{base}/JM_Forex_Bridge.mq5",
+        "ea_mq4": f"{base}/JM_Forex_Bridge.mq4",
+        "install_python_bat": f"{base}/install-python.bat",
         "readme": f"{base}/mt5-readme.txt",
         "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
-        "github_ea_v2_zip": (
-            "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
-            "cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-EA-v2.zip"
-        ),
-        "github_zip": (
-            "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/"
-            "cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-Bridge-Pack.zip"
-        ),
+        "github_complete_zip": f"{gh}/JM-FX-Complete-Pack.zip",
+        "github_ea_v2_zip": f"{gh}/JM-FX-MT5-EA-v2.zip",
+        "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
     }
 
 
@@ -60,13 +59,19 @@ def _release_file(name: str) -> Path:
         _RELEASES / name,
     ]
     mapping = {
+        "jmfx-complete.zip": _RELEASES / "JM-FX-Complete-Pack.zip",
         "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
-        "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/start-jm-mt5-agent.bat",
+        "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
+        "install-python.bat": _RELEASES / "JM-FX-Complete-Pack/install-python.bat",
+        "install-python.ps1": _RELEASES / "JM-FX-Complete-Pack/install-python.ps1",
         "jm_mt5_pc_agent.py": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/jm_mt5_pc_agent.py",
         "JM_Forex_Bridge.mq5": _RELEASES / "JM-FX-MT5-Bridge-Pack/Experts/JM_Forex_Bridge.mq5",
+        "JM_Forex_Bridge.mq4": _REPO_ROOT / "mt4/Experts/JM_Forex_Bridge.mq4",
         "mt5-readme.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/README.txt",
         "JM-FX-ACCOUNT.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/JM-FX-ACCOUNT.txt",
+        "complete-readme.txt": _RELEASES / "JM-FX-Complete-Pack/README.txt",
+        "download-links.txt": _RELEASES / "JM-FX-Complete-Pack/DOWNLOAD-LINKS.txt",
     }
     if name in mapping:
         candidates.insert(0, mapping[name])
@@ -74,6 +79,12 @@ def _release_file(name: str) -> Path:
         if path.is_file():
             return path
     raise HTTPException(status_code=404, detail=f"Download not found: {name}")
+
+
+@router.get("/downloads/jmfx-complete.zip")
+async def download_jmfx_complete_zip() -> FileResponse:
+    path = _release_file("jmfx-complete.zip")
+    return FileResponse(path, filename="JM-FX-Complete-Pack.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt5-ea-v2.zip")
@@ -104,6 +115,36 @@ async def download_mt5_agent_py() -> FileResponse:
 async def download_mt5_ea() -> FileResponse:
     path = _release_file("JM_Forex_Bridge.mq5")
     return FileResponse(path, filename="JM_Forex_Bridge.mq5", media_type="text/plain")
+
+
+@router.get("/downloads/JM_Forex_Bridge.mq4")
+async def download_mt4_ea() -> FileResponse:
+    path = _release_file("JM_Forex_Bridge.mq4")
+    return FileResponse(path, filename="JM_Forex_Bridge.mq4", media_type="text/plain")
+
+
+@router.get("/downloads/install-python.bat")
+async def download_install_python_bat() -> FileResponse:
+    path = _release_file("install-python.bat")
+    return FileResponse(path, filename="install-python.bat", media_type="application/octet-stream")
+
+
+@router.get("/downloads/install-python.ps1")
+async def download_install_python_ps1() -> FileResponse:
+    path = _release_file("install-python.ps1")
+    return FileResponse(path, filename="install-python.ps1", media_type="text/plain")
+
+
+@router.get("/downloads/complete-readme.txt")
+async def download_complete_readme() -> FileResponse:
+    path = _release_file("complete-readme.txt")
+    return FileResponse(path, filename="README-Complete-Pack.txt", media_type="text/plain")
+
+
+@router.get("/downloads/download-links.txt")
+async def download_links_txt() -> FileResponse:
+    path = _release_file("download-links.txt")
+    return FileResponse(path, filename="DOWNLOAD-LINKS.txt", media_type="text/plain")
 
 
 @router.get("/downloads/mt5-readme.txt")

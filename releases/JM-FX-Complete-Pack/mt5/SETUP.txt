@@ -1,0 +1,13 @@
+JM FX MT5 EA v2 — Walang PC Agent (DDDC3D)
+==========================================
+
+1. MT5 → MQL5\Experts\ → kopyahin JM_Forex_Bridge.mq5 → Compile F7
+2. Tools → Options → Expert Advisors:
+   Allow WebRequest → https://jmtechsolution.cloud
+3. Attach sa GOLD# chart:
+   InpSymbol = GOLD#
+   InpUseCloudBridge = true
+   InpBridgeToken = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+4. Login: https://jmtechsolution.cloud/fx/  Code DDDC3D
+
+Full guide: docs\MT5_NO_AGENT_SETUP.md

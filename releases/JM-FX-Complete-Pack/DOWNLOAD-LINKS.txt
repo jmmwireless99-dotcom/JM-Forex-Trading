@@ -1,0 +1,38 @@
+JM FX — Lahat ng Download Links
+================================
+
+GITHUB (raw — direktang download sa browser)
+---------------------------------------------
+Complete Pack (ZIP — lahat + Python):
+  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-Complete-Pack.zip
+
+MT5 EA v2 only (ZIP):
+  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-MT5-EA-v2.zip
+
+MT5 Bridge Pack (ZIP — may PC agent):
+  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-MT5-Bridge-Pack.zip
+
+Individual files:
+  MT5 EA:        .../raw/main/mt5/Experts/JM_Forex_Bridge.mq5
+  MT4 EA:        .../raw/main/mt4/Experts/JM_Forex_Bridge.mq4
+  PC Agent PY:   .../raw/main/scripts/jm_mt5_pc_agent.py
+  Agent BAT:     .../raw/main/scripts/start-jm-mt5-agent.bat
+  Python install:.../raw/main/releases/JM-FX-Complete-Pack/install-python.bat
+
+(JPalitan ang .../raw/main/ ng branch kung hindi pa merged sa main)
+
+CLOUD (jmtechsolution.cloud)
+----------------------------
+  https://jmtechsolution.cloud/fx/api/downloads/jmfx-complete.zip
+  https://jmtechsolution.cloud/fx/api/downloads/mt5-ea-v2.zip
+  https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge.zip
+  https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge  (JSON — all links)
+
+PYTHON OFFICIAL (kung gusto full installer)
+-------------------------------------------
+  https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe
+  https://www.python.org/downloads/windows/
+
+JM FX DASHBOARD
+---------------
+  https://jmtechsolution.cloud/fx/
