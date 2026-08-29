@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.api.account_deps import require_paper_account
 from app.api.deps import get_engine
-from app.brokers.mt_bridge import resolve_mt_bridge
+from app.brokers.mt_bridge import resolve_mt_bridge, resolve_platform_bridge
 from app.brokers.mt4_bridge import repair_mt_tick_csv
 from app.brokers.remote_bridge import (
     BRIDGE_FILES,
@@ -255,20 +255,22 @@ async def status() -> dict:
 
 
 @router.get("/mt/status")
-@router.get("/mt4/status")
+@router.get("/mt5/status")
 async def mt_status() -> dict:
     settings = get_engine().settings
     engine = get_engine()
-    bridge, platform = resolve_mt_bridge(settings)
+    bridge, platform = resolve_platform_bridge(settings, "mt5")
+    if bridge is None:
+        bridge, platform = resolve_mt_bridge(settings)
     info = engine.connection_info()
     if bridge is None:
         return {
             "configured": False,
             "online": False,
             "execution_mode": settings.execution_mode,
-            "platform": platform,
+            "platform": "mt5",
             "bridge_dir": "",
-            "hint": "Set JM_MT4_BRIDGE_DIR or JM_MT5_BRIDGE_DIR to Terminal Common\\Files",
+            "hint": "Set JM_MT5_BRIDGE_DIR to Terminal Common\\Files",
             **info,
         }
     online = bridge.is_online()
@@ -278,12 +280,49 @@ async def mt_status() -> dict:
         "configured": True,
         "online": online,
         "execution_mode": settings.execution_mode,
-        "platform": info.get("mt_platform") or platform,
+        "platform": "mt5",
         "bridge_dir": str(bridge.bridge_dir),
         "symbol": bridge.symbol,
         "tick": tick.model_dump(mode="json") if tick else None,
         "account": snap.model_dump(mode="json") if snap else None,
         "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+        "mt5_demo_account_code": settings.mt5_demo_account_code or None,
+        "mt5_demo_login": settings.mt5_demo_login or None,
+        **info,
+    }
+
+
+@router.get("/mt4/status")
+async def mt4_status() -> dict:
+    settings = get_engine().settings
+    engine = get_engine()
+    bridge, platform = resolve_platform_bridge(settings, "mt4")
+    info = engine.connection_info()
+    if bridge is None:
+        return {
+            "configured": False,
+            "online": False,
+            "execution_mode": settings.execution_mode,
+            "platform": "mt4",
+            "bridge_dir": "",
+            "hint": "Set JM_MT4_BRIDGE_DIR to MT4 Terminal Common\\Files",
+            **info,
+        }
+    online = bridge.is_online()
+    tick = bridge.read_tick() if online else None
+    snap = bridge.snapshot() if online else None
+    return {
+        "configured": True,
+        "online": online,
+        "execution_mode": settings.execution_mode,
+        "platform": "mt4",
+        "bridge_dir": str(bridge.bridge_dir),
+        "symbol": bridge.symbol,
+        "tick": tick.model_dump(mode="json") if tick else None,
+        "account": snap.model_dump(mode="json") if snap else None,
+        "positions": [p.model_dump(mode="json") for p in bridge.open_positions()] if online else [],
+        "mt4_demo_account_code": settings.mt4_demo_account_code or None,
+        "mt4_demo_login": settings.mt4_demo_login or None,
         **info,
     }
 
@@ -399,6 +438,8 @@ async def mt_remote_agent_status(token: str) -> dict:
         "mt_online": online,
         "mt5_demo_account_code": settings.mt5_demo_account_code or None,
         "mt5_demo_login": settings.mt5_demo_login or None,
+        "mt4_demo_account_code": settings.mt4_demo_account_code or None,
+        "mt4_demo_login": settings.mt4_demo_login or None,
         "symbol": settings.mt_symbol,
     }
 
@@ -572,6 +613,15 @@ async def login_account(body: LoginAccountBody) -> dict:
         raise HTTPException(status_code=404, detail="Account not found") from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail="Invalid account token") from exc
+    mt5_code = (engine.settings.mt5_demo_account_code or "").upper()
+    mt4_code = (engine.settings.mt4_demo_account_code or "").upper()
+    code_u = acct.code.upper()
+    if code_u == mt5_code:
+        login_msg = "Login OK — MT5 account; balance syncs from XM MT5 when bridge is online"
+    elif code_u == mt4_code:
+        login_msg = "Login OK — MT4 account; balance syncs from XM MT4 when bridge is online"
+    else:
+        login_msg = "Login OK — save token in this browser to stay signed in"
     return {
         "ok": True,
         "account_id": acct.id,
@@ -580,11 +630,7 @@ async def login_account(body: LoginAccountBody) -> dict:
         "follow_auto": acct.follow_auto,
         "account": engine.account_payload(acct),
         "mt5": engine.mt_demo_link_status(acct),
-        "message": (
-            "Login OK — DDDC3D is MT5-only; balance syncs from XM terminal when PC agent runs"
-            if acct.code.upper() == (engine.settings.mt5_demo_account_code or "").upper()
-            else "Login OK — save token in this browser to stay signed in"
-        ),
+        "message": login_msg,
     }
 
 

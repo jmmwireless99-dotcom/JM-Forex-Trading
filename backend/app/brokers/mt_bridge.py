@@ -16,6 +16,39 @@ def _resolve_mt_symbol(settings, *, mode: str) -> str:
     return getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
 
 
+def resolve_platform_bridge(
+    settings, platform: str
+) -> tuple[MetaTraderBridge | None, str]:
+    """Return (bridge, platform) for mt4 or mt5 independently."""
+    platform = (platform or "mt5").lower()
+    desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
+    remote = bool(getattr(settings, "mt_remote_bridge", False))
+    remote_cfg, online_max_age, order_timeout = _bridge_timeouts(settings)
+
+    if platform == "mt4":
+        path = getattr(settings, "mt4_bridge_dir", "") or ""
+        mt_symbol = getattr(settings, "mt4_symbol", None) or "XAUUSD"
+    else:
+        path = getattr(settings, "mt5_bridge_dir", "") or ""
+        mt_symbol = getattr(settings, "mt_symbol", None) or "GOLD#"
+
+    if not path and not (remote and platform == "mt5"):
+        return None, platform
+
+    if not path:
+        return None, platform
+
+    bridge = MetaTraderBridge(
+        path,
+        symbol=mt_symbol,
+        desk_symbol=desk_symbol,
+        remote_mode=remote_cfg,
+        online_max_age=online_max_age,
+        order_timeout=order_timeout,
+    )
+    return bridge, platform
+
+
 def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     """Return (bridge, platform) where platform is mt4|mt5|paper."""
     mode = (getattr(settings, "execution_mode", "paper") or "paper").lower()
@@ -60,4 +93,10 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     return None, "paper"
 
 
-__all__ = ["BridgeAck", "MetaTraderBridge", "MT4FileBridge", "resolve_mt_bridge"]
+__all__ = [
+    "BridgeAck",
+    "MetaTraderBridge",
+    "MT4FileBridge",
+    "resolve_mt_bridge",
+    "resolve_platform_bridge",
+]

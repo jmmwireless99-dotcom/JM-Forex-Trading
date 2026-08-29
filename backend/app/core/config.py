@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     # MT5 demo journal — trade log + UI account when JM_EXECUTION_MODE=mt5
     mt5_demo_account_code: str = ""
     mt5_demo_login: str = "169250320"
+    # MT4 demo journal — separate JM FX account linked to MT4 bridge
+    mt4_demo_account_code: str = ""
+    mt4_demo_login: str = ""
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""

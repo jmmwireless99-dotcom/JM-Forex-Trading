@@ -1,6 +1,15 @@
 # JM FX Downloads
 
-## MT5 Bridge Pack (Windows)
+## MT5 EA v2 — No PC Agent (recommended)
+
+| File | Link |
+|------|------|
+| **EA v2 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt5-ea-v2.zip |
+| GitHub mirror | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-symbol-mt5-c11c/releases/JM-FX-MT5-EA-v2.zip |
+
+Contents: `JM_Forex_Bridge.mq5` v2.00 + setup guide + DDDC3D login
+
+## MT5 Bridge Pack (full — includes legacy PC agent)
 
 | File | Link |
 |------|------|
