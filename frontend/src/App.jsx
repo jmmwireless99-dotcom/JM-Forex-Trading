@@ -165,7 +165,7 @@ export default function App() {
             mt4_login: acc.mt4_real_login,
             linked: acc.mt4_real_linked,
             platform: acc.mt_platform || 'mt4_real',
-            symbol: acc.mt4_symbol || 'XAUUSD',
+            symbol: acc.mt4_symbol || 'GOLD',
           },
         }))
         setMode('mt4')
@@ -607,6 +607,7 @@ export default function App() {
   )
   const gold = ticks.XAUUSD
   const goldLabel = mt5Only ? 'GOLD#' : 'XAUUSD'
+  const mt4Symbol = accountMeta?.mt4?.symbol || mt4Bridge?.symbol || 'GOLD'
   const hasOpen = positions.length > 0
 
   return (
@@ -672,7 +673,7 @@ export default function App() {
               ) : (
                 <>
                   <span className="badge badge-live" style={{ alignSelf: 'center' }}>
-                    MT4 · {account.mt4_real_login || accountMeta?.mt4?.mt4_login || accountMeta?.mt4?.login || 'live'} · XAUUSD
+                    MT4 · {account.mt4_real_login || accountMeta?.mt4?.mt4_login || accountMeta?.mt4?.login || 'live'} · {mt4Symbol}
                   </span>
                   <span className="meta" style={{ alignSelf: 'center' }}>
                     {mt4Linked && mt4Online
@@ -793,7 +794,7 @@ export default function App() {
             ) : mt4Real ? (
               mt4Bridge?.tick?.bid > 0 || gold?.bid > 0
                 ? ' · tick OK'
-                : ' · tick waiting (set InpSymbol=XAUUSD)'
+                : ' · tick waiting (set InpSymbol=GOLD on MT4 chart)'
             ) : null}
           </span>
           {mt5Only ? (
@@ -1137,8 +1138,8 @@ export default function App() {
                   accountMeta?.mt4?.login ||
                   '—'}
               </strong>
-              · symbol <strong>{accountMeta?.mt4?.symbol || mt4Bridge?.symbol || 'XAUUSD'}</strong>.
-              Keep MT4 open with JM_Forex_Bridge EA v2 (cloud bridge) on the XAUUSD chart.
+              · symbol <strong>{mt4Symbol}</strong>.
+              Keep MT4 open with JM_Forex_Bridge EA v2 (cloud bridge) on the {mt4Symbol} chart.
             </p>
           </div>
           <span className="badge badge-live">MT4 LIVE</span>
@@ -1272,7 +1273,7 @@ export default function App() {
               : mt5Only
                 ? 'GOLD# desk tape — synced from XM MT5 · M5 · M15 · H1 · 1M Daily'
                 : mt4Real
-                  ? 'XAUUSD desk tape — synced from XM MT4 live · M5 · M15 · H1 · 1M Daily'
+                  ? `${mt4Symbol} desk tape — synced from XM MT4 live · M5 · M15 · H1 · 1M Daily`
                   : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
           </span>
         </div>
