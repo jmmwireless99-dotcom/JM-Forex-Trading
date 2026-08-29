@@ -745,6 +745,9 @@ select {
 .chart-leg.tp {
   color: #7dffb3;
 }
+.chart-leg.preview {
+  color: #9aa3b2;
+}
 .chart-leg.buy,
 .chart-leg.sell {
   letter-spacing: 0.02em;
