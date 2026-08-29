@@ -1,42 +1,45 @@
+/** Pairs in the lab suite dashboard (mirrors lab-backend PAIR_SUITE_SYMBOLS) */
+export const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
+
 /** Pair → lab auto strategy preset (mirrors lab-backend/app/pair_strategies.py) */
 export const PAIR_PRESETS = {
   EURUSD: {
     strategy: 'EMA_RSI_SCALP',
     lots: 0.01,
-    sl_pips: 12,
-    tp_pips: 24,
+    sl_pips: 14,
+    tp_pips: 28,
     label: 'Scalper · EMA+RSI',
     botStyle: 'Best overall · Scalper · General EA',
   },
   GBPUSD: {
     strategy: 'BREAKOUT',
     lots: 0.01,
-    sl_pips: 18,
-    tp_pips: 36,
+    sl_pips: 20,
+    tp_pips: 40,
     label: 'Breakout · 24-bar range',
     botStyle: 'Trend follower · Breakout',
   },
   AUDNZD: {
     strategy: 'MEAN_REVERT',
     lots: 0.01,
-    sl_pips: 14,
-    tp_pips: 20,
+    sl_pips: 16,
+    tp_pips: 32,
     label: 'Mean revert · range edges',
     botStyle: 'Grid · Mean reversion · Range',
   },
   EURCHF: {
     strategy: 'MEAN_REVERT',
     lots: 0.01,
-    sl_pips: 10,
-    tp_pips: 16,
-    label: 'Mean revert · Asian range',
+    sl_pips: 14,
+    tp_pips: 28,
+    label: 'Mean revert · filtered',
     botStyle: 'Grid · Asian session scalper',
   },
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
     lots: 0.01,
-    sl_pips: 20,
-    tp_pips: 40,
+    sl_pips: 45,
+    tp_pips: 90,
     label: 'Trend · EMA+RSI gold',
     botStyle: 'Trend · Session scalp',
   },
@@ -45,19 +48,19 @@ export const PAIR_PRESETS = {
 export const STRATEGY_INFO = {
   EMA_RSI_SCALP: {
     name: 'EMA+RSI Scalper',
-    description: 'M5 EMA 20/50 + RSI — buy zone 40–54, sell 46–60. Best for EUR/USD.',
+    description: 'M5 EMA 20/50 + RSI + candle confirm. SL/TP from fill price.',
   },
   BREAKOUT: {
     name: 'Range Breakout',
-    description: 'M5 close breaks 24-bar high or low. Built for GBP/USD volatility.',
+    description: 'M5 close breaks 24-bar range with buffer — fewer false breaks.',
   },
   MEAN_REVERT: {
     name: 'Mean Reversion',
-    description: 'Buy bottom 25% / sell top 25% of range. Grid-lite for AUD/NZD & EUR/CHF.',
+    description: 'Fade range edges only with trend filter + rejection bar. Cooldown after loss.',
   },
   EMA_RSI_TREND: {
     name: 'EMA+RSI Trend',
-    description: 'Wider RSI zones for gold trends. Paper demo only — live gold on /fx/.',
+    description: 'Gold: wider 45/90 pip SL/TP, 4-bar spacing, no chase on overbought RSI.',
   },
 }
 

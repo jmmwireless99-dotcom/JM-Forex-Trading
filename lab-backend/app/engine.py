@@ -35,17 +35,18 @@ def _active_symbols() -> set[str]:
     return out
 
 
+def _last_closed_bar_time(candles: list) -> int:
+    closed = candles[:-1] if len(candles) > 1 else candles
+    if not closed:
+        return 0
+    return int(closed[-1]["time"])
+
+
 async def _refresh_symbol(sym: str) -> None:
     q = await asyncio.to_thread(fetch_quote_live, sym)
     _ticks[sym] = q
-    for acc in store.all_accounts():
-        acc.broker.update_tick(sym, q["mid"])
-    await _maybe_run_auto(sym, q["mid"])
 
-
-async def _maybe_run_auto(sym: str, mid: float) -> None:
-    if not any(a.auto.enabled and a.auto.symbol.upper() == sym for a in store.all_accounts()):
-        return
+    candles: list = []
     now = time.monotonic()
     cached = _candle_cache.get(sym)
     if cached and now - cached[0] < _AUTO_CHECK_EVERY:
@@ -57,8 +58,37 @@ async def _maybe_run_auto(sym: str, mid: float) -> None:
             _candle_cache[sym] = (now, candles)
         except Exception as e:
             log.warning("lab auto candles %s: %s", sym, e)
-            return
 
+    last_bar = _last_closed_bar_time(candles)
+    changed = False
+
+    for acc in store.all_accounts():
+        closed_pos = acc.broker.update_tick(sym, q["mid"])
+        for pos in closed_pos:
+            if (pos.realized_pnl or 0) < 0 and last_bar:
+                acc.auto.last_loss_bar_time = last_bar
+                changed = True
+
+    if candles:
+        for acc in store.all_accounts():
+            if not acc.auto.enabled or acc.auto.symbol.upper() != sym:
+                continue
+            if try_auto_fill(acc, candles, q["mid"]):
+                changed = True
+
+    if changed:
+        store.persist()
+
+
+async def _maybe_run_auto(sym: str, mid: float) -> None:
+    """Legacy hook — auto runs inside _refresh_symbol when candles are cached."""
+    if not any(a.auto.enabled and a.auto.symbol.upper() == sym for a in store.all_accounts()):
+        return
+    now = time.monotonic()
+    cached = _candle_cache.get(sym)
+    if not cached or now - cached[0] >= _AUTO_CHECK_EVERY:
+        return
+    candles = cached[1]
     changed = False
     for acc in store.all_accounts():
         if not acc.auto.enabled or acc.auto.symbol.upper() != sym:
