@@ -260,14 +260,22 @@ class TradingEngine:
         *,
         label: str | None = None,
         deposit: float | None = None,
+        code: str | None = None,
     ) -> dict[str, Any]:
         """Dedicated paper book for 3-leg scale-in testing — does not alter other accounts."""
-        return self.create_client_account(
+        result = self.create_client_account(
             label=label or "Scale-in demo (3 legs)",
             deposit=deposit or 1000.0,
             follow_auto=True,
             scale_in_mode=True,
         )
+        if code:
+            acct = self.accounts.get(result["account"]["account_id"])
+            if acct is not None:
+                acct.code = code.strip().upper()
+                self.accounts.save()
+                result["account"] = acct.snapshot_payload()
+        return result
 
     def _mt_demo_account(self) -> PaperAccount:
         """Journal + auto-fill target when execution_mode is mt4/mt5."""

@@ -181,6 +181,7 @@ class CreateScaleInAccountBody(BaseModel):
 
     label: str | None = None
     deposit: float | None = Field(default=1000.0, gt=0, le=1_000_000)
+    code: str | None = Field(default=None, min_length=4, max_length=12)
 
 
 class LoginAccountBody(BaseModel):
@@ -780,6 +781,7 @@ async def create_scale_in_demo_account(
     return get_engine().create_scale_in_demo_account(
         label=body.label,
         deposit=body.deposit,
+        code=body.code,
     )
 
 
