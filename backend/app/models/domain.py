@@ -89,6 +89,8 @@ class OrderRequest(BaseModel):
     attach_stops: bool = True
     limit_price: Optional[float] = None
     expire_at: Optional[datetime] = None
+    setup_id: Optional[str] = None
+    leg_index: Optional[int] = None
 
 
 class Order(BaseModel):
@@ -120,6 +122,8 @@ class Position(BaseModel):
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     strategy: Optional[str] = None
+    setup_id: Optional[str] = None
+    leg_index: Optional[int] = None
     status: PositionStatus = PositionStatus.OPEN
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0

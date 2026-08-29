@@ -103,6 +103,7 @@ class PaperAccount:
     risk: RiskManager
     follow_auto: bool = True
     is_desk: bool = False
+    scale_in_mode: bool = False
     created_at: datetime = field(default_factory=utcnow)
 
     def _effective_daily_pnl(self) -> float:
@@ -127,6 +128,7 @@ class PaperAccount:
             "code": self.code,
             "label": self.label,
             "follow_auto": self.follow_auto,
+            "scale_in_mode": self.scale_in_mode,
             "created_at": self.created_at.isoformat(),
             "deposit": snap.deposit,
             "balance": snap.balance,
@@ -146,6 +148,7 @@ class PaperAccount:
             "account_code": self.code,
             "account_label": self.label,
             "follow_auto": self.follow_auto,
+            "scale_in_mode": self.scale_in_mode,
         }
 
 
@@ -190,6 +193,7 @@ class PaperAccountRegistry:
         label: str | None = None,
         follow_auto: bool = True,
         is_desk: bool = False,
+        scale_in_mode: bool = False,
     ) -> PaperAccount:
         amount = float(deposit if deposit is not None else self.settings.initial_balance)
         amount = max(50.0, min(amount, 1_000_000.0))
@@ -204,6 +208,7 @@ class PaperAccountRegistry:
             risk=risk,
             follow_auto=follow_auto and not is_desk,
             is_desk=is_desk,
+            scale_in_mode=scale_in_mode and not is_desk,
         )
         with self._lock:
             self._accounts[acc.id] = acc
@@ -335,6 +340,7 @@ class PaperAccountRegistry:
                         "label": acc.label,
                         "token": acc.token,
                         "follow_auto": acc.follow_auto,
+                        "scale_in_mode": acc.scale_in_mode,
                         "is_desk": False,
                         "created_at": acc.created_at.isoformat(),
                         "deposit": snap.deposit,
@@ -431,6 +437,7 @@ class PaperAccountRegistry:
                     risk=risk,
                     follow_auto=bool(row.get("follow_auto", True)),
                     is_desk=False,
+                    scale_in_mode=bool(row.get("scale_in_mode", False)),
                     created_at=created_at,
                 )
                 self._accounts[acc.id] = acc

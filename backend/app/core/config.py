@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Avoid flip-flopping between strategies / overtrading paper noise
     strategy_stick_seconds: int = 300
     entry_cooldown_seconds: int = 120
+    # Scale-in demo accounts only (scale_in_mode on paper account — not global)
+    scale_in_max_legs: int = 3
+    scale_in_step_pips: float = 18.0
+    scale_in_base_lot_per_1k: float = 0.01
+    scale_in_leg_cooldown_seconds: int = 60
     # Chart candles (M1) vs signal timeframe for entries (M5)
     candle_period_seconds: int = 60
     signal_period_seconds: int = 300
