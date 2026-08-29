@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
+import { PAIR_PRESETS, STRATEGY_INFO, SUITE_PAIRS } from '../content/compare.js'
 import {
   labTradeApi,
   loadPairSuite,
-  saveLabSession,
   savePairSuite,
 } from '../api.js'
-
-const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF']
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {
@@ -23,6 +20,17 @@ function sessionFromRow(row) {
     code: row.code,
     symbol: row.symbol,
   }
+}
+
+function accountsFromApi(res) {
+  return (res.accounts || []).map((a) => ({
+    symbol: a.symbol,
+    account_id: a.account_id,
+    code: a.code,
+    token: a.token,
+    label: a.label,
+    strategy: a.strategy,
+  }))
 }
 
 export default function PairSuitePage() {
@@ -58,6 +66,32 @@ export default function PairSuitePage() {
 
   useEffect(() => {
     if (!suite?.accounts?.length) return undefined
+    const missing = SUITE_PAIRS.filter(
+      (sym) => !suite.accounts.some((a) => a.symbol === sym),
+    )
+    if (!missing.length) return undefined
+
+    let alive = true
+    ;(async () => {
+      try {
+        const res = await labTradeApi.createPairSuite(10000, true)
+        const accounts = accountsFromApi(res)
+        const payload = { accounts, created_at: new Date().toISOString() }
+        if (!alive) return
+        savePairSuite(payload)
+        setSuite(payload)
+        setNote(`Added ${missing.join(', ')} to suite — auto running on server`)
+      } catch (e) {
+        if (alive) setError(e.message || String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [suite])
+
+  useEffect(() => {
+    if (!suite?.accounts?.length) return undefined
     let alive = true
     ;(async () => {
       try {
@@ -81,14 +115,7 @@ export default function PairSuitePage() {
     setError('')
     try {
       const res = await labTradeApi.createPairSuite(10000, startAuto)
-      const accounts = (res.accounts || []).map((a) => ({
-        symbol: a.symbol,
-        account_id: a.account_id,
-        code: a.code,
-        token: a.token,
-        label: a.label,
-        strategy: a.strategy,
-      }))
+      const accounts = accountsFromApi(res)
       const payload = { accounts, created_at: new Date().toISOString() }
       savePairSuite(payload)
       setSuite(payload)
@@ -121,7 +148,7 @@ export default function PairSuitePage() {
           )
         }),
       )
-      setNote(on ? 'All 4 pair autos started' : 'All 4 pair autos stopped')
+      setNote(on ? 'All 5 pair autos started' : 'All 5 pair autos stopped')
       await refresh()
     } catch (e) {
       setError(e.message || String(e))
@@ -141,11 +168,18 @@ export default function PairSuitePage() {
     setNote('Cleared local pair suite — create again to get fresh credentials')
   }
 
+  const pairList = SUITE_PAIRS.map((id) => (
+    <strong key={id}>{id}</strong>
+  )).reduce((acc, el, i) => {
+    if (i === 0) return [el]
+    return [...acc, ', ', el]
+  }, [])
+
   if (!suite?.accounts?.length) {
     return (
       <div className="lab-page">
         <header className="lab-page-head">
-          <h1>4-pair dry run</h1>
+          <h1>5-pair dry run</h1>
           <p className="lab-muted">
             Isang account bawat pair — tumatakbo sabay sa server kahit iisa lang ang browser mo.
           </p>
@@ -153,9 +187,8 @@ export default function PairSuitePage() {
         <section className="lab-panel">
           <h2>Pair test suite</h2>
           <p className="lab-muted">
-            Gagawa ng 4 demo accounts: <strong>EURUSD</strong>, <strong>GBPUSD</strong>,{' '}
-            <strong>AUDNZD</strong>, <strong>EURCHF</strong>. Bawat isa may sariling strategy preset
-            at auto-trader. Puwedeng i-monitor lahat dito nang sabay.
+            Gagawa ng 5 demo accounts: {pairList}. Bawat isa may sariling strategy preset at
+            auto-trader. Puwedeng i-monitor lahat dito nang sabay.
           </p>
           <ul className="lab-suite-list">
             {SUITE_PAIRS.map((id) => {
@@ -169,10 +202,10 @@ export default function PairSuitePage() {
           </ul>
           <div className="lab-trade-controls">
             <button type="button" className="lab-btn" disabled={busy} onClick={() => bootstrap(true)}>
-              Create 4 accounts + start auto
+              Create 5 accounts + start auto
             </button>
             <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => bootstrap(false)}>
-              Create 4 accounts only
+              Create 5 accounts only
             </button>
           </div>
           {error ? <p className="lab-error-inline">{error}</p> : null}
@@ -186,9 +219,9 @@ export default function PairSuitePage() {
     <div className="lab-page">
       <header className="lab-page-head lab-trade-head">
         <div>
-          <h1>4-pair dry run</h1>
+          <h1>5-pair dry run</h1>
           <p className="lab-muted">
-            4 accounts · tumatakbo sabay sa server · refresh every 4s
+            {suite.accounts.length} accounts · tumatakbo sabay sa server · refresh every 4s
           </p>
         </div>
         <div className="lab-suite-actions">
@@ -219,6 +252,7 @@ export default function PairSuitePage() {
           const strat = STRATEGY_INFO[row.auto?.strategy || preset.strategy] || {}
           const tick = ticks[row.symbol]
           const open = row.positions?.[0]
+          const priceDec = row.symbol === 'XAUUSD' ? 2 : 5
           return (
             <article key={row.account_id} className="lab-panel lab-suite-card">
               <div className="lab-suite-card-head">
@@ -248,7 +282,7 @@ export default function PairSuitePage() {
                 </div>
                 <div>
                   <span className="lab-stat-label">Live</span>
-                  <strong>{tick ? Number(tick.mid).toFixed(row.symbol === 'XAUUSD' ? 2 : 5) : '—'}</strong>
+                  <strong>{tick ? Number(tick.mid).toFixed(priceDec) : '—'}</strong>
                 </div>
               </div>
               {row.auto?.last_block_reason ? (
@@ -258,7 +292,7 @@ export default function PairSuitePage() {
               )}
               {open ? (
                 <p className="lab-suite-open">
-                  Open: {open.side} {open.lots} @ {Number(open.entry_price).toFixed(5)} · uP&amp;L{' '}
+                  Open: {open.side} {open.lots} @ {Number(open.entry_price).toFixed(priceDec)} · uP&amp;L{' '}
                   <span className={open.unrealized_pnl >= 0 ? 'lab-pos' : 'lab-neg'}>
                     ${money(open.unrealized_pnl)}
                   </span>

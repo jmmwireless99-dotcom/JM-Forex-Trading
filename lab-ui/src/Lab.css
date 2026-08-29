@@ -723,6 +723,12 @@ a {
   gap: 1rem;
 }
 
+@media (min-width: 1100px) {
+  .lab-suite-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .lab-suite-card {
   margin: 0;
 }
