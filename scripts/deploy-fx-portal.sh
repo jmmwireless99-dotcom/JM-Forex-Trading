@@ -86,6 +86,18 @@ if [[ -f "$UNIT" ]]; then
   else
     sed -i '/^Environment=JM_AUTO_FILL/a Environment=JM_ASIA_DESK_ONLY=true' "$UNIT"
   fi
+  if grep -q '^Environment=JM_MT_BRIDGE_TOKEN=' "$UNIT"; then
+    MT4_CODE=$(grep '^JM_MT4_REAL_ACCOUNT_CODE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)
+    MT4_DIR=$(grep '^JM_MT4_REAL_BRIDGE_DIR=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)
+    if [[ -n "$MT4_CODE" && -n "$MT4_DIR" ]]; then
+      grep -q '^Environment=JM_MT4_REAL_ACCOUNT_CODE=' "$UNIT" || \
+        sed -i "/^Environment=JM_MT_BRIDGE_TOKEN=/a Environment=JM_MT4_REAL_ACCOUNT_CODE=${MT4_CODE}" "$UNIT"
+      grep -q '^Environment=JM_MT4_REAL_BRIDGE_DIR=' "$UNIT" || \
+        sed -i "/^Environment=JM_MT4_REAL_ACCOUNT_CODE=/a Environment=JM_MT4_REAL_BRIDGE_DIR=${MT4_DIR}" "$UNIT"
+      grep -q '^Environment=JM_MT4_SYMBOL=' "$UNIT" || \
+        sed -i "/^Environment=JM_MT4_REAL_BRIDGE_DIR=/a Environment=JM_MT4_SYMBOL=XAUUSD" "$UNIT"
+    fi
+  fi
   systemctl daemon-reload
 fi
 
