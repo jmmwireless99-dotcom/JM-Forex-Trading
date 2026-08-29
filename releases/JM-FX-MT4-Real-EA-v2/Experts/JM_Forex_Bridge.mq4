@@ -6,7 +6,7 @@
 #property version   "2.00"
 #property description "JM Forex AI bridge — local files or direct cloud sync (MT4 real)"
 
-input string InpSymbol           = "XAUUSD";
+input string InpSymbol           = "GOLD";
 input int    InpMagic            = 260719;
 input int    InpSlippagePoints   = 30;
 input int    InpPollMs           = 200;

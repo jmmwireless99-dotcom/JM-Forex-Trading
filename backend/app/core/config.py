@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     execution_mode: str = "paper"
     mt4_bridge_dir: str = ""
     mt5_bridge_dir: str = ""
-    mt4_symbol: str = "XAUUSD"
+    mt4_symbol: str = "GOLD"
     # XM MT5 gold symbol (desk still uses XAUUSD internally)
     mt_symbol: str = "GOLD#"
 

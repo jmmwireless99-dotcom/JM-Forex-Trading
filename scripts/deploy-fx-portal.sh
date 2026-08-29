@@ -40,6 +40,8 @@ upsert_env JM_AI_SMC_SELL_OVERLAP_MIN_N 5
 upsert_env JM_AUTO_FILL_SINGLE_BOOK false
 upsert_env JM_EXECUTION_MODE paper
 upsert_env JM_DEFAULT_SYMBOLS XAUUSD
+# XM MT4 live gold symbol (desk still uses XAUUSD internally)
+grep -q '^JM_MT4_SYMBOL=' "$ENV_FILE" 2>/dev/null || upsert_env JM_MT4_SYMBOL GOLD
 upsert_env JM_ASIA_DESK_ONLY true
 # Investment dashboard (do not overwrite JM_INVEST_SECRET if present)
 grep -q '^JM_INVEST_SECRET=' "$ENV_FILE" 2>/dev/null || upsert_env JM_INVEST_SECRET "$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -94,8 +96,13 @@ if [[ -f "$UNIT" ]]; then
         sed -i "/^Environment=JM_MT_BRIDGE_TOKEN=/a Environment=JM_MT4_REAL_ACCOUNT_CODE=${MT4_CODE}" "$UNIT"
       grep -q '^Environment=JM_MT4_REAL_BRIDGE_DIR=' "$UNIT" || \
         sed -i "/^Environment=JM_MT4_REAL_ACCOUNT_CODE=/a Environment=JM_MT4_REAL_BRIDGE_DIR=${MT4_DIR}" "$UNIT"
-      grep -q '^Environment=JM_MT4_SYMBOL=' "$UNIT" || \
-        sed -i "/^Environment=JM_MT4_REAL_BRIDGE_DIR=/a Environment=JM_MT4_SYMBOL=XAUUSD" "$UNIT"
+      MT4_SYM=$(grep '^JM_MT4_SYMBOL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo GOLD)
+      MT4_SYM="${MT4_SYM:-GOLD}"
+      if grep -q '^Environment=JM_MT4_SYMBOL=' "$UNIT"; then
+        sed -i "s/^Environment=JM_MT4_SYMBOL=.*/Environment=JM_MT4_SYMBOL=${MT4_SYM}/" "$UNIT"
+      else
+        sed -i "/^Environment=JM_MT4_REAL_BRIDGE_DIR=/a Environment=JM_MT4_SYMBOL=${MT4_SYM}" "$UNIT"
+      fi
     fi
   fi
   systemctl daemon-reload

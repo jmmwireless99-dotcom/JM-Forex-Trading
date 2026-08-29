@@ -13,7 +13,7 @@ def _resolve_mt_symbol(settings, *, mode: str) -> str:
     remote = bool(getattr(settings, "mt_remote_bridge", False))
     if mt5_path or remote or mode == "mt5":
         return getattr(settings, "mt_symbol", None) or "GOLD#"
-    return getattr(settings, "mt4_symbol", None) or getattr(settings, "mt_symbol", "XAUUSD")
+    return getattr(settings, "mt4_symbol", None) or "GOLD"
 
 
 def resolve_platform_bridge(
@@ -27,10 +27,10 @@ def resolve_platform_bridge(
 
     if platform == "mt4":
         path = getattr(settings, "mt4_bridge_dir", "") or ""
-        mt_symbol = getattr(settings, "mt4_symbol", None) or "XAUUSD"
+        mt_symbol = getattr(settings, "mt4_symbol", None) or "GOLD"
     elif platform == "mt4_real":
         path = getattr(settings, "mt4_real_bridge_dir", "") or ""
-        mt_symbol = getattr(settings, "mt4_symbol", None) or "XAUUSD"
+        mt_symbol = getattr(settings, "mt4_symbol", None) or "GOLD"
     else:
         path = getattr(settings, "mt5_bridge_dir", "") or ""
         mt_symbol = getattr(settings, "mt_symbol", None) or "GOLD#"
