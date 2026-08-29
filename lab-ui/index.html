@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JM Lab · Experiments</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect fill='%231a1033' width='32' height='32' rx='6'/><text x='16' y='22' text-anchor='middle' fill='%23a78bfa' font-size='14' font-family='sans-serif'>L</text></svg>" />
+    <style>
+      #root:empty::after {
+        content: 'Loading JM Lab…';
+        display: block;
+        padding: 3rem 1.5rem;
+        text-align: center;
+        color: #c5b8e8;
+        font-family: system-ui, sans-serif;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -45,9 +45,8 @@ if ! grep -q '/lab/assets/' dist/index.html; then
 fi
 
 echo "[3/4] Publish static files → ${LAB_DIR}..."
-mkdir -p "$(dirname "$LAB_DIR")"
-rm -rf "${LAB_DIR}"
 mkdir -p "${LAB_DIR}"
+# Merge build — keep previous hashed assets so cached index.html still loads after deploy
 cp -a dist/. "${LAB_DIR}/"
 chown -R www-data:www-data "$(dirname "$LAB_DIR")" 2>/dev/null || true
 
@@ -79,4 +78,4 @@ echo ""
 echo "OK — JM Lab static files deployed to ${LAB_DIR}"
 echo "    JM FX (/fx/) was NOT rebuilt and jm-forex.service was NOT restarted."
 echo "    Open: https://jmtechsolution.cloud/lab/#trade"
-echo "    Per-pair: https://jmtechsolution.cloud/lab/EURUSD (GBPUSD, AUDNZD, EURCHF)"
+echo "    Per-pair: https://jmtechsolution.cloud/lab/EURUSD (GBPUSD, AUDNZD, EURCHF, XAUUSD)"

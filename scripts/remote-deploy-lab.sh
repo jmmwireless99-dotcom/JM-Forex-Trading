@@ -27,6 +27,8 @@ echo "Deploying JM Lab only (${BRANCH}) → ${USER}@${HOST}"
 "${SSH[@]}" "set -euo pipefail
   cd '${DIR}'
   export BRANCH='${BRANCH}'
+  git fetch origin \"\${BRANCH}\"
+  git checkout -B \"\${BRANCH}\" \"origin/\${BRANCH}\"
   chmod +x scripts/deploy-lab-portal.sh scripts/deploy-lab-backend.sh scripts/install-apache-lab-snippet.sh 2>/dev/null || true
   if [[ -x scripts/install-apache-lab-snippet.sh ]]; then
     ./scripts/install-apache-lab-snippet.sh || true
