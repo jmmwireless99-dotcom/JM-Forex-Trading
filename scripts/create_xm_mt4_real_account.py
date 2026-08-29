@@ -25,6 +25,7 @@ def main() -> None:
     )
     parser.add_argument("--label", default=DEFAULT_LABEL, help="Account label")
     parser.add_argument("--code", default="", help="Pin account code (6 chars)")
+    parser.add_argument("--token", default="", help="Pin account token (keep existing login)")
     parser.add_argument("--deposit", type=float, default=DEFAULT_DEPOSIT, help="Initial display deposit")
     parser.add_argument(
         "--follow-auto",
@@ -71,6 +72,11 @@ def main() -> None:
     if existing:
         acct = existing
         created = False
+        if code_u:
+            acct.code = code_u
+        if (args.token or "").strip():
+            acct.token = args.token.strip()
+        reg.save()
     else:
         acct = reg.create(
             deposit=args.deposit,
@@ -80,6 +86,8 @@ def main() -> None:
         )
         if code_u:
             acct.code = code_u
+        if (args.token or "").strip():
+            acct.token = args.token.strip()
         reg.save()
         created = True
 
