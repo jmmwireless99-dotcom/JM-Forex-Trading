@@ -3,14 +3,17 @@ JM FX — Lahat ng Download Links
 
 GITHUB (raw — direktang download sa browser)
 ---------------------------------------------
-Complete Pack (ZIP — lahat + Python):
+Complete Pack (ZIP — lahat + Python) — GAMITIN ITO:
+  https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-Complete-Pack.zip
+
+Alternate (redirect):
   https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-Complete-Pack.zip
 
 MT5 EA v2 only (ZIP):
-  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-MT5-EA-v2.zip
+  https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-MT5-EA-v2.zip
 
-MT5 Bridge Pack (ZIP — may PC agent):
-  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-MT5-Bridge-Pack.zip
+MT5 Bridge Pack (ZIP):
+  https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-MT5-Bridge-Pack.zip
 
 Individual files:
   MT5 EA:        .../raw/main/mt5/Experts/JM_Forex_Bridge.mq5

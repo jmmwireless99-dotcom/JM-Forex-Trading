@@ -5,10 +5,10 @@ Lahat ng kailangan para sa MT5 (DDDC3D) + MT4 demo + MT4 real sa Windows PC.
 
 DIRECT DOWNLOAD (GitHub)
 ------------------------
-Full ZIP (lahat ng files + Python):
-  https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-Complete-Pack.zip
+Full ZIP (lahat ng files + Python) — GAMITIN ITO:
+  https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-Complete-Pack.zip
 
-Cloud mirror:
+Cloud mirror (mas mabilis sa PH):
   https://jmtechsolution.cloud/fx/api/downloads/jmfx-complete.zip
 
 CONTENTS
