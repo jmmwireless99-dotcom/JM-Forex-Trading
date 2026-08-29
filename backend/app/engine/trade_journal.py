@@ -62,7 +62,7 @@ class TradeJournal:
         return row
 
     def record_open_position(self, position: Position, *, mode: str = "paper") -> TradeLog:
-        existing = self._by_ticket.get(position.id)
+        existing = self._by_ticket.get(str(position.id))
         if existing and existing.status == TradeStatus.OPEN:
             existing.entry = position.entry_price
             existing.stop_loss = position.stop_loss
@@ -87,19 +87,40 @@ class TradeJournal:
             unrealized_pnl=position.unrealized_pnl,
         )
         self._trades.appendleft(row)
-        self._by_ticket[position.id] = row
+        self._by_ticket[str(position.id)] = row
         return row
 
     def update_open_pnl(self, positions: list[Position]) -> None:
         for position in positions:
-            row = self._by_ticket.get(position.id)
+            row = self._by_ticket.get(str(position.id))
             if row and row.status == TradeStatus.OPEN:
                 row.unrealized_pnl = position.unrealized_pnl
                 row.stop_loss = position.stop_loss
                 row.take_profit = position.take_profit
 
+    def record_mt5_open(self, order: Order, position: Position, *, mode: str = "mt5") -> TradeLog:
+        from app.engine.mt5_journal_sync import journal_row_from_mt5_fill
+
+        ticket = str(position.id)
+        existing = self._by_ticket.get(ticket)
+        if existing and existing.status == TradeStatus.OPEN:
+            existing.entry = position.entry_price
+            existing.stop_loss = position.stop_loss or order.stop_loss
+            existing.take_profit = position.take_profit or order.take_profit
+            existing.lots = position.lots
+            existing.unrealized_pnl = position.unrealized_pnl
+            existing.strategy = order.strategy or existing.strategy
+            existing.mode = mode
+            existing.comment = f"mt5:{ticket}"
+            return existing
+
+        row = journal_row_from_mt5_fill(order, position, mode=mode)
+        self._trades.appendleft(row)
+        self._by_ticket[ticket] = row
+        return row
+
     def record_close(self, position: Position) -> TradeLog | None:
-        row = self._by_ticket.get(position.id)
+        row = self._by_ticket.get(str(position.id))
         if row is None:
             row = TradeLog(
                 ticket=position.id,
@@ -113,7 +134,7 @@ class TradeJournal:
                 opened_at=position.opened_at or utcnow(),
             )
             self._trades.appendleft(row)
-            self._by_ticket[position.id] = row
+            self._by_ticket[str(position.id)] = row
 
         row.status = TradeStatus.CLOSED
         row.exit = position.close_price

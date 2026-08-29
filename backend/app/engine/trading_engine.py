@@ -15,6 +15,11 @@ from app.brokers.paper import PaperBroker
 from app.core.config import Settings
 from app.engine.candles import CandleAggregator
 from app.engine.trade_journal import TradeJournal
+from app.engine.mt5_journal_sync import (
+    parse_mt5_ticket,
+    sync_journal_with_mt5,
+    wait_mt_position,
+)
 from app.models.domain import (
     AccountSnapshot,
     Candle,
@@ -28,6 +33,7 @@ from app.models.domain import (
     Side,
     Signal,
     Tick,
+    TradeStatus,
     utcnow,
 )
 from app.paper_accounts import PaperAccount, PaperAccountRegistry
@@ -110,6 +116,7 @@ class TradingEngine:
         self._last_session_slot: str | None = None
         self._last_transfer_note: str | None = None
         self._journaled_limit_ids: set[str] = set()
+        self._last_mt_journal_sync_at: float = 0.0
         self._london_signal_ids: dict[str, str] = {}  # order.id -> london_signal uuid
         self.advisor = TradeAdvisor(
             history_path=settings.ai_history_path,
@@ -273,10 +280,12 @@ class TradingEngine:
         return None
 
     async def notify_mt_demo_sync(self) -> None:
-        """Push live MT5 balance/positions to DDDC3D clients after PC agent sync."""
+        """Push live MT5 balance/positions to DDDC3D clients after bridge sync."""
         acct = self.mt_demo_account()
         if acct is None:
             return
+        tick = self._recent_ticks.get(self.settings.symbols[0])
+        await self._sync_mt_demo_journal(acct, tick=tick, force=True)
         await self._emit("account", self.account_payload(acct))
         await self._emit(
             "positions",
@@ -286,6 +295,58 @@ class TradingEngine:
             },
         )
         await self._emit("connection", self.connection_info())
+
+    async def _sync_mt_demo_journal(
+        self,
+        account: PaperAccount,
+        *,
+        tick: Tick | None = None,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Mirror MT5 bridge fills/closes into DDDC3D JM FX trade log."""
+        if not self._is_mt_demo_account(account) or not self.mt or not self._mt_bridge_live():
+            return {"skipped": True}
+        now = time.time()
+        if not force and (now - self._last_mt_journal_sync_at) < 2.0:
+            return {"skipped": True, "reason": "throttled"}
+        self._last_mt_journal_sync_at = now
+        symbol = self.settings.symbols[0]
+        tick = tick or self._recent_ticks.get(symbol)
+        if tick is None and self.mt:
+            tick = self.mt.read_tick()
+            if tick:
+                self._recent_ticks[tick.symbol] = tick
+
+        before_closed = {
+            t.ticket
+            for t in account.journal.list(500)
+            if t.status == TradeStatus.CLOSED
+        }
+        result = sync_journal_with_mt5(
+            account.journal,
+            self.mt.open_positions(),
+            tick=tick,
+            mode="mt5",
+        )
+        account.journal.update_open_pnl(self.mt.open_positions())
+
+        for row in account.journal.list(500):
+            if row.status != TradeStatus.CLOSED or row.ticket in before_closed:
+                continue
+            if self.advisor.enabled:
+                try:
+                    self.advisor.record_close_from_trade(row)
+                except Exception:
+                    pass
+            await self._emit(
+                "trade",
+                {**row.model_dump(mode="json"), "account_id": account.id},
+            )
+
+        if result.get("closed") or result.get("opened") or result.get("updated"):
+            await self._emit("trades", self._trades_payload(account))
+            await self._emit("ai", self.ai_status())
+        return result
 
     def mt_demo_link_status(self, account: PaperAccount) -> dict[str, Any]:
         linked = self._is_mt_demo_account(account)
@@ -1312,6 +1373,9 @@ class TradingEngine:
                             )
                         acct.journal.update_open_pnl(acct.broker.open_positions())
                         await self._sync_limit_fills(acct)
+                    mt_acct = self.mt_demo_account()
+                    if mt_acct is not None and self._mt_bridge_live():
+                        await self._sync_mt_demo_journal(mt_acct, tick=tick)
                     await self._london_kill_switch(tick)
 
                 closed_candle, forming = self.candles.update(tick)
@@ -1640,12 +1704,53 @@ class TradingEngine:
                 )
                 return rejected
             order = self.mt.place_order(request)
-            pos = (
-                self._latest_open(request.symbol, request.side, acct)
-                if order.status == OrderStatus.FILLED
-                else None
+            row = None
+            if order.status == OrderStatus.FILLED:
+                mt_pos = None
+                ticket = parse_mt5_ticket(order)
+                if ticket:
+                    mt_pos = wait_mt_position(self.mt, ticket)
+                if mt_pos is None:
+                    mt_pos = self._latest_open(request.symbol, request.side, acct)
+                if mt_pos is not None:
+                    mt_pos = mt_pos.model_copy(update={"strategy": request.strategy})
+                    order.fill_price = mt_pos.entry_price
+                    row = acct.journal.record_mt5_open(order, mt_pos, mode="mt5")
+                    self._arm_entry_cooldown()
+                    await self._persist_trade_open(
+                        order, mt_pos, signal_db_id=signal_db_id
+                    )
+                    if self.advisor.enabled:
+                        try:
+                            self.advisor.record_open_from_trade(
+                                row, account_id=acct.id, mode="mt5"
+                            )
+                        except Exception:
+                            pass
+                else:
+                    row = acct.journal.record_order(order, mode="mt5")
+            else:
+                row = acct.journal.record_order(order, mode="mt5")
+            if row is not None:
+                await self._emit(
+                    "trade", {**row.model_dump(mode="json"), "account_id": acct.id}
+                )
+                await self._emit("trades", self._trades_payload(acct))
+            await self._sync_mt_demo_journal(acct, tick=tick, force=True)
+            await self._emit(
+                "order", {**order.model_dump(mode="json"), "account_id": acct.id}
             )
-            await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
+            await self._emit("account", self.account_payload(acct))
+            await self._emit(
+                "positions",
+                {
+                    "account_id": acct.id,
+                    "positions": [
+                        p.model_dump(mode="json") for p in self.open_positions(acct)
+                    ],
+                },
+            )
+            return order
         else:
             if self.mode in {"mt4", "mt5"} and not self.mt_online():
                 rejected = Order(
