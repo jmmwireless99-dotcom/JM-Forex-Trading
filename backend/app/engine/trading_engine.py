@@ -356,6 +356,21 @@ class TradingEngine:
             return bridge.snapshot()
         return self._empty_mt_snapshot()
 
+    def _linked_mt_accounts(self) -> list[PaperAccount]:
+        """All MT-linked JM FX accounts — MT5 demo, MT4 demo, MT4 real (priority order)."""
+        out: list[PaperAccount] = []
+        seen: set[str] = set()
+        for getter in (
+            self.mt_demo_account,
+            self.mt4_demo_account,
+            self.mt4_real_account,
+        ):
+            acct = getter()
+            if acct is not None and acct.id not in seen:
+                seen.add(acct.id)
+                out.append(acct)
+        return out
+
     def _account_executes_via_mt(self, account: PaperAccount) -> bool:
         return self._is_mt_demo_account(account)
 
@@ -1694,20 +1709,27 @@ class TradingEngine:
         """Accounts that receive auto strategy fills.
 
         One desk strategy signal fans out to every auto-follow client — same
-        AI_ML / EMA_RSI / SMC setup for all books. MT5 demo (DDDC3D) executes
-        on the bridge; paper accounts fill on their own book.
+        AI_ML / EMA_RSI / SMC setup for all books. MT-linked accounts execute
+        on their bridge first; paper accounts fill on their own book.
         """
-        mt_acct = self.mt_demo_account()
+        linked_mt = self._linked_mt_accounts()
         followers = self.accounts.auto_followers()
 
-        def _append_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
-            if mt_acct is None or mt_acct.id in {a.id for a in pool}:
+        def _prepend_linked_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
+            if not linked_mt:
                 return pool
-            # MT5 demo (DDDC3D) first — don't wait for 50+ paper fills
-            return [mt_acct, *pool]
+            pool_ids = {a.id for a in pool}
+            mt_in_pool = [a for a in linked_mt if a.id in pool_ids]
+            mt_extra = [
+                a for a in linked_mt if a.id not in pool_ids and a.follow_auto
+            ]
+            ordered_mt = mt_in_pool + mt_extra
+            seen = {a.id for a in ordered_mt}
+            rest = [a for a in pool if a.id not in seen]
+            return [*ordered_mt, *rest]
 
         if not self.settings.auto_fill_single_book:
-            return _append_mt(followers)
+            return _prepend_linked_mt(followers)
 
         code = (self.settings.auto_fill_account_code or "").strip().upper()
         if code:
@@ -1724,8 +1746,8 @@ class TradingEngine:
         if followers:
             followers = sorted(followers, key=lambda a: a.created_at)
             return followers[:1]
-        if mt_acct is not None:
-            return [mt_acct]
+        if linked_mt:
+            return linked_mt[:1]
         return []
 
     async def _handle_scale_in_signal_for_account(
@@ -1736,6 +1758,7 @@ class TradingEngine:
         account: PaperAccount,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
+        defer_save: bool = False,
     ) -> None:
         """Up to 3 same-side legs on pullbacks — scale-in paper account only."""
         opens = self.open_positions(account)
@@ -1827,6 +1850,7 @@ class TradingEngine:
             tick=tick,
             signal_db_id=signal_db_id,
             account=account,
+            defer_save=defer_save,
         )
         if order.status == OrderStatus.FILLED:
             mark_leg_added(account.id)
@@ -1924,42 +1948,74 @@ class TradingEngine:
                 cached_advice = None
 
         if cached_advice is not None and self.advisor.should_block(cached_advice):
-            for acct in targets:
-                rejected = Order(
-                    symbol=signal.symbol,
-                    side=signal.side,
-                    lots=0.01,
-                    strategy=signal.strategy,
-                    comment=(signal.reason or "")[:60],
-                    status=OrderStatus.REJECTED,
-                    reject_reason=(
-                        f"AI_ML_SKIP p={cached_advice.win_probability:.0%} · "
-                        + (
-                            cached_advice.reasons[0]
-                            if cached_advice.reasons
-                            else "low ML win probability"
-                        )
-                    ),
-                    stop_loss=signal.stop_loss,
-                    take_profit=signal.take_profit,
-                )
-                await self._journal_fill(
-                    rejected, signal_db_id=signal_db_id, account=acct
-                )
+            await asyncio.gather(
+                *[
+                    self._journal_fill(
+                        Order(
+                            symbol=signal.symbol,
+                            side=signal.side,
+                            lots=0.01,
+                            strategy=signal.strategy,
+                            comment=(signal.reason or "")[:60],
+                            status=OrderStatus.REJECTED,
+                            reject_reason=(
+                                f"AI_ML_SKIP p={cached_advice.win_probability:.0%} · "
+                                + (
+                                    cached_advice.reasons[0]
+                                    if cached_advice.reasons
+                                    else "low ML win probability"
+                                )
+                            ),
+                            stop_loss=signal.stop_loss,
+                            take_profit=signal.take_profit,
+                        ),
+                        signal_db_id=signal_db_id,
+                        account=acct,
+                    )
+                    for acct in targets
+                ]
+            )
             return
 
-        # Linked MT demo/real accounts before paper fan-out
         mt_targets = [a for a in targets if self._account_executes_via_mt(a)]
         paper_targets = [a for a in targets if not self._account_executes_via_mt(a)]
-        for acct in mt_targets + paper_targets:
-            await self._handle_signal_for_account(
-                signal,
-                tick,
-                account=acct,
-                signal_db_id=signal_db_id,
-                london_signal_id=london_signal_id,
-                cached_advice=cached_advice,
+
+        async def _mt_for_bridge(accts: list[PaperAccount]) -> None:
+            for acct in accts:
+                await self._handle_signal_for_account(
+                    signal,
+                    tick,
+                    account=acct,
+                    signal_db_id=signal_db_id,
+                    london_signal_id=london_signal_id,
+                    cached_advice=cached_advice,
+                )
+
+        by_bridge: dict[str, list[PaperAccount]] = {}
+        for acct in mt_targets:
+            key = self._demo_platform(acct) or "mt5"
+            by_bridge.setdefault(key, []).append(acct)
+        if by_bridge:
+            await asyncio.gather(
+                *[_mt_for_bridge(accts) for accts in by_bridge.values()]
             )
+
+        if paper_targets:
+            await asyncio.gather(
+                *[
+                    self._handle_signal_for_account(
+                        signal,
+                        tick,
+                        account=acct,
+                        signal_db_id=signal_db_id,
+                        london_signal_id=london_signal_id,
+                        cached_advice=cached_advice,
+                        defer_save=True,
+                    )
+                    for acct in paper_targets
+                ]
+            )
+            self.accounts.save()
 
     async def _handle_signal_for_account(
         self,
@@ -1970,6 +2026,7 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
         cached_advice: Any | None = None,
+        defer_save: bool = False,
     ) -> None:
         if self._is_scale_in_account(account):
             await self._handle_scale_in_signal_for_account(
@@ -1978,6 +2035,7 @@ class TradingEngine:
                 account=account,
                 signal_db_id=signal_db_id,
                 london_signal_id=london_signal_id,
+                defer_save=defer_save,
             )
             return
 
@@ -2058,6 +2116,7 @@ class TradingEngine:
             tick=tick,
             signal_db_id=signal_db_id,
             account=account,
+            defer_save=defer_save,
         )
         if london_signal_id and order:
             key = f"{account.id}:{order.id}"
@@ -2084,6 +2143,7 @@ class TradingEngine:
         *,
         signal_db_id: str | None = None,
         account: PaperAccount | None = None,
+        defer_save: bool = False,
     ) -> Order:
         acct = account or self._desk
         tick = tick or self._recent_ticks.get(request.symbol)
@@ -2240,7 +2300,8 @@ class TradingEngine:
                         pos = p
                         break
             await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
-            self.accounts.save()
+            if not defer_save:
+                self.accounts.save()
 
         await self._emit(
             "order", {**order.model_dump(mode="json"), "account_id": acct.id}
