@@ -1703,7 +1703,8 @@ class TradingEngine:
         def _append_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
             if mt_acct is None or mt_acct.id in {a.id for a in pool}:
                 return pool
-            return [*pool, mt_acct]
+            # MT5 demo (DDDC3D) first — don't wait for 50+ paper fills
+            return [mt_acct, *pool]
 
         if not self.settings.auto_fill_single_book:
             return _append_mt(followers)
@@ -1903,17 +1904,61 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Desk book never receives client auto fills (unless MT mode).
         targets = self._auto_fill_targets()
         if not targets:
             return
-        for acct in targets:
+
+        entry_px = None
+        if tick is not None:
+            entry_px = tick.ask if signal.side == Side.BUY else tick.bid
+        if signal.limit_price is not None:
+            entry_px = signal.limit_price
+
+        cached_advice = None
+        if self.advisor.enabled:
+            try:
+                cached_advice = self.advisor.advise_signal(signal, entry=entry_px)
+                self._last_advice = cached_advice.as_dict()
+                await self._emit("ai_advice", self._last_advice)
+            except Exception:
+                cached_advice = None
+
+        if cached_advice is not None and self.advisor.should_block(cached_advice):
+            for acct in targets:
+                rejected = Order(
+                    symbol=signal.symbol,
+                    side=signal.side,
+                    lots=0.01,
+                    strategy=signal.strategy,
+                    comment=(signal.reason or "")[:60],
+                    status=OrderStatus.REJECTED,
+                    reject_reason=(
+                        f"AI_ML_SKIP p={cached_advice.win_probability:.0%} · "
+                        + (
+                            cached_advice.reasons[0]
+                            if cached_advice.reasons
+                            else "low ML win probability"
+                        )
+                    ),
+                    stop_loss=signal.stop_loss,
+                    take_profit=signal.take_profit,
+                )
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+            return
+
+        # Linked MT demo/real accounts before paper fan-out
+        mt_targets = [a for a in targets if self._account_executes_via_mt(a)]
+        paper_targets = [a for a in targets if not self._account_executes_via_mt(a)]
+        for acct in mt_targets + paper_targets:
             await self._handle_signal_for_account(
                 signal,
                 tick,
                 account=acct,
                 signal_db_id=signal_db_id,
                 london_signal_id=london_signal_id,
+                cached_advice=cached_advice,
             )
 
     async def _handle_signal_for_account(
@@ -1924,6 +1969,7 @@ class TradingEngine:
         account: PaperAccount,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
+        cached_advice: Any | None = None,
     ) -> None:
         if self._is_scale_in_account(account):
             await self._handle_scale_in_signal_for_account(
@@ -1955,8 +2001,8 @@ class TradingEngine:
             entry_px = tick.ask if signal.side == Side.BUY else tick.bid
         if signal.limit_price is not None:
             entry_px = signal.limit_price
-        advice = None
-        if self.advisor.enabled:
+        advice = cached_advice
+        if advice is None and self.advisor.enabled:
             try:
                 advice = self.advisor.advise_signal(signal, entry=entry_px)
                 self._last_advice = advice.as_dict()
@@ -2113,7 +2159,7 @@ class TradingEngine:
                     {**rejected.model_dump(mode="json"), "account_id": acct.id},
                 )
                 return rejected
-            order = bridge.place_order(request)
+            order = await asyncio.to_thread(bridge.place_order, request)
             row = None
             if order.status == OrderStatus.FILLED:
                 mt_pos = None

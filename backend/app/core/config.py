@@ -110,9 +110,10 @@ class Settings(BaseSettings):
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""
-    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 60s remote)
+    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 30s remote)
     mt_bridge_online_max_age: float = 0.0
     mt_bridge_order_timeout: float = 0.0
+    mt_bridge_ack_poll_seconds: float = 0.02
 
     # Investment dashboard (30% / 30 days default yield model)
     invest_secret: str = "jm-fx-invest-dev-secret-change-me"
