@@ -1,12 +1,28 @@
 # JM FX Downloads
 
+## MT4 Bridge Pack (recommended for MT4)
+
+| File | Link |
+|------|------|
+| **MT4 Bridge Pack ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt4-bridge.zip |
+| **MT4 EA v2 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt4-ea-v2.zip |
+| **MT4 Real EA v2 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt4-real-ea-v2.zip |
+| GitHub mirror (full pack) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases/JM-FX-MT4-Bridge-Pack.zip |
+| MT4 EA (.mq4) | https://jmtechsolution.cloud/fx/api/downloads/JM_Forex_Bridge.mq4 |
+| All MT4 links (JSON) | https://jmtechsolution.cloud/fx/api/downloads/mt4-bridge |
+
+Contents: `JM_Forex_Bridge.mq4` v2.00 + setup guides for MT4 demo (local) and MT4 real (cloud)
+
+Rebuild: `./scripts/build-mt4-bridge-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |
 |------|------|
 | **MT4 Real EA v2 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/mt4-real-ea-v2.zip |
 | GitHub mirror | https://raw.githubusercontent.com/jmmwireless99-dotcom/JM-Forex-Trading/main/releases/JM-FX-MT4-Real-EA-v2.zip |
-| MT4 EA (.mq4) | https://jmtechsolution.cloud/fx/api/downloads/JM_Forex_Bridge.mq4 |
 
 Contents: `JM_Forex_Bridge.mq4` v2.00 + setup guide for MT4 **real** account (direct HTTP, walang PC agent)
 

@@ -1,0 +1,29 @@
+JM FX MT4 Demo — Local File Bridge
+====================================
+
+Para sa XM MT4 DEMO account (hiwalay sa MT4 Real at MT5 DDDC3D).
+
+INSTALL
+-------
+1. MT4 → File → Open Data Folder → MQL4\Experts\
+   Kopyahin ang Experts\JM_Forex_Bridge.mq4 → Compile (F7)
+
+2. Attach sa GOLD chart (XM demo symbol):
+   InpSymbol          = GOLD
+   InpUseCloudBridge  = false
+   UseCommonFolder    = true
+   AutoTrading ON
+
+3. Common Files path (dito nag-sync ang EA):
+   C:\Users\YOU\AppData\Roaming\MetaQuotes\Terminal\Common\Files
+
+4. Sa server .env:
+   JM_MT4_BRIDGE_DIR=<path sa Common\Files>
+   JM_MT4_SYMBOL=GOLD
+   JM_MT4_DEMO_ACCOUNT_CODE=<your demo code>
+   JM_MT4_DEMO_LOGIN=<your MT4 demo login>
+
+5. Login sa https://jmtechsolution.cloud/fx/ gamit ang MT4 demo code + token
+
+NOTE: MT4 Demo gumagamit ng local file bridge — kailangan naka-sync ang
+Common\Files folder sa server, o tumatakbo ang MT4 sa same machine ng server.
