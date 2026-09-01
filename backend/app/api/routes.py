@@ -478,6 +478,27 @@ async def _remote_sync_handler(body: "MtRemoteSyncBody", platform: str) -> dict:
 
     command_path = root / COMMAND_FILE
     command = command_path.read_text(encoding="utf-8") if command_path.exists() else ""
+
+    # Drop fulfilled commands — stale OPEN rows block new orders on remote bridge
+    if body.ack and command_path.exists():
+        ack_line = next((ln.strip() for ln in (body.ack or "").splitlines() if ln.strip()), "")
+        cmd_line = next(
+            (ln.strip() for ln in command.splitlines() if ln.strip() and not ln.startswith("id,action")),
+            "",
+        )
+        if ack_line and cmd_line:
+            ack_parts = ack_line.split(",")
+            cmd_id = cmd_line.split(",", 1)[0]
+            if (
+                len(ack_parts) >= 2
+                and ack_parts[0] == cmd_id
+                and ack_parts[1].upper() == "OK"
+            ):
+                command_path.write_text(
+                    "id,action,symbol,side,lots,sl,tp,comment\n", encoding="utf-8"
+                )
+                command = command_path.read_text(encoding="utf-8")
+
     if "jm_status.csv" in written or "jm_ticks.csv" in written:
         if platform == "mt4_real":
             await engine.notify_mt4_real_sync()
