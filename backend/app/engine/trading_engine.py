@@ -1322,11 +1322,18 @@ class TradingEngine:
             if self._is_scale_in_account(acct):
                 from app.risk.scale_in import scale_in_lots
 
-                note = (
-                    "Scale-in demo — up to 3 legs on pullbacks "
-                    f"({self.settings.scale_in_step_pips:g}p steps). "
-                    "Other accounts unchanged."
-                )
+                if self.settings.scale_in_structure_pullback:
+                    note = (
+                        "Scale-in demo — up to 3 legs on M1 structure pullbacks "
+                        f"({self.settings.scale_in_min_pullback_atr:g}×ATR + swing zone). "
+                        "Other accounts unchanged."
+                    )
+                else:
+                    note = (
+                        "Scale-in demo — up to 3 legs on pullbacks "
+                        f"({self.settings.scale_in_step_pips:g}p steps). "
+                        "Other accounts unchanged."
+                    )
             else:
                 note = "Paper demo capital for this account only — other clients cannot see it"
             paper = not self.using_mt()
@@ -1356,8 +1363,20 @@ class TradingEngine:
             if account and self._is_scale_in_account(acct)
             else None,
             "scale_in_lots": scale_in_lots_preview,
-            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            "scale_in_structure_pullback": bool(
+                self.settings.scale_in_structure_pullback
+            )
             if account and self._is_scale_in_account(acct)
+            else None,
+            "scale_in_min_pullback_atr": float(self.settings.scale_in_min_pullback_atr)
+            if account
+            and self._is_scale_in_account(acct)
+            and self.settings.scale_in_structure_pullback
+            else None,
+            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            if account
+            and self._is_scale_in_account(acct)
+            and not self.settings.scale_in_structure_pullback
             else None,
             "mt5_only": bool(account and self._is_mt5_demo_account(account)),
             "mt4_only": bool(account and self._is_mt4_demo_account(account)),
@@ -1906,6 +1925,10 @@ class TradingEngine:
                 legs = open_legs(opens, symbol=pos.symbol, side=pos.side)
                 if len(legs) >= int(self.settings.scale_in_max_legs):
                     continue
+                m1_bars = self.candles.closed_history(pos.symbol, 240)
+                from app.strategies.entry_setup import true_atr
+
+                atr = true_atr(m1_bars, 14) if m1_bars else None
                 plan = plan_scale_in_entry(
                     symbol=pos.symbol,
                     side=pos.side,
@@ -1914,6 +1937,8 @@ class TradingEngine:
                     tick=tick,
                     settings=self.settings,
                     require_depth=True,
+                    candles=m1_bars,
+                    atr=atr,
                 )
                 if not plan.allowed or plan.leg <= 1:
                     continue
@@ -1923,7 +1948,7 @@ class TradingEngine:
                     side=pos.side,
                     lots=plan.lots,
                     strategy=anchor.strategy or "scale_in",
-                    comment=f"scale_in_pullback|L{plan.leg}",
+                    comment=f"scale_in_structure|L{plan.leg}",
                     stop_loss=anchor.stop_loss,
                     take_profit=anchor.take_profit,
                     attach_stops=anchor.stop_loss is None and anchor.take_profit is None,
