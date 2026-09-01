@@ -71,6 +71,7 @@ async def downloads_mt4_bridge_index() -> dict:
         "ea_mq4": f"{base}/JM_Forex_Bridge.mq4",
         "readme": f"{base}/mt4-readme.txt",
         "account_txt": f"{base}/JM-FX-MT4-ACCOUNTS.txt",
+        "a76321_zip": f"{base}/mt4-a76321.zip",
         "complete_zip": f"{base}/jmfx-complete.zip",
         "github_zip": f"{gh}/JM-FX-MT4-Bridge-Pack.zip",
         "github_ea_v2_zip": f"{gh}/JM-FX-MT4-EA-v2.zip",
@@ -89,6 +90,7 @@ def _release_file(name: str) -> Path:
         "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
         "mt4-bridge.zip": _RELEASES / "JM-FX-MT4-Bridge-Pack.zip",
         "mt4-ea-v2.zip": _RELEASES / "JM-FX-MT4-EA-v2.zip",
+        "mt4-a76321.zip": _RELEASES / "JM-FX-MT4-A76321-Pack.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
         "install-python.bat": _RELEASES / "JM-FX-Complete-Pack/install-python.bat",
@@ -133,6 +135,12 @@ async def download_mt4_bridge_zip() -> FileResponse:
 async def download_mt4_ea_v2_zip() -> FileResponse:
     path = _release_file("mt4-ea-v2.zip")
     return FileResponse(path, filename="JM-FX-MT4-EA-v2.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-a76321.zip")
+async def download_mt4_a76321_zip() -> FileResponse:
+    path = _release_file("mt4-a76321.zip")
+    return FileResponse(path, filename="JM-FX-MT4-A76321-Pack.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt4-readme.txt")
