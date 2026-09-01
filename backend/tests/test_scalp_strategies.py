@@ -172,6 +172,53 @@ def test_pip_levels_fixed_asia_stops():
     assert sell.take_profit == 2377.5
 
 
+def test_asia_hybrid_levels_caps_sl_and_tp():
+    from app.strategies.entry_setup import asia_hybrid_levels, true_atr
+
+    bars = _bars(220, start=4440.0, trend=0.15)
+    # Tight structure → raw SL below min → bump to 80p
+    for i in range(-3, 0):
+        b = bars[i]
+        bars[i] = Candle(
+            symbol="XAUUSD",
+            open=b.close,
+            high=b.close + 0.3,
+            low=b.close - 0.5,
+            close=b.close + 0.1,
+            volume=10,
+            period_seconds=300,
+            open_time=b.open_time,
+            timestamp=b.timestamp,
+            is_closed=True,
+        )
+    atr = true_atr(bars, 14)
+    assert atr is not None
+    entry = bars[-1].close + 0.1
+    levels = asia_hybrid_levels(
+        Side.BUY,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        min_sl_pips=80,
+        max_sl_pips=150,
+        min_tp_pips=150,
+        max_tp_pips=280,
+        reward_r=2.0,
+    )
+    assert levels.risk == 8.0  # 80 pips
+    assert levels.take_profit == round(entry + 16.0, 2)  # 160p = 2R capped above min 150
+    assert levels.stop_loss == round(entry - 8.0, 2)
+
+
+def test_asia_hybrid_stops_enabled_by_default():
+    from app.core.config import Settings
+
+    s = Settings()
+    assert s.asia_hybrid_stops is True
+    assert s.asia_hybrid_min_sl_pips == 80.0
+    assert s.asia_hybrid_max_sl_pips == 150.0
+
+
 def test_smc_waits_for_sweep():
     strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
     # Flat tape — no swing break / no sweep → must stand aside

@@ -26,7 +26,15 @@ class Settings(BaseSettings):
     # pip=0.1 → 90 pips = $9.00 move on XAUUSD; TP at 2.5R = 225 pips ($22.50)
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
-    # Asia desk (PH 7AM–8PM, EMA_RSI child) — fixed pip SL/TP on auto signals
+    # Asia desk (PH 7AM–8PM, EMA_RSI child) — hybrid structure SL/TP with caps
+    # JM_ASIA_HYBRID_STOPS=true (default) keeps entry signals; only SL/TP prices change
+    asia_hybrid_stops: bool = True
+    asia_hybrid_min_sl_pips: float = 80.0
+    asia_hybrid_max_sl_pips: float = 150.0
+    asia_hybrid_min_tp_pips: float = 150.0
+    asia_hybrid_max_tp_pips: float = 280.0
+    asia_hybrid_reward_r: float = 2.0
+    # Legacy fixed Asia stops (used when asia_hybrid_stops=false)
     asia_stop_loss_pips: float = 120.0
     asia_take_profit_pips: float = 225.0
 

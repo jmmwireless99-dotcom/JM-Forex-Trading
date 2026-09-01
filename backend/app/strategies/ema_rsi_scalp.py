@@ -5,7 +5,12 @@ from __future__ import annotations
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
 from app.strategies.base import Strategy
-from app.strategies.entry_setup import pip_levels, structure_levels, true_atr
+from app.strategies.entry_setup import (
+    asia_hybrid_levels,
+    pip_levels,
+    structure_levels,
+    true_atr,
+)
 from app.strategies.indicators import ema, rsi
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.patterns import (
@@ -34,7 +39,7 @@ class EmaRsiScalpStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         min_bars_between_signals: int = 4,  # ≥20m on M5 — space entries without starving Asia
-        # Non-Asia: ATR structure SL/TP. Asia session uses fixed pips from settings.
+        # Non-Asia: ATR structure SL/TP. Asia session uses hybrid structure + caps.
         reward_r: float = 2.0,
         min_stop_atr: float = 1.15,
         min_tp_atr: float = 2.3,
@@ -206,12 +211,28 @@ class EmaRsiScalpStrategy(Strategy):
         settings = get_settings()
         session = classify_session(tick.timestamp)
         if session.label == "asia":
-            levels = pip_levels(
-                side,
-                entry=entry,
-                stop_loss_pips=float(settings.asia_stop_loss_pips),
-                take_profit_pips=float(settings.asia_take_profit_pips),
-            )
+            if settings.asia_hybrid_stops:
+                levels = asia_hybrid_levels(
+                    side,
+                    entry=entry,
+                    candles=bars,
+                    atr=atr,
+                    min_sl_pips=float(settings.asia_hybrid_min_sl_pips),
+                    max_sl_pips=float(settings.asia_hybrid_max_sl_pips),
+                    min_tp_pips=float(settings.asia_hybrid_min_tp_pips),
+                    max_tp_pips=float(settings.asia_hybrid_max_tp_pips),
+                    reward_r=float(settings.asia_hybrid_reward_r),
+                    swing_lookback=3,
+                    atr_pad=0.3,
+                    min_stop_atr=self.min_stop_atr,
+                )
+            else:
+                levels = pip_levels(
+                    side,
+                    entry=entry,
+                    stop_loss_pips=float(settings.asia_stop_loss_pips),
+                    take_profit_pips=float(settings.asia_take_profit_pips),
+                )
         else:
             levels = structure_levels(
                 side,

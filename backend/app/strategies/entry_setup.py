@@ -57,6 +57,56 @@ def pip_levels(
     )
 
 
+def _clamp_pips(value_pips: float, *, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value_pips))
+
+
+def asia_hybrid_levels(
+    side: Side,
+    *,
+    entry: float,
+    candles: list[Candle],
+    atr: float,
+    min_sl_pips: float = 80.0,
+    max_sl_pips: float = 150.0,
+    min_tp_pips: float = 150.0,
+    max_tp_pips: float = 280.0,
+    reward_r: float = 2.0,
+    swing_lookback: int = 3,
+    atr_pad: float = 0.3,
+    min_stop_atr: float = 1.15,
+    pip: float = 0.1,
+) -> Levels:
+    """Asia EMA_RSI: structure SL (swing + ATR pad) capped, TP at reward_r × risk."""
+    raw = structure_levels(
+        side,
+        entry=entry,
+        candles=candles,
+        atr=atr,
+        swing_lookback=swing_lookback,
+        atr_pad=atr_pad,
+        min_stop_atr=min_stop_atr,
+        reward_r=reward_r,
+        min_tp_atr=min_stop_atr * reward_r,
+    )
+    sl_pips = _clamp_pips(raw.risk / pip, lo=min_sl_pips, hi=max_sl_pips)
+    risk = sl_pips * pip
+    tp_pips = _clamp_pips(reward_r * sl_pips, lo=min_tp_pips, hi=max_tp_pips)
+    tp_dist = tp_pips * pip
+    if side == Side.BUY:
+        sl = entry - risk
+        tp = entry + tp_dist
+    else:
+        sl = entry + risk
+        tp = entry - tp_dist
+    return Levels(
+        stop_loss=round(sl, 2),
+        take_profit=round(tp, 2),
+        risk=round(risk, 2),
+        reward_r=round(tp_dist / risk, 2) if risk else reward_r,
+    )
+
+
 def structure_levels(
     side: Side,
     *,
