@@ -42,8 +42,10 @@ from app.risk.scale_in import (
     evaluate_scale_in,
     leg_add_cooldown_ok,
     mark_leg_added,
+    mark_signal_entry,
     open_legs,
     plan_scale_in_entry,
+    signal_entry_cooldown_ok,
 )
 from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
 from app.strategies.auto_router import AutoStrategyRouter
@@ -1271,7 +1273,8 @@ class TradingEngine:
             return
         if position is not None:
             row = acct.journal.record_open_position(position, mode=self.mode)
-            self._arm_entry_cooldown()
+            if not self._is_scale_in_account(acct):
+                self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
             if self.advisor.enabled:
                 try:
@@ -1779,7 +1782,9 @@ class TradingEngine:
         if not plan.allowed:
             return
 
-        if plan.leg == 1 and time.time() < self._entry_cooldown_until:
+        if plan.leg == 1 and not signal_entry_cooldown_ok(
+            account.id, float(self.settings.entry_cooldown_seconds)
+        ):
             return
 
         if plan.leg > 1 and not leg_add_cooldown_ok(
@@ -1855,7 +1860,7 @@ class TradingEngine:
         if order.status == OrderStatus.FILLED:
             mark_leg_added(account.id)
             if plan.leg == 1:
-                self._arm_entry_cooldown()
+                mark_signal_entry(account.id)
 
         if london_signal_id and order:
             key = f"{account.id}:{order.id}"
@@ -1907,12 +1912,16 @@ class TradingEngine:
                 )
                 if not plan.allowed or plan.leg <= 1:
                     continue
+                anchor = legs[0]
                 request = OrderRequest(
                     symbol=pos.symbol,
                     side=pos.side,
                     lots=plan.lots,
-                    strategy=legs[0].strategy or "scale_in",
+                    strategy=anchor.strategy or "scale_in",
                     comment=f"scale_in_pullback|L{plan.leg}",
+                    stop_loss=anchor.stop_loss,
+                    take_profit=anchor.take_profit,
+                    attach_stops=anchor.stop_loss is None and anchor.take_profit is None,
                     setup_id=plan.setup_id,
                     leg_index=plan.leg,
                 )
@@ -1991,16 +2000,9 @@ class TradingEngine:
                     cached_advice=cached_advice,
                 )
 
-        by_bridge: dict[str, list[PaperAccount]] = {}
-        for acct in mt_targets:
-            key = self._demo_platform(acct) or "mt5"
-            by_bridge.setdefault(key, []).append(acct)
-        if by_bridge:
-            await asyncio.gather(
-                *[_mt_for_bridge(accts) for accts in by_bridge.values()]
-            )
-
-        if paper_targets:
+        async def _paper_fan_out() -> None:
+            if not paper_targets:
+                return
             await asyncio.gather(
                 *[
                     self._handle_signal_for_account(
@@ -2016,6 +2018,15 @@ class TradingEngine:
                 ]
             )
             self.accounts.save()
+
+        by_bridge: dict[str, list[PaperAccount]] = {}
+        for acct in mt_targets:
+            key = self._demo_platform(acct) or "mt5"
+            by_bridge.setdefault(key, []).append(acct)
+        fan_out: list[Any] = [_paper_fan_out()]
+        if by_bridge:
+            fan_out.extend(_mt_for_bridge(accts) for accts in by_bridge.values())
+        await asyncio.gather(*fan_out)
 
     async def _handle_signal_for_account(
         self,

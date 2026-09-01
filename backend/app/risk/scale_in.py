@@ -177,6 +177,7 @@ def evaluate_scale_in(
 
 # Per-account throttle: account_id -> monotonic last add time
 _last_leg_add_at: dict[str, float] = {}
+_last_signal_entry_at: dict[str, float] = {}
 
 
 def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
@@ -186,3 +187,13 @@ def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
 
 def mark_leg_added(account_id: str) -> None:
     _last_leg_add_at[account_id] = time.time()
+
+
+def signal_entry_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
+    """Leg-1 spacing per scale-in book — not the engine-wide entry cooldown."""
+    last = _last_signal_entry_at.get(account_id, 0.0)
+    return (time.time() - last) >= cooldown_seconds
+
+
+def mark_signal_entry(account_id: str) -> None:
+    _last_signal_entry_at[account_id] = time.time()
