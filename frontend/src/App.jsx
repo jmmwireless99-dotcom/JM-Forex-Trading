@@ -621,7 +621,10 @@ export default function App() {
   }
 
   const sessionTier = desk?.session?.tier || '—'
-  const newsBlocked = Boolean(desk?.news?.blocked)
+  const newsInfo = desk?.news || {}
+  const newsBlocked = Boolean(newsInfo.blocked)
+  const newsArmed = Boolean(newsInfo.news_strategy_armed)
+  const newsEntryOpen = Boolean(newsInfo.trading_window_active)
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const mt4Online = Boolean(mt4Bridge?.online)
   const mtLinkedOnline = mt5Only ? mtOnline : mt4Real ? mt4Online : mtOnline
@@ -801,7 +804,16 @@ export default function App() {
             Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
             {autoInfo?.decision?.regime || sessionTier}
           </span>
-          <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
+          <span>
+            News:{' '}
+            {newsArmed
+              ? newsEntryOpen
+                ? 'NewsBreakout LIVE'
+                : 'NewsBreakout armed'
+              : newsBlocked
+                ? 'BLACKOUT'
+                : 'clear'}
+          </span>
           <span>
             MT:{' '}
             {mtLinkedOnly
@@ -1624,6 +1636,72 @@ export default function App() {
               </table>
             </div>
           )}
+        </section>
+
+        <section className="panel news-panel" style={{ gridColumn: '1 / -1' }}>
+          <h2>News calendar · NewsBreakout</h2>
+          <div
+            className={`news-box${newsArmed ? ' armed' : ''}${newsEntryOpen ? ' entry-live' : ''}${newsBlocked ? ' blackout' : ''}`}
+          >
+            <div className="auto-head">
+              <strong>
+                {newsInfo.scheduled_event || (newsInfo.news_day ? 'News day' : 'No high-impact news today')}
+              </strong>
+              <span className={`side ${newsArmed ? (newsEntryOpen ? 'buy' : 'sell') : 'sell'}`}>
+                {newsArmed
+                  ? newsEntryOpen
+                    ? 'ENTRY OPEN'
+                    : 'ARMED'
+                  : newsInfo.news_day
+                    ? 'WAITING'
+                    : 'OFF'}
+              </span>
+            </div>
+            <p className="auto-reason">
+              {newsInfo.news_strategy_reason ||
+                newsInfo.reason ||
+                'NFP · CPI · FOMC · Core PCE — auto NewsBreakout PH 7PM–7AM, T-60m before release'}
+            </p>
+            <div className="news-grid meta">
+              <span>
+                Release (PH):{' '}
+                {newsInfo.scheduled_release_utc
+                  ? new Date(newsInfo.scheduled_release_utc).toLocaleString('en-PH', {
+                      timeZone: 'Asia/Manila',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
+                  : '—'}
+              </span>
+              <span>
+                EMA_RSI blackout:{' '}
+                <strong>{newsBlocked ? 'ON (stand aside)' : 'clear'}</strong>
+                {newsInfo.event ? ` · ${newsInfo.event}` : ''}
+              </span>
+              <span>
+                NewsBreakout auto:{' '}
+                <strong>{newsInfo.news_breakout_auto === false ? 'disabled' : 'enabled'}</strong>
+              </span>
+              <span>
+                Entry window:{' '}
+                <strong>
+                  {newsEntryOpen
+                    ? 'post-spike (+5 to +60m)'
+                    : newsArmed
+                      ? 'armed — wait for release'
+                      : 'closed'}
+                </strong>
+              </span>
+            </div>
+            {newsInfo.trading_window_reason ? (
+              <div className="meta" style={{ marginTop: '0.55rem' }}>
+                {newsInfo.trading_window_reason}
+              </div>
+            ) : null}
+          </div>
         </section>
 
       </div>

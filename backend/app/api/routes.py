@@ -618,6 +618,7 @@ async def desk() -> dict:
     primary = primary_news_event(now) if news_day else None
     news_armed = should_run_news_strategy(now)
     news_window = check_news_trading_window(now) if news_armed.active else None
+    release_at = news_armed.release_at or (primary.when if primary else None)
     strategy = engine.strategy
     block = getattr(strategy, "last_block_reason", None)
     return {
@@ -642,9 +643,11 @@ async def desk() -> dict:
             "filter_enabled": settings.news_filter,
             "news_day": news_day,
             "news_breakout_auto": settings.news_breakout_auto,
-            "scheduled_event": primary.event.name if primary else None,
+            "scheduled_event": primary.event.name if primary else news_armed.event,
+            "scheduled_release_utc": release_at.isoformat() if release_at else None,
             "news_strategy_armed": news_armed.active,
             "news_strategy_reason": news_armed.reason,
+            "minutes_from_release": news_armed.minutes_from_release,
             "trading_window_active": bool(news_window and news_window.active),
             "trading_window_reason": news_window.reason if news_window else "",
         },

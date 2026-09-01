@@ -953,6 +953,38 @@ select {
   gap: 0.25rem;
 }
 
+.news-panel h2 {
+  margin-bottom: 0.65rem;
+}
+
+.news-box {
+  border: 1px solid rgba(125, 180, 255, 0.22);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, rgba(40, 70, 120, 0.18), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.armed {
+  border-color: rgba(242, 193, 78, 0.45);
+  background: linear-gradient(180deg, rgba(242, 193, 78, 0.14), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.entry-live {
+  border-color: rgba(125, 255, 179, 0.45);
+  background: linear-gradient(180deg, rgba(20, 99, 92, 0.24), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.blackout:not(.armed) {
+  border-color: rgba(255, 107, 107, 0.35);
+}
+
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.45rem 1rem;
+  margin-top: 0.65rem;
+}
+
 .auto-head {
   display: flex;
   justify-content: space-between;
