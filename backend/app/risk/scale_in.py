@@ -143,14 +143,15 @@ def evaluate_scale_in(
     tick: Tick | None,
     settings: Settings,
 ) -> RiskDecision:
-    """Risk gate for scale-in paper accounts — allows up to N same-side legs."""
+    """Risk gate for scale-in paper accounts — allows up to N same-side legs.
+
+    The daily loss circuit breaker (max_daily_loss_pct) is checked centrally
+    in TradingEngine._execute() via RiskManager.daily_loss_hit() before this
+    function is even called, so every account type — scale-in included —
+    shares the same capital-protection gate.
+    """
     if request.lots <= 0:
         return RiskDecision(False, "Lot size must be positive")
-
-    if settings.max_daily_loss_pct > 0:
-        # Re-use standard daily loss from first RiskManager instance pattern — skip here;
-        # caller still runs after this only for scale-in accounts on paper.
-        pass
 
     legs = open_legs(open_positions, symbol=request.symbol, side=request.side)
     max_legs = int(getattr(settings, "scale_in_max_legs", 3))

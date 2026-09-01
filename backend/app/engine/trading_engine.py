@@ -37,7 +37,7 @@ from app.models.domain import (
     utcnow,
 )
 from app.paper_accounts import PaperAccount, PaperAccountRegistry
-from app.risk.manager import RiskManager
+from app.risk.manager import RiskDecision, RiskManager
 from app.risk.scale_in import (
     evaluate_scale_in,
     leg_add_cooldown_ok,
@@ -2171,7 +2171,15 @@ class TradingEngine:
         # Each paper book keeps its own last-tick cache — sync shared feed before fill.
         if tick is not None and not via_mt:
             acct.broker._last_ticks[tick.symbol] = tick
-        if self._is_scale_in_account(acct) and not via_mt:
+        if not via_mt and acct.risk.daily_loss_hit():
+            # Capital-protection circuit breaker — applies to every paper book,
+            # including scale-in accounts (which size their own lots below and
+            # would otherwise bypass this check entirely).
+            decision = RiskDecision(
+                False,
+                f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
+            )
+        elif self._is_scale_in_account(acct) and not via_mt:
             decision = evaluate_scale_in(
                 request,
                 balance=self._balance(acct),

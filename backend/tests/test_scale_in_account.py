@@ -158,3 +158,41 @@ def test_signal_entry_cooldown_is_per_account():
     mark_signal_entry("acct-a")
     assert not signal_entry_cooldown_ok("acct-a", 300.0)
     assert signal_entry_cooldown_ok("acct-b", 300.0)
+
+
+@pytest.mark.asyncio
+async def test_scale_in_account_respects_daily_loss_kill_switch(tmp_path: Path):
+    """SCALE3 must stop opening new legs once the daily loss limit is hit —
+    previously scale-in accounts bypassed max_daily_loss_pct entirely."""
+    store = tmp_path / "paper_accounts.json"
+    settings = Settings(
+        max_open_positions=1,
+        scale_in_max_legs=3,
+        scale_in_step_pips=18.0,
+        max_daily_loss_pct=1.0,
+    )
+    reg = PaperAccountRegistry(settings, store_path=store)
+    acct = reg.create(
+        deposit=1000.0,
+        label="Scale-in daily loss test",
+        follow_auto=True,
+        scale_in_mode=True,
+    )
+    reg.save()
+    engine = TradingEngine(settings)
+    engine.accounts = reg
+
+    # Simulate a realized loss exceeding the 1% daily limit ($1000 * 1% = $10)
+    acct.risk.record_realized_pnl(-15.0)
+    assert acct.risk.daily_loss_hit() is True
+
+    tick = Tick(symbol="XAUUSD", bid=4500.0, ask=4500.3, mid=4500.15, timestamp=utcnow())
+    acct.broker._last_ticks["XAUUSD"] = tick
+    order = await engine._execute(
+        OrderRequest(symbol="XAUUSD", side=Side.BUY, lots=0.01),
+        tick=tick,
+        account=acct,
+    )
+    assert order.status == OrderStatus.REJECTED
+    assert "daily loss" in (order.reject_reason or "").lower()
+    assert len(acct.broker.open_positions()) == 0
