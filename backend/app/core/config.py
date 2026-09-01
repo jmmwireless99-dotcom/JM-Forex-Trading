@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     # JM_SESSION_FILTER=true  JM_NEWS_FILTER=true  JM_PRIME_SESSION_ONLY=false
     session_filter: bool = False
     news_filter: bool = True
+    # Auto-switch to NewsBreakout on NFP/CPI/FOMC/PCE days
+    news_breakout_auto: bool = True
     prime_session_only: bool = False
     # true = PH desk 7AM–8PM · 8PM–2AM SMC · 2AM–7AM EMA_RSI
     # JM_ASIA_DESK_ONLY=true

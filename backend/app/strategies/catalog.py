@@ -179,6 +179,38 @@ def strategy_catalog() -> list[dict]:
             "order_type": "MARKET",
             "reward_r": 2.5,
         },
+        {
+            "id": "NewsBreakout",
+            "name": "News Breakout",
+            "sessions": ["News days — NFP, CPI, FOMC, Core PCE"],
+            "session_slots": ["news_day"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "Auto-runs on high-impact USD news days instead of AI_ML. "
+                "Post-spike momentum entry +5 to +60 min after release."
+            ),
+            "entry_rules": [
+                "Desk auto-switches from AI_ML on news days (JM_NEWS_BREAKOUT_AUTO=true).",
+                "Wait +5 min after scheduled release — skip initial whipsaw.",
+                "Enter on strong M5 body breaking pre-release 6-bar range.",
+                "Wide ATR stops (3× SL · 2R TP) — max 2 trades per news day.",
+            ],
+            "entry_flow": [
+                "Router parks NewsBreakout all day on NFP/CPI/FOMC/PCE schedule.",
+                "Inside post-release window → directional break → MARKET.",
+                "EMA_RSI / SMC unchanged on normal days.",
+            ],
+            "parameters": _seed_params("NewsBreakout"),
+            "safety": [
+                "Bypasses normal news blackout — designed for news volatility.",
+                "ML gate skipped for NewsBreakout signals (separate from AI_ML).",
+                "Normal strategies still block during news when news_filter=true.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 2.0,
+        },
         _MANUAL_CARD,
     ]
 
@@ -191,5 +223,6 @@ def entry_rules_short() -> list[str]:
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
+        "NewsBreakout — auto on NFP/CPI/FOMC/PCE days · post-spike +5–60m · wide ATR stops",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

@@ -99,6 +99,82 @@ class NewsBlackout:
     minutes_to_event: int | None = None
 
 
+@dataclass(frozen=True)
+class NewsDayEvent:
+    """One scheduled high-impact print on a calendar day."""
+
+    event: NewsEvent
+    when: datetime
+
+
+@dataclass(frozen=True)
+class NewsTradingWindow:
+    """Active post-release momentum window for NewsBreakout."""
+
+    active: bool
+    event: str | None = None
+    reason: str = ""
+    minutes_from_release: int | None = None
+    release_at: datetime | None = None
+
+
+def news_events_on_day(ts: datetime, *, include_medium: bool = False) -> list[NewsDayEvent]:
+    """High-impact USD events scheduled on this UTC calendar day."""
+    ts = ts.astimezone(timezone.utc)
+    day = datetime(ts.year, ts.month, ts.day, tzinfo=timezone.utc)
+    out: list[NewsDayEvent] = []
+    for event in USD_GOLD_EVENTS:
+        if event.impact == NewsImpact.MEDIUM and not include_medium:
+            continue
+        for when in _event_occurrences(event, day):
+            out.append(NewsDayEvent(event=event, when=when))
+    return sorted(out, key=lambda row: row.when)
+
+
+def is_news_day(ts: datetime, *, include_medium: bool = False) -> bool:
+    """True when at least one high-impact USD gold event is scheduled today."""
+    return bool(news_events_on_day(ts, include_medium=include_medium))
+
+
+def primary_news_event(ts: datetime) -> NewsDayEvent | None:
+    rows = news_events_on_day(ts)
+    return rows[0] if rows else None
+
+
+def check_news_trading_window(
+    ts: datetime,
+    *,
+    post_release_start_min: int = 5,
+    post_release_end_min: int = 60,
+) -> NewsTradingWindow:
+    """Post-spike entry window — opposite of the stand-aside blackout."""
+    ts = ts.astimezone(timezone.utc)
+    candidates: list[tuple[int, NewsDayEvent, int]] = []
+
+    for day in (ts - timedelta(days=1), ts, ts + timedelta(days=1)):
+        for row in news_events_on_day(day):
+            delta_min = int((ts - row.when).total_seconds() // 60)
+            if post_release_start_min <= delta_min <= post_release_end_min:
+                candidates.append((abs(delta_min - post_release_start_min), row, delta_min))
+
+    if not candidates:
+        if is_news_day(ts):
+            return NewsTradingWindow(
+                active=False,
+                reason="News day — waiting for post-release window (+5 to +60m)",
+            )
+        return NewsTradingWindow(active=False, reason="Not a news day")
+
+    _, best, delta_min = min(candidates, key=lambda item: item[0])
+    return NewsTradingWindow(
+        active=True,
+        event=best.event.name,
+        reason=f"News window: {best.event.name} (+{delta_min}m post-release)",
+        minutes_from_release=delta_min,
+        release_at=best.when,
+    )
+
+
 def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int | None:
     """Return day-of-month for the n-th weekday (1-based), or None."""
     count = 0

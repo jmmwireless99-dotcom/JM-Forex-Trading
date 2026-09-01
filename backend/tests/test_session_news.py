@@ -140,3 +140,12 @@ def test_core_pce_last_friday_blackout():
     result = check_news_blackout(ts, before_minutes=45, after_minutes=30)
     assert result.blocked is True
     assert result.event == "Core PCE"
+
+
+def test_is_news_day_core_pce_friday():
+    from app.strategies.news_calendar import is_news_day, primary_news_event
+
+    ts = datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc)
+    assert is_news_day(ts) is True
+    assert primary_news_event(ts) is not None
+    assert primary_news_event(ts).event.name == "Core PCE"

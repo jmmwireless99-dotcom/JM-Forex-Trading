@@ -54,6 +54,7 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 # Session-follow pool for auto transfer by time.
 _AUTO_POOL = (
     "AI_ML",
+    "NewsBreakout",
     "EMA_RSI_Scalp",
     "Liquidity_Sweep_SMC",
     "EMA_VWAP_Scalp",
@@ -1774,7 +1775,11 @@ class TradingEngine:
                 await self._emit("ai_advice", self._last_advice)
             except Exception:
                 advice = None
-        if advice is not None and self.advisor.should_block(advice):
+        if (
+            advice is not None
+            and (signal.strategy or "") != "NewsBreakout"
+            and self.advisor.should_block(advice)
+        ):
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,
@@ -1963,7 +1968,11 @@ class TradingEngine:
                 await self._emit("ai_advice", self._last_advice)
             except Exception:
                 advice = None
-        if advice is not None and self.advisor.should_block(advice):
+        if (
+            advice is not None
+            and (signal.strategy or "") != "NewsBreakout"
+            and self.advisor.should_block(advice)
+        ):
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,

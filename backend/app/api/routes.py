@@ -22,7 +22,12 @@ from app.models.domain import OrderRequest, Side, utcnow
 from app.paper_accounts import PaperAccount
 from app.strategies import STRATEGY_REGISTRY, list_strategy_names
 from app.strategies.catalog import entry_rules_short, strategy_catalog
-from app.strategies.news_calendar import check_news_blackout
+from app.strategies.news_calendar import (
+    check_news_blackout,
+    check_news_trading_window,
+    is_news_day,
+    primary_news_event,
+)
 from app.strategies.session import classify_session
 
 router = APIRouter()
@@ -608,6 +613,9 @@ async def desk() -> dict:
     now = utcnow()
     session = classify_session(now)
     news = check_news_blackout(now)
+    news_day = is_news_day(now)
+    primary = primary_news_event(now) if news_day else None
+    news_window = check_news_trading_window(now) if news_day else None
     strategy = engine.strategy
     block = getattr(strategy, "last_block_reason", None)
     return {
@@ -630,14 +638,23 @@ async def desk() -> dict:
             "event": news.event,
             "reason": news.reason,
             "filter_enabled": settings.news_filter,
+            "news_day": news_day,
+            "news_breakout_auto": settings.news_breakout_auto,
+            "scheduled_event": primary.event.name if primary else None,
+            "trading_window_active": bool(news_window and news_window.active),
+            "trading_window_reason": news_window.reason if news_window else "",
         },
         "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
         "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
-        "recommended_asia": "AI_ML → EMA_RSI_Scalp",
+        "recommended_asia": (
+            "NewsBreakout (news day)" if news_day else "AI_ML → EMA_RSI_Scalp"
+        ),
         "recommended_london": "Stand aside",
-        "recommended_overlap": "AI_ML → Liquidity_Sweep_SMC",
+        "recommended_overlap": (
+            "NewsBreakout (news day)" if news_day else "AI_ML → Liquidity_Sweep_SMC"
+        ),
         "recommended_ny": "AI_ML → EMA_VWAP_Scalp",
         "recommended_sr_scalp": "AI_ML → Liquidity_Sweep_SMC",
         "asia_desk_only": settings.asia_desk_only,
