@@ -189,18 +189,23 @@ def strategy_catalog() -> list[dict]:
             "chart_tf": "M1",
             "summary": (
                 "Auto-runs on high-impact USD news days instead of AI_ML. "
-                "Post-spike momentum entry +5 to +60 min after release."
+                "Post-spike break flags a setup; entry only on retest + "
+                "rejection candle — pinakamaligtas na paraan, hindi habol-presyo."
             ),
             "entry_rules": [
                 "Desk auto-switches from AI_ML on PH evening when T-60m before news.",
                 "Arms 1 hour before NFP/CPI/FOMC/PCE — PH 7PM–7AM only.",
                 "Wait +5 min after release — skip initial whipsaw.",
-                "Enter on strong M5 body breaking pre-release 6-bar range.",
+                "Strong M5 body breaking pre-release 6-bar range flags a pending setup.",
+                "Entry fires only when price retests the broken level with a "
+                "pin bar / engulfing rejection candle (within 6 M5 bars).",
                 "Wide ATR stops (3× SL · 2R TP) — max 2 trades per news day.",
             ],
             "entry_flow": [
                 "Router parks NewsBreakout T-60m → T+60m around release (PH evening).",
-                "Inside post-release window → directional break → MARKET.",
+                "Inside post-release window → directional break → pending (no order yet).",
+                "Retest of broken level + rejection candle within 6 bars → MARKET.",
+                "Missed retest (6 bars, ~30m) → setup dropped, no chase entry.",
                 "EMA_RSI / SMC unchanged on normal days.",
             ],
             "parameters": _seed_params("NewsBreakout"),

@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     forex_factory_refresh_seconds: int = 300
     # Auto-switch to NewsBreakout on NFP/CPI/FOMC/PCE days
     news_breakout_auto: bool = True
+    # Safer default: wait for price to retest the broken level with a rejection
+    # candle instead of chasing the initial post-spike break (gold whipsaws hard
+    # in the first minute after high-impact USD news — pinakamaligtas na entry).
+    news_breakout_require_retest: bool = True
+    news_breakout_retest_valid_bars: int = 6
+    news_breakout_retest_pad_atr: float = 0.35
     prime_session_only: bool = False
     # true = PH desk 7AM–8PM · 8PM–2AM SMC · 2AM–7AM EMA_RSI
     # JM_ASIA_DESK_ONLY=true
