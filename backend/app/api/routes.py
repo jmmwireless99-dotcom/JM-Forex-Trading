@@ -75,6 +75,7 @@ def _release_file(name: str) -> Path:
         "JM-FX-ACCOUNT.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/JM-FX-ACCOUNT.txt",
         "complete-readme.txt": _RELEASES / "JM-FX-Complete-Pack/README.txt",
         "download-links.txt": _RELEASES / "JM-FX-Complete-Pack/DOWNLOAD-LINKS.txt",
+        "vm-setup-checklist.txt": _RELEASES / "JM-FX-VM-Setup-Checklist.txt",
     }
     if name in mapping:
         candidates.insert(0, mapping[name])
