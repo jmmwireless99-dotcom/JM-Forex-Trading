@@ -27,6 +27,7 @@ from app.strategies.news_calendar import (
     check_news_trading_window,
     is_news_day,
     primary_news_event,
+    should_run_news_strategy,
 )
 from app.strategies.session import classify_session
 
@@ -615,7 +616,8 @@ async def desk() -> dict:
     news = check_news_blackout(now)
     news_day = is_news_day(now)
     primary = primary_news_event(now) if news_day else None
-    news_window = check_news_trading_window(now) if news_day else None
+    news_armed = should_run_news_strategy(now)
+    news_window = check_news_trading_window(now) if news_armed.active else None
     strategy = engine.strategy
     block = getattr(strategy, "last_block_reason", None)
     return {
@@ -641,6 +643,8 @@ async def desk() -> dict:
             "news_day": news_day,
             "news_breakout_auto": settings.news_breakout_auto,
             "scheduled_event": primary.event.name if primary else None,
+            "news_strategy_armed": news_armed.active,
+            "news_strategy_reason": news_armed.reason,
             "trading_window_active": bool(news_window and news_window.active),
             "trading_window_reason": news_window.reason if news_window else "",
         },
@@ -649,11 +653,11 @@ async def desk() -> dict:
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
         "recommended_asia": (
-            "NewsBreakout (news day)" if news_day else "AI_ML → EMA_RSI_Scalp"
+            "NewsBreakout (news evening)" if news_armed.active else "AI_ML → EMA_RSI_Scalp"
         ),
         "recommended_london": "Stand aside",
         "recommended_overlap": (
-            "NewsBreakout (news day)" if news_day else "AI_ML → Liquidity_Sweep_SMC"
+            "NewsBreakout (news evening)" if news_armed.active else "AI_ML → Liquidity_Sweep_SMC"
         ),
         "recommended_ny": "AI_ML → EMA_VWAP_Scalp",
         "recommended_sr_scalp": "AI_ML → Liquidity_Sweep_SMC",

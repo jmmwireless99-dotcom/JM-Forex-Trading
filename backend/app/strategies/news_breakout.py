@@ -1,8 +1,8 @@
-"""Post-release momentum strategy for high-impact USD news days (XAUUSD).
+"""Post-release momentum strategy for high-impact USD news (XAUUSD).
 
-Runs automatically on NFP / CPI / FOMC / Core PCE days via auto_router.
-Enters after the initial spike (+5 to +60 min post-release) on strong
-directional M5 closes with wide ATR-based stops.
+Arms automatically from 1 hour before scheduled NFP/CPI/FOMC/PCE prints
+through 1 hour after — PH evening/night only (7PM–7AM). Entries fire on
+post-spike M5 breaks (+5 to +60m after release).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from app.strategies.base import Strategy
 from app.strategies.entry_setup import structure_levels, true_atr
 from app.strategies.news_calendar import (
     check_news_trading_window,
-    is_news_day,
+    should_run_news_strategy,
 )
 from app.strategies.session import SessionTier, classify_session
 
@@ -79,8 +79,9 @@ class NewsBreakoutStrategy(Strategy):
             self.last_block_reason = window.reason
             return None
 
-        if not is_news_day(tick.timestamp):
-            self.last_block_reason = "NewsBreakout: not a news day"
+        armed = should_run_news_strategy(tick.timestamp)
+        if not armed.active:
+            self.last_block_reason = armed.reason or "NewsBreakout not armed"
             return None
 
         trade_window = check_news_trading_window(tick.timestamp)

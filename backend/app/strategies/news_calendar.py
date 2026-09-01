@@ -141,37 +141,141 @@ def primary_news_event(ts: datetime) -> NewsDayEvent | None:
     return rows[0] if rows else None
 
 
+def _nearest_scheduled_news(
+    ts: datetime,
+    *,
+    include_medium: bool = False,
+) -> tuple[NewsDayEvent, int] | None:
+    """Return (event, minutes_until_release) for the closest scheduled print.
+
+    Positive minutes_until_release = release is still in the future.
+    Negative = release already happened.
+    """
+    ts = ts.astimezone(timezone.utc)
+    best: tuple[int, NewsDayEvent, int] | None = None
+    for day in (ts - timedelta(days=1), ts, ts + timedelta(days=1)):
+        for row in news_events_on_day(day, include_medium=include_medium):
+            delta_min = int((row.when - ts).total_seconds() // 60)
+            abs_delta = abs(delta_min)
+            if best is None or abs_delta < best[0]:
+                best = (abs_delta, row, delta_min)
+    if best is None:
+        return None
+    _, row, delta_min = best
+    return row, delta_min
+
+
+def should_run_news_strategy(
+    ts: datetime,
+    *,
+    pre_release_minutes: int = 60,
+    post_release_minutes: int = 60,
+) -> NewsTradingWindow:
+    """True when PH gabi/evening and within 1hr before → 1hr after scheduled news."""
+    from app.strategies.session import is_ph_evening_news_window
+
+    ts = ts.astimezone(timezone.utc)
+    if ts.weekday() >= 5:
+        return NewsTradingWindow(active=False, reason="Weekend — NewsBreakout off")
+
+    if not is_ph_evening_news_window(ts):
+        return NewsTradingWindow(
+            active=False,
+            reason="NewsBreakout: PH daytime — EMA_RSI/SMC until evening",
+        )
+
+    nearest = _nearest_scheduled_news(ts)
+    if nearest is None:
+        return NewsTradingWindow(active=False, reason="No scheduled high-impact news")
+
+    row, minutes_until = nearest
+    minutes_from_release = -minutes_until
+
+    if minutes_until > pre_release_minutes:
+        return NewsTradingWindow(
+            active=False,
+            event=row.event.name,
+            reason=(
+                f"NewsBreakout arms T-{pre_release_minutes}m "
+                f"({row.event.name} in {minutes_until}m)"
+            ),
+            minutes_from_release=minutes_from_release,
+            release_at=row.when,
+        )
+
+    if minutes_until < -post_release_minutes:
+        return NewsTradingWindow(
+            active=False,
+            event=row.event.name,
+            reason=f"News window ended (+{post_release_minutes}m after {row.event.name})",
+            minutes_from_release=minutes_from_release,
+            release_at=row.when,
+        )
+
+    if minutes_until >= 0:
+        phase = f"T-{minutes_until}m pre-release"
+    else:
+        phase = f"+{-minutes_until}m post-release"
+
+    return NewsTradingWindow(
+        active=True,
+        event=row.event.name,
+        reason=f"NewsBreakout active: {row.event.name} ({phase})",
+        minutes_from_release=minutes_from_release,
+        release_at=row.when,
+    )
+
+
 def check_news_trading_window(
     ts: datetime,
     *,
     post_release_start_min: int = 5,
     post_release_end_min: int = 60,
 ) -> NewsTradingWindow:
-    """Post-spike entry window — opposite of the stand-aside blackout."""
+    """Entry window for NewsBreakout — post-spike only, inside the armed period."""
+    armed = should_run_news_strategy(
+        ts,
+        pre_release_minutes=60,
+        post_release_minutes=post_release_end_min,
+    )
+    if not armed.active:
+        return armed
+
     ts = ts.astimezone(timezone.utc)
-    candidates: list[tuple[int, NewsDayEvent, int]] = []
+    if armed.release_at is None:
+        return NewsTradingWindow(active=False, reason="No release time")
 
-    for day in (ts - timedelta(days=1), ts, ts + timedelta(days=1)):
-        for row in news_events_on_day(day):
-            delta_min = int((ts - row.when).total_seconds() // 60)
-            if post_release_start_min <= delta_min <= post_release_end_min:
-                candidates.append((abs(delta_min - post_release_start_min), row, delta_min))
+    delta_min = int((ts - armed.release_at).total_seconds() // 60)
+    if delta_min < post_release_start_min:
+        minutes_until = int((armed.release_at - ts).total_seconds() // 60)
+        wait = (
+            f"{minutes_until}m until release"
+            if minutes_until > 0
+            else f"release { -minutes_until}m ago — wait +{post_release_start_min}m"
+        )
+        return NewsTradingWindow(
+            active=False,
+            event=armed.event,
+            reason=f"Pre-release armed — {wait} ({armed.event})",
+            minutes_from_release=delta_min,
+            release_at=armed.release_at,
+        )
 
-    if not candidates:
-        if is_news_day(ts):
-            return NewsTradingWindow(
-                active=False,
-                reason="News day — waiting for post-release window (+5 to +60m)",
-            )
-        return NewsTradingWindow(active=False, reason="Not a news day")
+    if delta_min > post_release_end_min:
+        return NewsTradingWindow(
+            active=False,
+            event=armed.event,
+            reason=f"Post-release window closed (+{post_release_end_min}m)",
+            minutes_from_release=delta_min,
+            release_at=armed.release_at,
+        )
 
-    _, best, delta_min = min(candidates, key=lambda item: item[0])
     return NewsTradingWindow(
         active=True,
-        event=best.event.name,
-        reason=f"News window: {best.event.name} (+{delta_min}m post-release)",
+        event=armed.event,
+        reason=f"News entry window: {armed.event} (+{delta_min}m post-release)",
         minutes_from_release=delta_min,
-        release_at=best.when,
+        release_at=armed.release_at,
     )
 
 

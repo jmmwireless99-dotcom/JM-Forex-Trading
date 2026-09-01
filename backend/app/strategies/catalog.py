@@ -192,13 +192,14 @@ def strategy_catalog() -> list[dict]:
                 "Post-spike momentum entry +5 to +60 min after release."
             ),
             "entry_rules": [
-                "Desk auto-switches from AI_ML on news days (JM_NEWS_BREAKOUT_AUTO=true).",
-                "Wait +5 min after scheduled release — skip initial whipsaw.",
+                "Desk auto-switches from AI_ML on PH evening when T-60m before news.",
+                "Arms 1 hour before NFP/CPI/FOMC/PCE — PH 7PM–7AM only.",
+                "Wait +5 min after release — skip initial whipsaw.",
                 "Enter on strong M5 body breaking pre-release 6-bar range.",
                 "Wide ATR stops (3× SL · 2R TP) — max 2 trades per news day.",
             ],
             "entry_flow": [
-                "Router parks NewsBreakout all day on NFP/CPI/FOMC/PCE schedule.",
+                "Router parks NewsBreakout T-60m → T+60m around release (PH evening).",
                 "Inside post-release window → directional break → MARKET.",
                 "EMA_RSI / SMC unchanged on normal days.",
             ],
@@ -223,6 +224,6 @@ def entry_rules_short() -> list[str]:
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
-        "NewsBreakout — auto on NFP/CPI/FOMC/PCE days · post-spike +5–60m · wide ATR stops",
+        "NewsBreakout — PH gabi T-60m→T+60m around news · post-spike entry · wide ATR stops",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

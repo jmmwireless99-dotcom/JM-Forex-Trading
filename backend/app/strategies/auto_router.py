@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from app.core.config import get_settings
-from app.strategies.news_calendar import is_news_day, primary_news_event
+from app.strategies.news_calendar import primary_news_event, should_run_news_strategy
 from app.strategies.session import SessionTier, classify_session, next_session_hint
 
 
@@ -85,13 +85,14 @@ class AutoStrategyRouter:
         day = DAY_NAMES[utc.weekday()]
         settings = get_settings()
 
-        if settings.news_breakout_auto and is_news_day(utc):
-            primary = primary_news_event(utc)
-            event_name = primary.event.name if primary else "High-impact USD"
+        news_run = should_run_news_strategy(utc) if settings.news_breakout_auto else None
+
+        if news_run and news_run.active:
+            event_name = news_run.event or "High-impact USD"
             pick = "NewsBreakout"
             child = None
             allow = session.tier != SessionTier.AVOID
-            reason = f"News day ({event_name}): NewsBreakout"
+            reason = news_run.reason or f"News evening ({event_name}): NewsBreakout"
             regime = Regime.VOLATILE if allow else Regime.BLOCKED
         else:
             pick = self._pick(session.label)
@@ -173,11 +174,11 @@ class AutoStrategyRouter:
                 "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
-                "days": "News days (NFP/CPI/FOMC/PCE)",
-                "utc": "Event +5 to +60m",
-                "ph": "Post-release window",
-                "slot": "news_day",
-                "session": "any desk slot",
-                "strategies": "NewsBreakout (auto — replaces AI_ML)",
+                "days": "News evenings (PH 7PM–7AM)",
+                "utc": "T-60m → T+60m around release",
+                "ph": "1hr before news → 1hr after",
+                "slot": "news_evening",
+                "session": "SMC / early Asia only",
+                "strategies": "NewsBreakout (auto — replaces AI_ML in window)",
             },
         ]
