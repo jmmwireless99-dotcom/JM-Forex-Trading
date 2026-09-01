@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
 from app.strategies.base import Strategy
-from app.strategies.entry_setup import Levels, structure_levels, true_atr
+from app.strategies.entry_setup import Levels, structure_levels, true_atr, volatility_stop_scale
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.session import SessionTier, classify_session
 
@@ -168,42 +168,54 @@ def _smc_structure_levels(
     sweep: SweepMemory | None,
     pad: float,
     reward_r: float = 2.0,
-    min_stop_atr: float = 2.5,
-    min_tp_atr: float = 5.0,
-    swing_lookback: int = 6,
-    atr_pad: float = 0.55,
+    min_stop_atr: float = 3.0,
+    min_tp_atr: float = 6.0,
+    swing_lookback: int = 8,
+    atr_pad: float = 0.65,
+    vol_adaptive: bool = True,
+    vol_mult_max: float = 1.75,
 ) -> Levels:
     """SL beyond swept liquidity + wider swing buffer; TP at reward_r × risk."""
+    effective_atr, vol_mult = (
+        volatility_stop_scale(candles, atr, mult_max=vol_mult_max)
+        if vol_adaptive
+        else (atr, 1.0)
+    )
+    stop_atr = min_stop_atr * vol_mult
+    tp_atr = min_tp_atr * vol_mult
+    lookback = swing_lookback + int(round((vol_mult - 1.0) * 6))
+    pad_eff = atr_pad * (1.0 + 0.25 * (vol_mult - 1.0))
+
     base = structure_levels(
         side,
         entry=entry,
         candles=candles,
-        atr=atr,
+        atr=effective_atr,
         reward_r=reward_r,
-        min_stop_atr=min_stop_atr,
-        min_tp_atr=min_tp_atr,
-        swing_lookback=swing_lookback,
-        atr_pad=atr_pad,
+        min_stop_atr=stop_atr,
+        min_tp_atr=tp_atr,
+        swing_lookback=lookback,
+        atr_pad=pad_eff,
     )
-    min_risk = min_stop_atr * atr
+    min_risk = stop_atr * effective_atr
     if sweep is None:
         return base
 
     # Place stop beyond the swept pool — retests often tag this level before moving.
-    sweep_buffer = max(pad, atr_pad * atr)
+    sweep_buffer = max(pad, pad_eff * effective_atr)
     if side == Side.BUY:
         sweep_sl = sweep.level - sweep_buffer
         sl = min(base.stop_loss, sweep_sl)
         risk = max(entry - sl, min_risk)
         sl = entry - risk
-        tp_dist = max(reward_r * risk, min_tp_atr * atr)
+        tp_dist = max(reward_r * risk, tp_atr * effective_atr)
         tp = entry + tp_dist
     else:
         sweep_sl = sweep.level + sweep_buffer
         sl = max(base.stop_loss, sweep_sl)
         risk = max(sl - entry, min_risk)
         sl = entry + risk
-        tp_dist = max(reward_r * risk, min_tp_atr * atr)
+        tp_dist = max(reward_r * risk, tp_atr * effective_atr)
         tp = entry - tp_dist
 
     return Levels(
@@ -229,10 +241,12 @@ class LiquiditySweepSmcStrategy(Strategy):
         sweep_valid_bars: int = 18,
         max_trades_per_day: int = 4,
         reward_r: float = 2.0,
-        min_stop_atr: float = 2.5,
-        min_tp_atr: float = 5.0,
-        swing_lookback: int = 6,
-        atr_pad: float = 0.55,
+        min_stop_atr: float = 3.0,
+        min_tp_atr: float = 6.0,
+        swing_lookback: int = 8,
+        atr_pad: float = 0.65,
+        vol_adaptive_stops: bool | None = None,
+        vol_mult_max: float | None = None,
     ) -> None:
         super().__init__(lookback=lookback)
         settings = get_settings()
@@ -249,6 +263,16 @@ class LiquiditySweepSmcStrategy(Strategy):
         self.min_tp_atr = min_tp_atr
         self.swing_lookback = swing_lookback
         self.atr_pad = atr_pad
+        self.vol_adaptive_stops = (
+            settings.smc_vol_adaptive_stops
+            if vol_adaptive_stops is None
+            else vol_adaptive_stops
+        )
+        self.vol_mult_max = (
+            float(settings.smc_vol_mult_max)
+            if vol_mult_max is None
+            else vol_mult_max
+        )
         self.last_checklist: list[str] = []
         self.last_block_reason: str | None = None
         self.last_zones: list[dict] = []
@@ -417,10 +441,13 @@ class LiquiditySweepSmcStrategy(Strategy):
             min_tp_atr=self.min_tp_atr,
             swing_lookback=self.swing_lookback,
             atr_pad=self.atr_pad,
+            vol_adaptive=self.vol_adaptive_stops,
+            vol_mult_max=self.vol_mult_max,
         )
         self.last_checklist.append(
             f"SL/TP risk={levels.risk:.2f} R={levels.reward_r:.1f} "
             f"sl={levels.stop_loss:.2f} tp={levels.take_profit:.2f}"
+            + (" · vol-adaptive" if self.vol_adaptive_stops else "")
         )
         self._mark_fired(fire_key, day)
         return Signal(

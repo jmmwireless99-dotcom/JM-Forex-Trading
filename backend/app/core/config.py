@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     scale_in_step_pips: float = 18.0
     scale_in_base_lot_per_1k: float = 0.01
     scale_in_leg_cooldown_seconds: int = 60
+    # Liquidity_Sweep_SMC (PH night 8PM–2AM) — vol-adaptive ATR stops, not fixed pips
+    smc_vol_adaptive_stops: bool = True
+    smc_vol_mult_max: float = 1.75
     # Chart candles (M1) vs signal timeframe for entries (M5)
     candle_period_seconds: int = 60
     signal_period_seconds: int = 300
