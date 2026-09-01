@@ -625,6 +625,9 @@ export default function App() {
   const newsBlocked = Boolean(newsInfo.blocked)
   const newsArmed = Boolean(newsInfo.news_strategy_armed)
   const newsEntryOpen = Boolean(newsInfo.trading_window_active)
+  const ffCalendar = newsInfo.forex_factory || {}
+  const ffEvents = ffCalendar.events_today || []
+  const ffFetchedAt = ffCalendar.fetched_at
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const mt4Online = Boolean(mt4Bridge?.online)
   const mtLinkedOnline = mt5Only ? mtOnline : mt4Real ? mt4Online : mtOnline
@@ -1701,6 +1704,103 @@ export default function App() {
                 {newsInfo.trading_window_reason}
               </div>
             ) : null}
+          </div>
+
+          <div className="news-ff-head meta">
+            <span>
+              Source:{' '}
+              <a
+                href={ffCalendar.source_url || 'https://www.forexfactory.com/calendar'}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Forex Factory
+              </a>
+              {ffCalendar.enabled === false ? ' (proxy fallback)' : ' · live feed'}
+            </span>
+            <span>
+              Updated:{' '}
+              {ffFetchedAt
+                ? new Date(ffFetchedAt).toLocaleTimeString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                  })
+                : '—'}
+            </span>
+          </div>
+
+          {ffCalendar.last_error ? (
+            <div className="meta news-ff-error">Feed: {ffCalendar.last_error}</div>
+          ) : null}
+
+          <div className="news-ff-scroll">
+            <table className="table news-ff-table">
+              <thead>
+                <tr>
+                  <th>Time (PH)</th>
+                  <th>CCY</th>
+                  <th>Impact</th>
+                  <th>Event</th>
+                  <th>Actual</th>
+                  <th>Forecast</th>
+                  <th>Previous</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ffEvents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="meta">
+                      Loading Forex Factory calendar…
+                    </td>
+                  </tr>
+                ) : (
+                  ffEvents.map((ev) => {
+                    const phTime = new Date(ev.when_utc).toLocaleString('en-PH', {
+                      timeZone: 'Asia/Manila',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
+                    const impact = (ev.impact || 'Low').toLowerCase()
+                    const rowClass = [
+                      ev.imminent ? 'news-ff-imminent' : '',
+                      ev.is_past ? 'news-ff-past' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                    const countdown =
+                      ev.minutes_until > 0
+                        ? `in ${ev.minutes_until}m`
+                        : ev.minutes_until < 0
+                          ? `${Math.abs(ev.minutes_until)}m ago`
+                          : 'now'
+                    return (
+                      <tr key={`${ev.when_utc}-${ev.title}-${ev.country}`} className={rowClass}>
+                        <td>
+                          {phTime}
+                          <div className="meta news-ff-countdown">{countdown}</div>
+                        </td>
+                        <td>{ev.country}</td>
+                        <td>
+                          <span className={`news-impact news-impact-${impact}`}>
+                            {ev.impact}
+                          </span>
+                        </td>
+                        <td>{ev.title}</td>
+                        <td>{ev.actual || '—'}</td>
+                        <td>{ev.forecast || '—'}</td>
+                        <td>{ev.previous || '—'}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 

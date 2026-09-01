@@ -148,4 +148,4 @@ def test_is_news_day_core_pce_friday():
     ts = datetime(2026, 7, 31, 8, 0, tzinfo=timezone.utc)
     assert is_news_day(ts) is True
     assert primary_news_event(ts) is not None
-    assert primary_news_event(ts).event.name == "Core PCE"
+    assert primary_news_event(ts).name == "Core PCE"

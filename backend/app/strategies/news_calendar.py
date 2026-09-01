@@ -100,11 +100,66 @@ class NewsBlackout:
 
 
 @dataclass(frozen=True)
+class ScheduledNewsRow:
+    """One scheduled news print — Forex Factory live or proxy fallback."""
+
+    name: str
+    when: datetime
+    country: str = "USD"
+    impact: str = "High"
+    source: str = "proxy"
+
+
+@dataclass(frozen=True)
 class NewsDayEvent:
     """One scheduled high-impact print on a calendar day."""
 
     event: NewsEvent
     when: datetime
+
+    @property
+    def name(self) -> str:
+        return self.event.name
+
+
+def _ff_calendar():
+    from app.core.config import get_settings
+    from app.services.forex_factory import get_forex_factory_calendar
+
+    settings = get_settings()
+    if not settings.forex_factory_enabled:
+        return None
+    return get_forex_factory_calendar(refresh_seconds=settings.forex_factory_refresh_seconds)
+
+
+def _row_from_ff(ev) -> ScheduledNewsRow:
+    return ScheduledNewsRow(
+        name=ev.title,
+        when=ev.when,
+        country=ev.country,
+        impact=ev.impact,
+        source="forexfactory",
+    )
+
+
+def _proxy_rows_on_day(ts: datetime, *, include_medium: bool = False) -> list[ScheduledNewsRow]:
+    ts = ts.astimezone(timezone.utc)
+    day = datetime(ts.year, ts.month, ts.day, tzinfo=timezone.utc)
+    out: list[ScheduledNewsRow] = []
+    for event in USD_GOLD_EVENTS:
+        if event.impact == NewsImpact.MEDIUM and not include_medium:
+            continue
+        for when in _event_occurrences(event, day):
+            out.append(
+                ScheduledNewsRow(
+                    name=event.name,
+                    when=when,
+                    country="USD",
+                    impact=event.impact.value,
+                    source="proxy",
+                )
+            )
+    return sorted(out, key=lambda row: row.when)
 
 
 @dataclass(frozen=True)
@@ -118,17 +173,15 @@ class NewsTradingWindow:
     release_at: datetime | None = None
 
 
-def news_events_on_day(ts: datetime, *, include_medium: bool = False) -> list[NewsDayEvent]:
+def news_events_on_day(ts: datetime, *, include_medium: bool = False) -> list[ScheduledNewsRow]:
     """High-impact USD events scheduled on this UTC calendar day."""
-    ts = ts.astimezone(timezone.utc)
-    day = datetime(ts.year, ts.month, ts.day, tzinfo=timezone.utc)
-    out: list[NewsDayEvent] = []
-    for event in USD_GOLD_EVENTS:
-        if event.impact == NewsImpact.MEDIUM and not include_medium:
-            continue
-        for when in _event_occurrences(event, day):
-            out.append(NewsDayEvent(event=event, when=when))
-    return sorted(out, key=lambda row: row.when)
+    cal = _ff_calendar()
+    if cal is not None:
+        min_impact = "Medium" if include_medium else "High"
+        rows = cal.events_on_day(ts, countries=("USD",), min_impact=min_impact)
+        if rows:
+            return [_row_from_ff(ev) for ev in rows]
+    return _proxy_rows_on_day(ts, include_medium=include_medium)
 
 
 def is_news_day(ts: datetime, *, include_medium: bool = False) -> bool:
@@ -136,7 +189,7 @@ def is_news_day(ts: datetime, *, include_medium: bool = False) -> bool:
     return bool(news_events_on_day(ts, include_medium=include_medium))
 
 
-def primary_news_event(ts: datetime) -> NewsDayEvent | None:
+def primary_news_event(ts: datetime) -> ScheduledNewsRow | None:
     rows = news_events_on_day(ts)
     return rows[0] if rows else None
 
@@ -145,16 +198,24 @@ def _nearest_scheduled_news(
     ts: datetime,
     *,
     include_medium: bool = False,
-) -> tuple[NewsDayEvent, int] | None:
-    """Return (event, minutes_until_release) for the closest scheduled print.
-
-    Positive minutes_until_release = release is still in the future.
-    Negative = release already happened.
-    """
+) -> tuple[ScheduledNewsRow, int] | None:
+    """Return (event, minutes_until_release) for the closest scheduled print."""
     ts = ts.astimezone(timezone.utc)
-    best: tuple[int, NewsDayEvent, int] | None = None
+    cal = _ff_calendar()
+    if cal is not None:
+        nearest = cal.nearest_event(
+            ts,
+            countries=("USD",),
+            min_impact="Medium" if include_medium else "High",
+        )
+        if nearest is not None:
+            ev, delta = nearest
+            return _row_from_ff(ev), delta
+
+    best: tuple[int, ScheduledNewsRow, int] | None = None
     for day in (ts - timedelta(days=1), ts, ts + timedelta(days=1)):
-        for row in news_events_on_day(day, include_medium=include_medium):
+        day_dt = day.astimezone(timezone.utc)
+        for row in _proxy_rows_on_day(day_dt, include_medium=include_medium):
             delta_min = int((row.when - ts).total_seconds() // 60)
             abs_delta = abs(delta_min)
             if best is None or abs_delta < best[0]:
@@ -163,6 +224,13 @@ def _nearest_scheduled_news(
         return None
     _, row, delta_min = best
     return row, delta_min
+
+
+def forex_factory_desk(ts: datetime | None = None) -> dict:
+    cal = _ff_calendar()
+    if cal is None:
+        return {"source": "proxy", "enabled": False, "events_today": []}
+    return {"enabled": True, **cal.desk_payload(ts)}
 
 
 def should_run_news_strategy(
@@ -194,10 +262,10 @@ def should_run_news_strategy(
     if minutes_until > pre_release_minutes:
         return NewsTradingWindow(
             active=False,
-            event=row.event.name,
+            event=row.name,
             reason=(
                 f"NewsBreakout arms T-{pre_release_minutes}m "
-                f"({row.event.name} in {minutes_until}m)"
+                f"({row.name} in {minutes_until}m)"
             ),
             minutes_from_release=minutes_from_release,
             release_at=row.when,
@@ -206,8 +274,8 @@ def should_run_news_strategy(
     if minutes_until < -post_release_minutes:
         return NewsTradingWindow(
             active=False,
-            event=row.event.name,
-            reason=f"News window ended (+{post_release_minutes}m after {row.event.name})",
+            event=row.name,
+            reason=f"News window ended (+{post_release_minutes}m after {row.name})",
             minutes_from_release=minutes_from_release,
             release_at=row.when,
         )
@@ -219,8 +287,8 @@ def should_run_news_strategy(
 
     return NewsTradingWindow(
         active=True,
-        event=row.event.name,
-        reason=f"NewsBreakout active: {row.event.name} ({phase})",
+        event=row.name,
+        reason=f"NewsBreakout active: {row.name} ({phase})",
         minutes_from_release=minutes_from_release,
         release_at=row.when,
     )
@@ -362,6 +430,27 @@ def check_news_blackout(
 ) -> NewsBlackout:
     """Return whether we should stand aside around USD/gold news."""
     ts = ts.astimezone(timezone.utc)
+    cal = _ff_calendar()
+    if cal is not None:
+        lo = ts - timedelta(hours=2)
+        hi = ts + timedelta(hours=2)
+        min_impact = "Medium" if include_medium else "High"
+        nearest_ff: tuple[int, str, int] | None = None
+        for ev in cal.events_between(lo, hi, countries=("USD",), min_impact=min_impact):
+            delta_min = int((ev.when - ts).total_seconds() // 60)
+            if -before_minutes <= delta_min <= after_minutes:
+                abs_delta = abs(delta_min)
+                if nearest_ff is None or abs_delta < nearest_ff[0]:
+                    nearest_ff = (abs_delta, ev.title, delta_min)
+        if nearest_ff is not None:
+            _, title, delta_min = nearest_ff
+            return NewsBlackout(
+                blocked=True,
+                event=title,
+                reason=f"News blackout: {title} (±{before_minutes}/{after_minutes}m · FF)",
+                minutes_to_event=nearest_ff[0],
+            )
+
     window_days = [ts - timedelta(days=1), ts, ts + timedelta(days=1)]
 
     nearest: tuple[int, NewsEvent] | None = None

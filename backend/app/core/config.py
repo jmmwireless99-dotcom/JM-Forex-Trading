@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # JM_SESSION_FILTER=true  JM_NEWS_FILTER=true  JM_PRIME_SESSION_ONLY=false
     session_filter: bool = False
     news_filter: bool = True
+    # Live Forex Factory calendar (real release times)
+    forex_factory_enabled: bool = True
+    forex_factory_refresh_seconds: int = 300
     # Auto-switch to NewsBreakout on NFP/CPI/FOMC/PCE days
     news_breakout_auto: bool = True
     prime_session_only: bool = False

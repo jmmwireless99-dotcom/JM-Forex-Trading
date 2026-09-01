@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -25,6 +25,7 @@ from app.strategies.catalog import entry_rules_short, strategy_catalog
 from app.strategies.news_calendar import (
     check_news_blackout,
     check_news_trading_window,
+    forex_factory_desk,
     is_news_day,
     primary_news_event,
     should_run_news_strategy,
@@ -618,7 +619,19 @@ async def desk() -> dict:
     primary = primary_news_event(now) if news_day else None
     news_armed = should_run_news_strategy(now)
     news_window = check_news_trading_window(now) if news_armed.active else None
+    ff_calendar = forex_factory_desk(now)
+    next_ff = ff_calendar.get("next_usd_high") or {}
     release_at = news_armed.release_at or (primary.when if primary else None)
+    scheduled_name = (
+        primary.name if primary else news_armed.event or next_ff.get("title")
+    )
+    if release_at is None and next_ff.get("when_utc"):
+        try:
+            release_at = datetime.fromisoformat(
+                str(next_ff["when_utc"]).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            release_at = None
     strategy = engine.strategy
     block = getattr(strategy, "last_block_reason", None)
     return {
@@ -643,11 +656,14 @@ async def desk() -> dict:
             "filter_enabled": settings.news_filter,
             "news_day": news_day,
             "news_breakout_auto": settings.news_breakout_auto,
-            "scheduled_event": primary.event.name if primary else news_armed.event,
-            "scheduled_release_utc": release_at.isoformat() if release_at else None,
+            "scheduled_event": scheduled_name,
+            "scheduled_release_utc": (
+                release_at.isoformat() if release_at else next_ff.get("when_utc")
+            ),
             "news_strategy_armed": news_armed.active,
             "news_strategy_reason": news_armed.reason,
             "minutes_from_release": news_armed.minutes_from_release,
+            "forex_factory": ff_calendar,
             "trading_window_active": bool(news_window and news_window.active),
             "trading_window_reason": news_window.reason if news_window else "",
         },
