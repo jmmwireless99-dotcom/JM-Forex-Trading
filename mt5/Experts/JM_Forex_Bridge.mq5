@@ -11,7 +11,7 @@
 input string InpSymbol         = "GOLD#";
 input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
-input int    InpPollMs         = 50;
+input int    InpPollMs         = 25;
 input bool   UseCommonFolder   = true;
 input string CommandFile       = "jm_command.csv";
 input string StatusFile        = "jm_status.csv";
@@ -23,7 +23,7 @@ input string AckFile           = "jm_ack.csv";
 input bool   InpUseCloudBridge = true;
 input string InpApiUrl         = "https://jmtechsolution.cloud/fx/api";
 input string InpBridgeToken    = "gTXmD7O-194jS9gveB1I5c9qjmNdqdUv";
-input int    InpSyncEveryMs    = 250;
+input int    InpSyncEveryMs    = 150;
 
 CTrade trade;
 string g_last_cmd_id = "";
@@ -315,8 +315,17 @@ void ReadCommandsFromFile()
    FileClose(h);
 }
 
-bool CloudSync()
+bool CloudAckOnly()
 {
+   if(StringLen(InpBridgeToken) < 8 || StringLen(g_ack_line) < 3)
+      return false;
+   string body = "{\"token\":\"" + JsonEscape(InpBridgeToken) + "\"";
+   body += ",\"ack\":\"" + JsonEscape(g_ack_line) + "\"}";
+   string url = InpApiUrl + "/mt/remote/sync";
+   string response = "";
+   return HttpRequest("POST", url, body, response, 3000);
+}
+
    if(StringLen(InpBridgeToken) < 8)
       return false;
 
@@ -355,7 +364,10 @@ bool CloudFetchCommand()
    string before = g_last_cmd_id;
    ProcessCommandCsv(command);
    if(g_last_cmd_id != before)
+   {
+      CloudAckOnly();
       CloudSync();
+   }
    return true;
 }
 
@@ -409,4 +421,14 @@ void OnTimer()
 void OnTick()
 {
    WriteTicks();
+   if(InpUseCloudBridge)
+   {
+      static uint s_last_cmd_fetch = 0;
+      uint now = GetTickCount();
+      if(s_last_cmd_fetch == 0 || (now - s_last_cmd_fetch) >= 25)
+      {
+         CloudFetchCommand();
+         s_last_cmd_fetch = now;
+      }
+   }
 }

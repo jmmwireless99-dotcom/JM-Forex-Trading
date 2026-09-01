@@ -76,6 +76,7 @@ def _release_file(name: str) -> Path:
         "complete-readme.txt": _RELEASES / "JM-FX-Complete-Pack/README.txt",
         "download-links.txt": _RELEASES / "JM-FX-Complete-Pack/DOWNLOAD-LINKS.txt",
         "vm-setup-checklist.txt": _RELEASES / "JM-FX-VM-Setup-Checklist.txt",
+        "mt5-fast-execution.txt": _RELEASES / "JM-FX-MT5-FAST-EXECUTION.txt",
     }
     if name in mapping:
         candidates.insert(0, mapping[name])
@@ -155,6 +156,18 @@ async def download_complete_readme() -> FileResponse:
 async def download_links_txt() -> FileResponse:
     path = _release_file("download-links.txt")
     return FileResponse(path, filename="DOWNLOAD-LINKS.txt", media_type="text/plain")
+
+
+@router.get("/downloads/mt5-fast-execution.txt")
+async def download_mt5_fast_execution() -> FileResponse:
+    path = _release_file("mt5-fast-execution.txt")
+    return FileResponse(path, filename="JM-FX-MT5-FAST-EXECUTION.txt", media_type="text/plain")
+
+
+@router.get("/downloads/vm-setup-checklist.txt")
+async def download_vm_setup_checklist() -> FileResponse:
+    path = _release_file("vm-setup-checklist.txt")
+    return FileResponse(path, filename="JM-FX-VM-Setup-Checklist.txt", media_type="text/plain")
 
 
 @router.get("/downloads/mt5-readme.txt")

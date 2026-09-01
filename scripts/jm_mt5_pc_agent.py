@@ -26,8 +26,8 @@ FILES = {
 COMMAND_FILE = "jm_command.csv"
 
 # Fast command poll (JM FX → MT5) vs full file upload (MT5 → JM FX)
-CMD_INTERVAL = 0.05
-FULL_INTERVAL = 0.25
+CMD_INTERVAL = 0.03
+FULL_INTERVAL = 0.15
 
 
 def read_text(path: Path) -> str | None:

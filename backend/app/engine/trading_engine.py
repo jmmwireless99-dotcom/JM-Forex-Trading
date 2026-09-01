@@ -1437,8 +1437,140 @@ class TradingEngine:
     async def manual_order(
         self, request: OrderRequest, account: PaperAccount | None = None
     ) -> Order:
+        acct = account or self._desk
+        via_mt = self.using_mt() or self._account_executes_via_mt(acct)
+        # MT manual fills must not queue behind the tick loop (_tick_once holds _lock).
+        if via_mt:
+            return await self._execute_mt_manual(request, account=acct)
         async with self._lock:
             return await self._execute(request, account=account)
+
+    async def _execute_mt_manual(
+        self, request: OrderRequest, *, account: PaperAccount
+    ) -> Order:
+        """Fast path: validate under lock, wait for bridge ack outside lock."""
+        bridge = None
+        platform = "mt5"
+        tick: Tick | None = None
+        async with self._lock:
+            tick = self._recent_ticks.get(request.symbol)
+            decision = account.risk.evaluate(
+                request,
+                balance=self._balance(account),
+                open_positions=self.open_positions(account),
+                tick=tick,
+            )
+            if not decision.approved:
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=decision.reason,
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(rejected, account=account)
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": account.id},
+                )
+                return rejected
+            if tick is not None and request.attach_stops:
+                sl, tp = account.risk.apply_default_stops(request, tick)
+                request.stop_loss = request.stop_loss or sl
+                request.take_profit = request.take_profit or tp
+            request.lots = decision.adjusted_lots or request.lots
+            bridge = self._bridge_for_account(account)
+            platform = self._demo_platform(account) or self._mt_platform
+            symbol = self.settings.mt_symbol if platform == "mt5" else self.settings.mt4_symbol
+            label = platform.upper().replace("_", " ")
+            if not self._mt_bridge_live(bridge):
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=f"{label} bridge offline — attach JM_Forex_Bridge on {symbol}",
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(rejected, account=account)
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": account.id},
+                )
+                return rejected
+
+        order = await asyncio.to_thread(bridge.place_order, request)
+        async with self._lock:
+            return await self._finalize_mt_order(
+                order,
+                request=request,
+                account=account,
+                bridge=bridge,
+                platform=platform,
+                tick=tick,
+            )
+
+    async def _finalize_mt_order(
+        self,
+        order: Order,
+        *,
+        request: OrderRequest,
+        account: PaperAccount,
+        bridge,
+        platform: str,
+        tick: Tick | None,
+        signal_db_id: str | None = None,
+    ) -> Order:
+        row = None
+        if order.status == OrderStatus.FILLED:
+            mt_pos = None
+            ticket = parse_mt5_ticket(order)
+            if ticket:
+                mt_pos = wait_mt_position(bridge, ticket, timeout=2.0, poll=0.04)
+            if mt_pos is None:
+                mt_pos = self._latest_open(request.symbol, request.side, account)
+            if mt_pos is not None:
+                mt_pos = mt_pos.model_copy(update={"strategy": request.strategy})
+                order.fill_price = mt_pos.entry_price
+                row = account.journal.record_mt5_open(order, mt_pos, mode=platform)
+                self._arm_entry_cooldown()
+                await self._persist_trade_open(order, mt_pos, signal_db_id=signal_db_id)
+                if self.advisor.enabled:
+                    try:
+                        self.advisor.record_open_from_trade(
+                            row, account_id=account.id, mode=platform
+                        )
+                    except Exception:
+                        pass
+            else:
+                row = account.journal.record_order(order, mode=platform)
+        else:
+            row = account.journal.record_order(order, mode=platform)
+        if row is not None:
+            await self._emit(
+                "trade", {**row.model_dump(mode="json"), "account_id": account.id}
+            )
+            await self._emit("trades", self._trades_payload(account))
+        await self._sync_mt_demo_journal(account, tick=tick, force=True)
+        await self._emit("order", {**order.model_dump(mode="json"), "account_id": account.id})
+        await self._emit("account", self.account_payload(account))
+        await self._emit(
+            "positions",
+            {
+                "account_id": account.id,
+                "positions": [
+                    p.model_dump(mode="json") for p in self.open_positions(account)
+                ],
+            },
+        )
+        return order
 
     async def set_position_stops(
         self,

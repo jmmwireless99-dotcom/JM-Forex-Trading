@@ -1,0 +1,65 @@
+================================================================================
+  JM FX — FASTEST MT5 EXECUTION (DDDC3D on Windows VM)
+================================================================================
+
+GOAL: Click Buy/Sell sa browser → MT5 filled in ~1-3 seconds (not 2+ minutes)
+
+WHY CLOUD EA MODE IS SLOWER
+---------------------------
+Cloud mode (InpUseCloudBridge=true):
+  Browser → Server → HTTP → MT5 EA → HTTP → Server → ack
+  Each HTTP call VM ↔ cloud = ~0.5-1 sec. Total = 2-4 sec minimum, often worse.
+
+FASTEST MODE: PC AGENT + LOCAL EA  ← USE THIS ON VM
+---------------------------------------------------
+  Browser → Server writes command
+  PC Agent polls server every 50ms → writes LOCAL file on VM
+  EA reads LOCAL file instantly (microseconds) → OrderSend
+  Agent uploads ack to server
+
+  Browser → Server → Agent(50ms) → Local file → EA(instant) → MT5
+
+SETUP (Windows VM — DDDC3D)
+---------------------------
+1. Download:
+   https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge.zip
+
+2. MT5 → compile JM_Forex_Bridge.mq5 v2
+
+3. Attach EA sa GOLD# chart:
+   InpUseCloudBridge  = false    ← LOCAL mode (NOT cloud)
+   InpSymbol          = GOLD#
+   UseCommonFolder    = true
+   Algo Trading ON
+
+4. Run PC Agent (keep window open):
+   python jm_mt5_pc_agent.py
+   OR double-click start-jm-mt5-agent.bat
+
+   Optional faster env:
+   set JM_CMD_INTERVAL=0.03
+   set JM_FULL_INTERVAL=0.15
+
+5. Login desk DDDC3D → test manual Buy → expect ~1-3 sec fill
+
+CLOUD EA MODE (simpler setup, slower)
+-------------------------------------
+  InpUseCloudBridge = true
+  No PC agent
+  Expected: 2-5 sec per order (depends on network VM ↔ cloud)
+
+ALREADY ON SERVER (auto)
+------------------------
+  • Manual orders bypass tick-loop lock (no queue behind 50+ paper accounts)
+  • 20ms ack polling
+  • Command file cleared after OK ack
+  • DDDC3D priority in auto-fill
+
+TROUBLESHOOT SLOW ORDERS
+------------------------
+  pending:true on command  → restart agent; clear stale command on server
+  2+ minute delay          → stale command bug OR cloud mode + slow network
+  Sync offline             → Algo Trading OFF or EA not attached
+  Error 4060               → Allow WebRequest (cloud mode only)
+
+================================================================================
