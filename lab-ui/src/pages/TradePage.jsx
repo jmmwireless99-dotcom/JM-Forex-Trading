@@ -45,7 +45,7 @@ export default function TradePage({ fixedPair = null }) {
   const [ticks, setTicks] = useState({})
   const [positions, setPositions] = useState([])
   const [trades, setTrades] = useState([])
-  const [lots, setLots] = useState('0.01')
+  const [lots, setLots] = useState('0.03')
   const [slPips, setSlPips] = useState('15')
   const [tpPips, setTpPips] = useState('30')
   const [busy, setBusy] = useState(false)
@@ -129,6 +129,7 @@ export default function TradePage({ fixedPair = null }) {
         if (!alive) return
         if (synced?.auto) {
           setAuto(synced.auto)
+          setLots(String(synced.auto.lots))
           setSlPips(String(synced.auto.sl_pips))
           setTpPips(String(synced.auto.tp_pips))
           if (synced.message) setNote(synced.message)

@@ -38,7 +38,7 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "EURUSD": {
         "strategy": "EMA_RSI_SCALP",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 14.0,
         "tp_pips": 28.0,
         "min_bars_between": 3,
@@ -47,7 +47,7 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     },
     "GBPUSD": {
         "strategy": "BREAKOUT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 20.0,
         "tp_pips": 40.0,
         "min_bars_between": 2,
@@ -56,7 +56,7 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 16.0,
         "tp_pips": 32.0,
         "min_bars_between": 3,
@@ -65,7 +65,7 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     },
     "EURCHF": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 14.0,
         "tp_pips": 28.0,
         "min_bars_between": 4,
@@ -74,12 +74,14 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
     },
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 30.0,
         "tp_pips": 75.0,
         "min_bars_between": 4,
         "cooldown_bars_after_loss": 5,
-        "auto_risk": True,
+        # Flat 0.03 lot per trade like the other 4 pairs — auto_risk sizing
+        # (1% equity / SL distance) would otherwise override the flat lot.
+        "auto_risk": False,
         "risk_pct": 1.0,
         "max_spread_pips": 3.5,
         "breakout_min_pips": 15.0,

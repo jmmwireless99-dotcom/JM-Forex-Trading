@@ -2,7 +2,7 @@
 export const PAIR_PRESETS = {
   EURUSD: {
     strategy: 'EMA_RSI_SCALP',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 14,
     tp_pips: 28,
     label: 'Scalper · EMA+RSI',
@@ -10,7 +10,7 @@ export const PAIR_PRESETS = {
   },
   GBPUSD: {
     strategy: 'BREAKOUT',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 20,
     tp_pips: 40,
     label: 'Breakout · 24-bar range',
@@ -18,7 +18,7 @@ export const PAIR_PRESETS = {
   },
   AUDNZD: {
     strategy: 'MEAN_REVERT',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 16,
     tp_pips: 32,
     label: 'Mean revert · range edges',
@@ -26,7 +26,7 @@ export const PAIR_PRESETS = {
   },
   EURCHF: {
     strategy: 'MEAN_REVERT',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 14,
     tp_pips: 28,
     label: 'Mean revert · Asian range',
@@ -34,11 +34,11 @@ export const PAIR_PRESETS = {
   },
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 30,
     tp_pips: 75,
     label: 'Gold · EMA20/50/200 + RSI8',
-    botStyle: 'Review preset · 1% risk · 30/75 pips',
+    botStyle: 'Review preset · 0.03 lot · 30/75 pips',
   },
 }
 
