@@ -18,7 +18,7 @@ export default function Nav({ page, setPage }) {
   const tabs = [
     { id: 'home', label: 'Home' },
     { id: 'trade', label: 'Live demo' },
-    { id: 'suite', label: '4-pair test' },
+    { id: 'suite', label: '5-pair test' },
     { id: 'compare', label: 'Compare' },
     { id: 'snapshot', label: 'JM FX snapshot' },
     { id: 'pairs', label: 'Pair lab' },
