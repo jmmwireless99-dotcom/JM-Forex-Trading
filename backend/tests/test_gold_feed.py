@@ -12,6 +12,13 @@ def test_interval_map_defaults():
     assert _yahoo_range_for_interval("1d") == "1mo"
 
 
+def test_m5_bars_for_days():
+    from app.market_data.gold_feed import _m5_bars_for_days
+
+    assert _m5_bars_for_days(31) == 8928
+    assert _m5_bars_for_days(1) == 288
+
+
 def test_fetch_gold_candles_live():
     try:
         data = fetch_gold_candles(interval="5m", limit=50)

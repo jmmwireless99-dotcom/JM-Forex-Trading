@@ -589,13 +589,31 @@ async def candles(symbol: str | None = None, limit: int = 200) -> dict:
     }
 
 
+@router.get("/signal-candles")
+async def signal_candles(symbol: str | None = None, limit: int = 500) -> dict:
+    """Desk M5 signal candles — same bars EMA_RSI / Asia strategies evaluate."""
+    engine = get_engine()
+    limit = max(10, min(limit, 600))
+    sym = (symbol or engine.settings.symbols[0]).upper()
+    return {
+        "symbol": sym,
+        "period_seconds": engine.signal_candles.period_seconds,
+        "timeframe": f"M{max(1, engine.signal_candles.period_seconds // 60)}",
+        "candles": engine.signal_candle_history(sym, limit),
+    }
+
+
 @router.get("/market/gold-candles")
-async def gold_candles(interval: str = "5m", limit: int = 300) -> dict:
+async def gold_candles(interval: str = "5m", limit: int = 300, days: int | None = None) -> dict:
     """Live gold OHLC for dashboard (Yahoo GC=F). Display only — not strategy feed."""
     from app.market_data.gold_feed import fetch_gold_candles
 
     try:
-        return fetch_gold_candles(interval=interval, limit=min(max(limit, 50), 1000))
+        return fetch_gold_candles(
+            interval=interval,
+            limit=min(max(limit, 50), 9000),
+            days=days,
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 

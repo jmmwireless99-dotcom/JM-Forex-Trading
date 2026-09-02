@@ -90,6 +90,8 @@ export default function App() {
   }
   const [candles, setCandles] = useState([])
   const [liveCandle, setLiveCandle] = useState(null)
+  const [signalCandles, setSignalCandles] = useState([])
+  const [liveSignalCandle, setLiveSignalCandle] = useState(null)
   const [trades, setTrades] = useState([])
   const [tradeSummary, setTradeSummary] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -370,6 +372,31 @@ export default function App() {
           return next.slice(-240)
         })
       }
+      if (msg.event === 'signal_candle') {
+        setLiveSignalCandle(msg.data)
+        setSignalCandles((prev) => {
+          const next = [...prev]
+          const idx = next.findIndex(
+            (c) => (c.open_time || c.timestamp) === (msg.data.open_time || msg.data.timestamp),
+          )
+          if (idx >= 0) next[idx] = msg.data
+          else next.push(msg.data)
+          return next.slice(-600)
+        })
+      }
+      if (msg.event === 'signal_candle_closed') {
+        setLiveSignalCandle(null)
+        setSignalCandles((prev) => {
+          const next = [
+            ...prev.filter(
+              (c) =>
+                (c.open_time || c.timestamp) !== (msg.data.open_time || msg.data.timestamp),
+            ),
+          ]
+          next.push(msg.data)
+          return next.slice(-600)
+        })
+      }
       if (msg.event === 'trades') {
         setTrades(msg.data?.trades || [])
         setTradeSummary(msg.data?.summary || null)
@@ -402,6 +429,7 @@ export default function App() {
           api.desk(),
           api.mtStatus(),
           api.candles('XAUUSD', 200),
+          api.signalCandles('XAUUSD', 500),
           api.auto(),
         ])
         if (!alive) return
@@ -414,7 +442,8 @@ export default function App() {
         const deskInfo = val(4)
         const mtInfo = val(5)
         const candleInfo = val(6)
-        const auto = val(7)
+        const signalInfo = val(7)
+        const auto = val(8)
         if (st) {
           setStatus(st)
           if (!mtLinkedOnlyRef.current) {
@@ -431,6 +460,7 @@ export default function App() {
         if (mtInfo) setMt(mtInfo)
         if (auto) setAutoInfo(auto)
         if (candleInfo) setCandles(candleInfo.candles || [])
+        if (signalInfo) setSignalCandles(signalInfo.candles || [])
         if (tk) {
           const map = {}
           for (const t of tk.ticks || []) map[t.symbol] = t
@@ -1313,7 +1343,7 @@ export default function App() {
                 ? 'GOLD# desk tape — synced from XM MT5 · M5 · M15 · H1 · 1M Daily'
                 : mt4Real
                   ? `${mt4Symbol} desk tape — synced from XM MT4 live · M5 · M15 · H1 · 1M Daily`
-                  : 'Desk tape — Live · M5 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
+                  : 'Desk tape — M5 default · M1 · M15 · H1 · 1M Daily · EMA/RSI/SL/TP'}
           </span>
         </div>
         {chartMode === 'tradingview' ? (
@@ -1322,6 +1352,8 @@ export default function App() {
           <CandleChart
             candles={candles}
             liveCandle={liveCandle}
+            signalCandles={signalCandles}
+            liveSignalCandle={liveSignalCandle}
             livePrice={gold?.mid}
             symbol={goldLabel}
             positions={positions}

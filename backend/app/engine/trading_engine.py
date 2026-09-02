@@ -1221,6 +1221,11 @@ class TradingEngine:
         symbol = (symbol or self.settings.symbols[0]).upper()
         return [c.model_dump(mode="json") for c in self.candles.history(symbol, limit)]
 
+    def signal_candle_history(self, symbol: str | None = None, limit: int = 500) -> list:
+        """M5 (signal) candles — same timeframe strategies use for entries."""
+        symbol = (symbol or self.settings.symbols[0]).upper()
+        return [c.model_dump(mode="json") for c in self.signal_candles.history(symbol, limit)]
+
     async def _journal_close(self, position: Position, account: PaperAccount) -> None:
         row = account.journal.record_close(position)
         if row:
@@ -1602,7 +1607,15 @@ class TradingEngine:
                     await self._maybe_scale_in_adds(tick)
                 await self._emit("candle", forming.model_dump(mode="json"))
 
-                closed_signal, _forming_signal = self.signal_candles.update(tick)
+                closed_signal, forming_signal = self.signal_candles.update(tick)
+                if closed_signal is not None:
+                    await self._emit(
+                        "signal_candle_closed",
+                        closed_signal.model_dump(mode="json"),
+                    )
+                if forming_signal is not None:
+                    await self._emit("signal_candle", forming_signal.model_dump(mode="json"))
+
                 closed_m3, _forming_m3 = self.m3_candles.update(tick)
                 signal = None
                 uses_m3_entry = (
