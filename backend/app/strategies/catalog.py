@@ -96,7 +96,7 @@ def strategy_catalog() -> list[dict]:
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
-                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
+                "Cooldown spacing ≥4 M5 bars (≥6 to flip side); no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",

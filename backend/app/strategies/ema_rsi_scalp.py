@@ -142,7 +142,7 @@ class EmaRsiScalpStrategy(Strategy):
                 )
                 if len(bars) - 1 - idx < self.min_bars_between_signals:
                     self.last_block_reason = (
-                        f"Cooldown cooldown ({self.min_bars_between_signals} M5 bars)"
+                        f"Cooldown ({self.min_bars_between_signals} M5 bars)"
                     )
                     return None
             except StopIteration:
