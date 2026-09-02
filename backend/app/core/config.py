@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Aug 31) does not shrink/grow with the calmer Asia morning tape and was
     # linked to worse morning results. Default back to ATR structure.
     asia_use_structure_stops: bool = True
+    # Asia desk ATR floors — slightly wider than the base 1.15/2.3 so calm-morning
+    # noise does not tag SL as easily (PH 7AM–8PM + 2AM–7AM EMA_RSI slots).
+    asia_min_stop_atr: float = 1.45
+    asia_min_tp_atr: float = 2.9
+    asia_structure_atr_pad: float = 0.4
     # Legacy fixed pip SL/TP — only used when asia_use_structure_stops=false
     asia_stop_loss_pips: float = 120.0
     asia_take_profit_pips: float = 225.0

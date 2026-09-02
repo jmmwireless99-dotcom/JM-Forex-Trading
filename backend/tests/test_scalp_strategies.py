@@ -229,7 +229,7 @@ def _asia_buy_signal(*, asia_use_structure_stops: bool | None = None, monkeypatc
 
 
 def test_asia_session_defaults_to_atr_structure_stops(monkeypatch):
-    """Aug 19 baseline: Asia morning stops adapt to ATR, not a blanket 120p."""
+    """Asia morning stops adapt to ATR with wider desk floors (not fixed 120p)."""
     from app.core.config import get_settings
 
     signal, entry = _asia_buy_signal(monkeypatch=monkeypatch)
@@ -243,6 +243,36 @@ def test_asia_session_defaults_to_atr_structure_stops(monkeypatch):
     # Fixed-pip mode always produces exactly 120p SL — structure mode sizes
     # from ATR/swing instead, so it should not land on that exact value.
     assert sl_pips != 120
+
+
+def test_asia_desk_uses_wider_atr_floors(monkeypatch):
+    """Asia desk config uses wider ATR floors than the base EMA_RSI defaults."""
+    from app.core.config import get_settings
+    from app.strategies.entry_setup import structure_levels
+
+    settings = get_settings()
+    assert settings.asia_min_stop_atr == 1.45
+    assert settings.asia_min_tp_atr == 2.9
+    assert settings.asia_structure_atr_pad == 0.4
+
+    now = datetime(2026, 7, 21, 2, 0, tzinfo=timezone.utc)
+    bars = _bars(10, start=2200.0, trend=0.0, now=now)
+    atr = 3.0
+    entry = bars[-1].close
+    narrow = structure_levels(
+        Side.BUY, entry=entry, candles=bars, atr=atr, min_stop_atr=1.15, min_tp_atr=2.3
+    )
+    wide = structure_levels(
+        Side.BUY,
+        entry=entry,
+        candles=bars,
+        atr=atr,
+        atr_pad=settings.asia_structure_atr_pad,
+        min_stop_atr=settings.asia_min_stop_atr,
+        min_tp_atr=settings.asia_min_tp_atr,
+    )
+    assert abs(entry - wide.stop_loss) > abs(entry - narrow.stop_loss)
+    assert abs(wide.take_profit - entry) > abs(narrow.take_profit - entry)
 
 
 def test_asia_session_legacy_fixed_pips_opt_in(monkeypatch):
