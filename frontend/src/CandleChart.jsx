@@ -19,6 +19,11 @@ const RANGE_ALIASES = {
   '15': 'm15',
 }
 
+/** Max bars sent to lightweight-charts (full month retained for scroll). */
+const MAX_CHART_BARS = 8640
+/** Default visible window on desk M5 (~2 trading days). */
+const M5_VISIBLE_BARS = 576
+
 function loadRange() {
   try {
     const saved = localStorage.getItem('jm_desk_chart_range')
@@ -151,7 +156,7 @@ function formatDayLabel(unixSec) {
 }
 
 /** First bar of each UTC day → square marker (daily separators). */
-function dayBoundaryMarkers(rows) {
+function dayBoundaryMarkers(rows, { maxLabels = 14 } = {}) {
   const out = []
   let prev = null
   for (const r of rows) {
@@ -163,8 +168,12 @@ function dayBoundaryMarkers(rows) {
       position: 'aboveBar',
       color: 'rgba(240, 199, 94, 0.9)',
       shape: 'square',
-      text: formatDayLabel(r.time),
+      text: '', // label only on recent days — long text stacks vertically
     })
+  }
+  // Label only the most recent N day boundaries to avoid chart clutter
+  for (const m of out.slice(-maxLabels)) {
+    m.text = formatDayLabel(m.time)
   }
   return out
 }
@@ -173,6 +182,11 @@ function sliceLastDays(rows, days) {
   if (!rows.length) return rows
   const cutoff = rows[rows.length - 1].time - days * 86400
   return rows.filter((r) => r.time >= cutoff)
+}
+
+function sliceLastBars(rows, maxBars) {
+  if (!rows.length || rows.length <= maxBars) return rows
+  return rows.slice(-maxBars)
 }
 
 function rangeFetchSpec(range) {
@@ -222,6 +236,7 @@ export default function CandleChart({
   const candleTimesRef = useRef([])
   const displayRowsRef = useRef([])
   const fitOnceRef = useRef(false)
+  const m5ZoomKeyRef = useRef('')
 
   const [range, setRange] = useState(loadRange)
   const [histRows, setHistRows] = useState([])
@@ -244,16 +259,21 @@ export default function CandleChart({
     [signalCandles, liveSignalCandle],
   )
 
-  const displayRows =
-    range === 'm1tape' ? m1Rows : range === 'm5' ? mergeCandleRows(histRows, deskM5Tail) : histRows
+  const displayRows = useMemo(() => {
+    let rows =
+      range === 'm1tape' ? m1Rows : range === 'm5' ? mergeCandleRows(histRows, deskM5Tail) : histRows
+    return sliceLastBars(rows, MAX_CHART_BARS)
+  }, [range, m1Rows, histRows, deskM5Tail])
 
   useEffect(() => {
     fitOnceRef.current = false
+    m5ZoomKeyRef.current = ''
   }, [range])
 
   useEffect(() => {
     if (!hostRef.current) return undefined
     const chart = createChart(hostRef.current, {
+      autoSize: true,
       layout: {
         background: { color: 'transparent' },
         textColor: '#c5d4cf',
@@ -264,7 +284,7 @@ export default function CandleChart({
       },
       rightPriceScale: {
         borderColor: 'rgba(125, 255, 179, 0.15)',
-        scaleMargins: { top: 0.05, bottom: 0.28 },
+        scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
         borderColor: 'rgba(125, 255, 179, 0.15)',
@@ -322,7 +342,7 @@ export default function CandleChart({
       title: 'RSI',
     })
     chart.priceScale('rsi').applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0.02 },
+      scaleMargins: { top: 0.82, bottom: 0.04 },
       borderVisible: false,
       drawTicks: false,
     })
@@ -356,17 +376,7 @@ export default function CandleChart({
     chartRef.current = chart
     seriesRef.current = series
 
-    const ro = new ResizeObserver(() => {
-      if (!hostRef.current) return
-      chart.applyOptions({
-        width: hostRef.current.clientWidth,
-        height: hostRef.current.clientHeight,
-      })
-    })
-    ro.observe(hostRef.current)
-
     return () => {
-      ro.disconnect()
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -468,10 +478,11 @@ export default function CandleChart({
       return
     }
     seriesRef.current.setData(data)
-    if (range === 'm5' || range === 'm1tape') {
-      chartRef.current?.timeScale().scrollToRealTime()
-    } else if (!fitOnceRef.current) {
-      chartRef.current?.timeScale().fitContent()
+    const ts = chartRef.current?.timeScale()
+    if (ts && range === 'm1tape') {
+      ts.scrollToRealTime()
+    } else if (ts && range !== 'm5' && !fitOnceRef.current) {
+      ts.fitContent()
       fitOnceRef.current = true
     }
 
@@ -501,6 +512,18 @@ export default function CandleChart({
     }
     rsiRef.current.setData(pack(rsiSeries(closes, rsiPeriod), 2))
   }, [displayRows, showEma, showRsi, rsiPeriod, range, histStatus])
+
+  // M5: zoom to recent window once history is loaded (not on every live tick)
+  useEffect(() => {
+    if (range !== 'm5' || !chartRef.current || !displayRows.length) return
+    if (histStatus === 'loading') return
+    const key = `${range}|${histStatus}|${histRows.length}`
+    if (m5ZoomKeyRef.current === key) return
+    m5ZoomKeyRef.current = key
+    const ts = chartRef.current.timeScale()
+    const from = Math.max(0, displayRows.length - M5_VISIBLE_BARS)
+    ts.setVisibleLogicalRange({ from, to: displayRows.length + 2 })
+  }, [range, histStatus, histRows.length, displayRows.length])
 
   // LIVE price line; update forming M5 bar only on desk tabs (not Yahoo-only TF)
   useEffect(() => {
@@ -553,7 +576,7 @@ export default function CandleChart({
     } catch {
       /* series may be mid-reset */
     }
-  }, [livePrice, liveCandle, liveSignalCandle, candles, signalCandles, displayRows, histStatus, range])
+  }, [livePrice, liveCandle, liveSignalCandle, candles, signalCandles, range])
 
   // Entry / SL / TP
   useEffect(() => {
@@ -728,7 +751,9 @@ export default function CandleChart({
         <span className="chart-leg buy">▲ BUY</span>
         <span className="chart-leg sell">▼ SELL</span>
       </div>
-      <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
+      <div className="desk-chart-shell desk-chart-shell-rsi">
+        <div className="desk-chart-host" ref={hostRef} />
+      </div>
       {range !== 'm1tape' ? (
         <p className="desk-history-footnote">
           {range === 'm5'
