@@ -5,7 +5,7 @@ import math
 import random
 import time
 from collections import deque
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from app.ai.advisor import TradeAdvisor
@@ -646,13 +646,76 @@ class TradingEngine:
         """Warm M1/M5 history so EMA/ADX are ready without waiting hours."""
         if self.signal_candles.closed_history(self.settings.symbols[0], 10):
             return
-        # Pin paper mid to live gold BEFORE seeding so EMA history sits near TV price.
-        if self.settings.paper_sync_live_gold and self.settings.execution_mode == "paper":
-            self.market.pull_live_mids(force=True)
         symbol = self.settings.symbols[0]
+        if self._seed_signal_candles_from_market(symbol):
+            self._seed_synthetic_intraday(symbol)
+            return
+        self._seed_synthetic_all(symbol)
+
+    def _seed_signal_candles_from_market(self, symbol: str) -> bool:
+        """Seed M5 signal history from live gold feed so EMA/RSI match market scale."""
+        try:
+            from app.market_data.gold_feed import fetch_gold_candles
+
+            data = fetch_gold_candles(interval="5m", limit=300)
+            rows = data.get("candles") or []
+            if len(rows) < 50:
+                return False
+            mid = float(rows[-1]["close"])
+            if not (500 < mid < 20000):
+                return False
+            if self.settings.paper_sync_live_gold and self.settings.execution_mode == "paper":
+                self.market.pull_live_mids(force=True)
+                live = self.market.last_mids().get(symbol)
+                if live and 500 < live < 20000 and abs(live - mid) / mid <= 0.05:
+                    mid = float(live)
+            self.market.sync_mid(symbol, mid)
+
+            signal_seed = max(220, int(self.settings.candle_history))
+            bars: list[Candle] = []
+            for c in rows[-signal_seed:]:
+                ot = datetime.fromtimestamp(int(c["time"]), tz=timezone.utc)
+                bars.append(
+                    Candle(
+                        symbol=symbol,
+                        open=round(float(c["open"]), 2),
+                        high=round(float(c["high"]), 2),
+                        low=round(float(c["low"]), 2),
+                        close=round(float(c["close"]), 2),
+                        volume=1.0,
+                        period_seconds=self.settings.signal_period_seconds,
+                        open_time=ot,
+                        timestamp=ot + timedelta(seconds=self.settings.signal_period_seconds - 1),
+                        is_closed=True,
+                    )
+                )
+            self.signal_candles.seed_history(symbol, bars)
+            for strat in self._strategies.values():
+                if getattr(strat, "candle_driven", False):
+                    for bar in bars:
+                        strat.feed_bar(bar)
+            return True
+        except Exception:
+            return False
+
+    def _seed_synthetic_intraday(self, symbol: str) -> None:
+        """Seed M1/M3 around the market-synced mid (M5 already loaded from feed)."""
         mid = self.market.last_mids().get(symbol, 2350.0)
         now = utcnow()
-        # EMA200 needs 205+ M5 closes — seed past that so Asia/EMA can fire after restart.
+        signal_seed = max(220, int(self.settings.candle_history))
+        for period, agg, count in (
+            (180, self.m3_candles, max(160, signal_seed // 2)),
+            (self.settings.candle_period_seconds, self.candles, signal_seed),
+        ):
+            bars = self._synthetic_bars(symbol, mid, now, period, count)
+            agg.seed_history(symbol, bars)
+
+    def _seed_synthetic_all(self, symbol: str) -> None:
+        """Fallback when market feed unavailable — oscillate around live or default mid."""
+        if self.settings.paper_sync_live_gold and self.settings.execution_mode == "paper":
+            self.market.pull_live_mids(force=True)
+        mid = self.market.last_mids().get(symbol, 2350.0)
+        now = utcnow()
         signal_seed = max(220, int(self.settings.candle_history))
         last_close = mid
         for period, agg, count in (
@@ -660,44 +723,51 @@ class TradingEngine:
             (180, self.m3_candles, max(160, signal_seed // 2)),
             (self.settings.candle_period_seconds, self.candles, signal_seed),
         ):
-            bars: list[Candle] = []
-            # Oscillate around the live mid so EMA20/200 stay near current tape
-            price = mid
-            for i in range(count):
-                # Mean-revert to mid — last bars finish at the live price
-                target = mid + math.sin(i / 11.0) * 1.2
-                # Stronger pull on the final 30 bars so seed end ≈ live mid
-                if i >= count - 30:
-                    target = mid + math.sin(i / 7.0) * 0.25
-                delta = (target - price) * 0.35 + random.uniform(-0.12, 0.12)
-                o = price
-                c = price + delta
-                h = max(o, c) + abs(delta) * 0.35 + 0.05
-                l = min(o, c) - abs(delta) * 0.35 - 0.05
-                open_time = now - timedelta(seconds=period * (count - i))
-                bars.append(
-                    Candle(
-                        symbol=symbol,
-                        open=round(o, 2),
-                        high=round(h, 2),
-                        low=round(l, 2),
-                        close=round(c, 2),
-                        volume=float(20 + i % 7),
-                        period_seconds=period,
-                        open_time=open_time,
-                        timestamp=open_time + timedelta(seconds=period - 1),
-                        is_closed=True,
-                    )
-                )
-                price = c
-            last_close = price
+            bars = self._synthetic_bars(symbol, mid, now, period, count)
+            last_close = bars[-1].close if bars else mid
             agg.seed_history(symbol, bars)
             for strat in self._strategies.values():
                 if getattr(strat, "candle_driven", False) and period == self.settings.signal_period_seconds:
                     for bar in bars:
                         strat.feed_bar(bar)
-        # Keep the live simulator glued to the seeded close (EMA proximity)
         self.market.sync_mid(symbol, last_close)
+
+    def _synthetic_bars(
+        self,
+        symbol: str,
+        mid: float,
+        now: datetime,
+        period: int,
+        count: int,
+    ) -> list[Candle]:
+        bars: list[Candle] = []
+        price = mid
+        for i in range(count):
+            target = mid + math.sin(i / 11.0) * 1.2
+            if i >= count - 30:
+                target = mid + math.sin(i / 7.0) * 0.25
+            delta = (target - price) * 0.35 + random.uniform(-0.12, 0.12)
+            o = price
+            c = price + delta
+            h = max(o, c) + abs(delta) * 0.35 + 0.05
+            l = min(o, c) - abs(delta) * 0.35 - 0.05
+            open_time = now - timedelta(seconds=period * (count - i))
+            bars.append(
+                Candle(
+                    symbol=symbol,
+                    open=round(o, 2),
+                    high=round(h, 2),
+                    low=round(l, 2),
+                    close=round(c, 2),
+                    volume=float(20 + i % 7),
+                    period_seconds=period,
+                    open_time=open_time,
+                    timestamp=open_time + timedelta(seconds=period - 1),
+                    is_closed=True,
+                )
+            )
+            price = c
+        return bars
 
     async def start(self) -> None:
         if self.running:

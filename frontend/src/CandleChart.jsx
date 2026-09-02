@@ -57,6 +57,12 @@ function mergeCandleRows(...groups) {
   return Array.from(map.values()).sort((a, b) => a.time - b.time)
 }
 
+/** Reject mixing engine/paper prices with market OHLC (prevents fake crash candles). */
+function priceNear(a, b, pct = 0.04) {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return false
+  return Math.abs(a - b) / b <= pct
+}
+
 function emaSeries(closes, period) {
   if (!closes.length) return []
   const k = 2 / (period + 1)
@@ -254,16 +260,12 @@ export default function CandleChart({
 
   const m1Rows = useMemo(() => buildCandleRows(candles, liveCandle), [candles, liveCandle])
 
-  const deskM5Tail = useMemo(
-    () => buildCandleRows(signalCandles, liveSignalCandle),
-    [signalCandles, liveSignalCandle],
-  )
-
+  // M5 uses market gold OHLC only — engine signal candles can sit on a different
+  // paper mid (e.g. 4436 vs PAXG 2471) and must NOT be merged into the chart.
   const displayRows = useMemo(() => {
-    let rows =
-      range === 'm1tape' ? m1Rows : range === 'm5' ? mergeCandleRows(histRows, deskM5Tail) : histRows
-    return sliceLastBars(rows, MAX_CHART_BARS)
-  }, [range, m1Rows, histRows, deskM5Tail])
+    if (range === 'm1tape') return sliceLastBars(m1Rows, MAX_CHART_BARS)
+    return sliceLastBars(histRows, MAX_CHART_BARS)
+  }, [range, m1Rows, histRows])
 
   useEffect(() => {
     fitOnceRef.current = false
@@ -408,10 +410,7 @@ export default function CandleChart({
     ;(async () => {
       try {
         if (spec.kind === 'desk_m5') {
-          const [market, desk] = await Promise.all([
-            api.goldCandles({ interval: '5', limit: 9000, days: spec.days }),
-            api.signalCandles(symbol, 500),
-          ])
+          const market = await api.goldCandles({ interval: '5', limit: 9000, days: spec.days })
           if (!alive) return
           let marketRows = (market.candles || [])
             .map((c) => ({
@@ -421,12 +420,10 @@ export default function CandleChart({
               low: Number(c.low),
               close: Number(c.close),
             }))
-            .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close))
+            .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close) && r.close > 500)
           marketRows = sliceLastDays(marketRows, spec.days)
-          const deskRows = (desk.candles || []).map(toChartCandle)
-          const rows = mergeCandleRows(marketRows, deskRows)
-          if (!rows.length) throw new Error('No M5 desk candles returned')
-          setHistRows(rows)
+          if (!marketRows.length) throw new Error('No M5 market candles returned')
+          setHistRows(marketRows)
           setHistStatus('ready')
           return
         }
@@ -529,14 +526,18 @@ export default function CandleChart({
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
-    const px = resolveLivePrice(livePrice, liveSignalCandle || liveCandle, signalCandles.length ? signalCandles : candles)
+    const px = resolveLivePrice(livePrice, liveCandle, candles)
     if (px == null) return
 
-    const title = `LIVE ${px.toFixed(2)}`
+    const rows = displayRowsRef.current
+    const last = rows.length ? rows[rows.length - 1] : null
+    const pxOk = last ? priceNear(px, last.close, 0.04) : true
+
+    const title = pxOk ? `LIVE ${px.toFixed(2)}` : `DESK ${px.toFixed(2)}`
     if (!livePriceLineRef.current) {
       livePriceLineRef.current = series.createPriceLine({
         price: px,
-        color: '#ffffff',
+        color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
@@ -544,11 +545,15 @@ export default function CandleChart({
       })
     } else {
       try {
-        livePriceLineRef.current.applyOptions({ price: px, title })
+        livePriceLineRef.current.applyOptions({
+          price: px,
+          title,
+          color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
+        })
       } catch {
         livePriceLineRef.current = series.createPriceLine({
           price: px,
-          color: '#ffffff',
+          color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
@@ -557,12 +562,9 @@ export default function CandleChart({
       }
     }
 
-    const canUpdateForming = range === 'm5' || range === 'm1tape'
-    if (!canUpdateForming) return
+    const canUpdateForming = (range === 'm5' || range === 'm1tape') && pxOk
+    if (!canUpdateForming || !last) return
 
-    const rows = displayRowsRef.current
-    if (!rows.length) return
-    const last = rows[rows.length - 1]
     const updated = {
       time: last.time,
       open: last.open,
@@ -576,7 +578,7 @@ export default function CandleChart({
     } catch {
       /* series may be mid-reset */
     }
-  }, [livePrice, liveCandle, liveSignalCandle, candles, signalCandles, range])
+  }, [livePrice, liveCandle, candles, range])
 
   // Entry / SL / TP
   useEffect(() => {
@@ -695,7 +697,7 @@ export default function CandleChart({
     const keys = new Set(displayRows.map((r) => utcDayKey(r.time)))
     return keys.size
   }, [displayRows])
-  const livePx = resolveLivePrice(livePrice, liveSignalCandle || liveCandle, signalCandles.length ? signalCandles : candles)
+  const livePx = resolveLivePrice(livePrice, liveCandle, candles)
 
   return (
     <div className="chart-wrap">
@@ -757,9 +759,9 @@ export default function CandleChart({
       {range !== 'm1tape' ? (
         <p className="desk-history-footnote">
           {range === 'm5'
-            ? 'M5 desk signal candles (engine) merged with ~1 month market gold OHLC · UTC day separators · white '
+            ? 'M5 market gold OHLC (GC=F / PAXG) · ~1 month · UTC day separators · white '
             : 'History via market gold OHLC (GC=F / PAXG) · UTC day separators · white '}
-          <strong>LIVE</strong> price tracks the desk tick on M5/M1 tabs only.
+          <strong>LIVE</strong> line tracks desk tick when within 4% of the last bar.
         </p>
       ) : null}
     </div>
