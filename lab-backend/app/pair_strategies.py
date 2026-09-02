@@ -45,15 +45,6 @@ PAIR_PRESETS: dict[str, dict[str, Any]] = {
         "cooldown_bars_after_loss": 3,
         "label": "Scalper · EMA+RSI",
     },
-    "GBPUSD": {
-        "strategy": "BREAKOUT",
-        "lots": 0.03,
-        "sl_pips": 20.0,
-        "tp_pips": 40.0,
-        "min_bars_between": 2,
-        "cooldown_bars_after_loss": 4,
-        "label": "Breakout · 24-bar range",
-    },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
         "lots": 0.03,

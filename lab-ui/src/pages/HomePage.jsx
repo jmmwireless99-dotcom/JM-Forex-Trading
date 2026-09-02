@@ -57,7 +57,7 @@ export default function HomePage() {
             Buksan bawat pair sa hiwalay na tab — may sariling account at auto-trader bawat isa.
           </p>
           <div className="lab-pair-url-grid">
-            {['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD'].map((id) => (
+            {['EURUSD', 'AUDNZD', 'EURCHF', 'XAUUSD'].map((id) => (
               <a key={id} href={`/lab/${id}`} className="lab-btn lab-btn-ghost" target="_blank" rel="noopener noreferrer">
                 /lab/{id}
               </a>

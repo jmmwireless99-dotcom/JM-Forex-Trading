@@ -9,7 +9,7 @@ import {
   isInvalidLabSessionError,
 } from '../api.js'
 
-const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
+const SUITE_PAIRS = ['EURUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
 
 function fmtPrice(symbol, n) {
   const d = symbol === 'XAUUSD' ? 2 : 5
@@ -178,7 +178,7 @@ export default function PairSuitePage() {
           )
         }),
       )
-      setNote(on ? 'All 5 pair autos started' : 'All 5 pair autos stopped')
+      setNote(on ? `All ${suite.accounts.length} pair autos started` : `All ${suite.accounts.length} pair autos stopped`)
       await refresh()
     } catch (e) {
       setError(e.message || String(e))
@@ -202,7 +202,7 @@ export default function PairSuitePage() {
     return (
       <div className="lab-page">
         <header className="lab-page-head">
-          <h1>5-pair dry run</h1>
+          <h1>4-pair dry run</h1>
           <p className="lab-muted">
             Isang account bawat pair — tumatakbo sabay sa server kahit iisa lang ang browser mo.
           </p>
@@ -210,7 +210,7 @@ export default function PairSuitePage() {
         <section className="lab-panel">
           <h2>Pair test suite</h2>
           <p className="lab-muted">
-            Gagawa ng 5 demo accounts: <strong>EURUSD</strong>, <strong>GBPUSD</strong>,{' '}
+            Gagawa ng {SUITE_PAIRS.length} demo accounts: <strong>EURUSD</strong>,{' '}
             <strong>AUDNZD</strong>, <strong>EURCHF</strong>, <strong>XAUUSD</strong>. Bawat isa may
             sariling strategy preset at auto-trader. Puwedeng i-monitor lahat dito nang sabay.
           </p>
@@ -226,10 +226,10 @@ export default function PairSuitePage() {
           </ul>
           <div className="lab-trade-controls">
             <button type="button" className="lab-btn" disabled={busy} onClick={() => bootstrap(true)}>
-              Create 5 accounts + start auto
+              Create {SUITE_PAIRS.length} accounts + start auto
             </button>
             <button type="button" className="lab-btn lab-btn-ghost" disabled={busy} onClick={() => bootstrap(false)}>
-              Create 5 accounts only
+              Create {SUITE_PAIRS.length} accounts only
             </button>
           </div>
           {error ? <p className="lab-error-inline">{error}</p> : null}
@@ -243,9 +243,9 @@ export default function PairSuitePage() {
     <div className="lab-page">
       <header className="lab-page-head lab-trade-head">
         <div>
-          <h1>5-pair dry run</h1>
+          <h1>4-pair dry run</h1>
           <p className="lab-muted">
-            5 accounts · tumatakbo sabay sa server · refresh every 4s
+            {SUITE_PAIRS.length} accounts · tumatakbo sabay sa server · refresh every 4s
           </p>
         </div>
         <div className="lab-suite-actions">
