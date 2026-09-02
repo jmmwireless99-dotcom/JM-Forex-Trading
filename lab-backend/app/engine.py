@@ -18,6 +18,13 @@ _running = False
 _candle_cache: dict[str, tuple[float, list]] = {}
 _AUTO_CHECK_EVERY = 60.0
 _TICK_EVERY = 1.0
+# Gold EMA200 needs 210+ closed M5 bars — 120 was blocking all XAUUSD signals
+_CANDLE_LIMIT = {"XAUUSD": 280}
+_DEFAULT_CANDLE_LIMIT = 120
+
+
+def _candle_limit(sym: str) -> int:
+    return _CANDLE_LIMIT.get(sym.upper(), _DEFAULT_CANDLE_LIMIT)
 
 
 def get_ticks() -> dict[str, dict]:
@@ -53,7 +60,9 @@ async def _refresh_symbol(sym: str) -> None:
         candles = cached[1]
     else:
         try:
-            payload = await asyncio.to_thread(fetch_candles, sym, interval="5", limit=120)
+            payload = await asyncio.to_thread(
+                fetch_candles, sym, interval="5", limit=_candle_limit(sym)
+            )
             candles = payload.get("candles") or []
             _candle_cache[sym] = (now, candles)
         except Exception as e:
