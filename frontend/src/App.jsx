@@ -26,6 +26,16 @@ function pnlClass(n) {
   return ''
 }
 
+function slTpPips(position) {
+  const entry = Number(position.entry_price)
+  const sl = position.stop_loss != null ? Number(position.stop_loss) : null
+  const tp = position.take_profit != null ? Number(position.take_profit) : null
+  return {
+    sl: sl != null ? Math.round(Math.abs(entry - sl) / 0.1) : null,
+    tp: tp != null ? Math.round(Math.abs(tp - entry) / 0.1) : null,
+  }
+}
+
 /** Map engine labels back to select value (clean slate = manual_only). */
 function normalizeStrategy(label) {
   if (!label) return 'manual_only'
@@ -612,10 +622,30 @@ export default function App() {
 
   async function attachAutoStops(id) {
     await run(async () => {
-      await api.setStops(id, { auto: true })
+      await api.setStops(id, { auto: true, vol_auto: true })
       const pos = await api.positions()
       setPositions(pos.open || [])
-      setOrderNote('Auto SL/TP attached')
+      setOrderNote('Vol-adaptive SL/TP attached (auto-adjust on)')
+      return null
+    })
+  }
+
+  async function adjustStops(id, scale, label) {
+    await run(async () => {
+      await api.setStops(id, { scale })
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote(`SL/TP ${label}`)
+      return null
+    })
+  }
+
+  async function toggleVolAuto(id, enabled) {
+    await run(async () => {
+      await api.setStops(id, { vol_auto: enabled, auto: enabled })
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote(enabled ? 'Auto SL/TP adjust ON' : 'Auto SL/TP adjust OFF (manual)')
       return null
     })
   }
@@ -1502,7 +1532,9 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((p) => (
+                {positions.map((p) => {
+                  const dist = slTpPips(p)
+                  return (
                   <tr key={p.id}>
                     <td>{p.symbol}</td>
                     <td>
@@ -1510,8 +1542,22 @@ export default function App() {
                     </td>
                     <td>{p.lots}</td>
                     <td>{p.entry_price}</td>
-                    <td>{p.stop_loss ?? '—'}</td>
-                    <td>{p.take_profit ?? '—'}</td>
+                    <td>
+                      {p.stop_loss ?? '—'}
+                      {dist.sl != null ? (
+                        <span className="meta" style={{ display: 'block', fontSize: '0.75rem' }}>
+                          {dist.sl}p
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>
+                      {p.take_profit ?? '—'}
+                      {dist.tp != null ? (
+                        <span className="meta" style={{ display: 'block', fontSize: '0.75rem' }}>
+                          {dist.tp}p
+                        </span>
+                      ) : null}
+                    </td>
                     <td className={pnlClass(p.unrealized_pnl)}>
                       ${money(p.unrealized_pnl)}
                     </td>
@@ -1521,11 +1567,42 @@ export default function App() {
                           className="btn-ghost"
                           disabled={busy}
                           onClick={() => attachAutoStops(p.id)}
-                          title="Auto attach desk default SL/TP"
+                          title="Vol-adaptive SL/TP from live ATR"
                         >
                           Auto SL/TP
                         </button>
-                      ) : null}
+                      ) : (
+                        <>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => adjustStops(p.id, 0.9, 'tightened 10%')}
+                            title="Tighten SL/TP distance 10%"
+                          >
+                            −10%
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => adjustStops(p.id, 1.1, 'widened 10%')}
+                            title="Widen SL/TP distance 10%"
+                          >
+                            +10%
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => toggleVolAuto(p.id, !p.vol_auto_stops)}
+                            title={
+                              p.vol_auto_stops
+                                ? 'Pause M5 vol-auto adjust'
+                                : 'Resume M5 vol-auto adjust'
+                            }
+                          >
+                            {p.vol_auto_stops ? 'Auto ON' : 'Auto OFF'}
+                          </button>
+                        </>
+                      )}
                       <button
                         className="btn-ghost"
                         disabled={busy}
@@ -1535,7 +1612,7 @@ export default function App() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           )}

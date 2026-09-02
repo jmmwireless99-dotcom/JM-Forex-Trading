@@ -101,7 +101,7 @@ def strategy_catalog() -> list[dict]:
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (Asia desk: ~1.45×ATR SL · 1:2 TP).",
+                "SL/TP vol-adaptive (Asia: ~0.72–1.75× ATR · calm=tighter · fast=wider · auto M5 refresh).",
             ],
             "parameters": _seed_params("EMA_RSI_Scalp"),
             "safety": [

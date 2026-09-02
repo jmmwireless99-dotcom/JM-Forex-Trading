@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     asia_min_stop_atr: float = 1.45
     asia_min_tp_atr: float = 2.9
     asia_structure_atr_pad: float = 0.4
+    # Bidirectional vol scaling — calm tape tightens SL/TP, fast tape widens.
+    asia_vol_adaptive_stops: bool = True
+    asia_vol_mult_calm: float = 0.72
+    asia_vol_mult_max: float = 1.75
+    # Refresh open Asia positions on each M5 close from live ATR/vol.
+    asia_dynamic_stops: bool = True
     # Legacy fixed pip SL/TP — only used when asia_use_structure_stops=false
     asia_stop_loss_pips: float = 120.0
     asia_take_profit_pips: float = 225.0

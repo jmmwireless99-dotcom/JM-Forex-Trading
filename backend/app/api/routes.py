@@ -238,6 +238,10 @@ class PositionStopsBody(BaseModel):
     auto: bool = False
     stop_loss_pips: float | None = Field(default=None, gt=0, le=500)
     take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
+    # Multiply current SL/TP distance from entry (0.9 = tighten 10%, 1.1 = widen 10%).
+    scale: float | None = Field(default=None, gt=0.5, le=2.0)
+    # Enable/disable M5 vol-auto refresh while position is open.
+    vol_auto: bool | None = None
 
 
 @router.get("/health")
@@ -1014,10 +1018,18 @@ async def set_position_stops(
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
     """Attach / update SL & TP after a manual (or any) open."""
-    if not body.auto and body.stop_loss is None and body.take_profit is None:
+    if (
+        not body.auto
+        and body.stop_loss is None
+        and body.take_profit is None
+        and body.scale is None
+        and body.stop_loss_pips is None
+        and body.take_profit_pips is None
+        and body.vol_auto is None
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Provide stop_loss/take_profit or set auto=true",
+            detail="Provide stop_loss/take_profit, scale, pips, vol_auto, or set auto=true",
         )
     updated = await get_engine().set_position_stops(
         position_id,
@@ -1028,6 +1040,8 @@ async def set_position_stops(
         or body.take_profit_pips is not None,
         stop_loss_pips=body.stop_loss_pips,
         take_profit_pips=body.take_profit_pips,
+        scale=body.scale,
+        vol_auto=body.vol_auto,
         account=account,
     )
     if updated is None:

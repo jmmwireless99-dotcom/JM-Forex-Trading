@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
+from app.strategies.asia_stops import compute_asia_levels
 from app.strategies.base import Strategy
 from app.strategies.entry_setup import pip_levels, structure_levels, true_atr
 from app.strategies.indicators import ema, rsi
@@ -216,16 +217,12 @@ class EmaRsiScalpStrategy(Strategy):
                 take_profit_pips=float(settings.asia_take_profit_pips),
             )
         elif asia_desk:
-            levels = structure_levels(
+            levels = compute_asia_levels(
                 side,
                 entry=entry,
                 candles=bars,
                 atr=atr,
-                swing_lookback=3,
-                atr_pad=settings.asia_structure_atr_pad,
                 reward_r=self.reward_r,
-                min_stop_atr=settings.asia_min_stop_atr,
-                min_tp_atr=settings.asia_min_tp_atr,
             )
         else:
             levels = structure_levels(

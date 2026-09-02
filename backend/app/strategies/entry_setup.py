@@ -82,6 +82,52 @@ def volatility_stop_scale(
     return effective, round(max(mult_min, min(mult_max, mult)), 3)
 
 
+def adaptive_vol_stop_scale(
+    candles: list[Candle],
+    atr: float,
+    *,
+    baseline_period: int = 48,
+    burst_bars: int = 3,
+    mult_calm: float = 0.72,
+    mult_normal: float = 1.0,
+    mult_fast: float = 1.75,
+    calm_ratio_floor: float = 0.55,
+) -> tuple[float, float]:
+    """Bidirectional vol scale — tighter stops when gold is slow, wider when fast.
+
+  ratio < 1 (calm Asia morning) → mult trends toward mult_calm (easier TP).
+  ratio > 1 (burst / news tape)   → mult trends toward mult_fast (room to breathe).
+    """
+    if not candles or atr <= 0:
+        return atr, mult_normal
+
+    baseline_atr = (
+        true_atr(candles, baseline_period)
+        if len(candles) >= baseline_period + 1
+        else atr
+    )
+    start = max(1, len(candles) - burst_bars)
+    burst_trs = [
+        bar_true_range(candles[i], candles[i - 1].close) for i in range(start, len(candles))
+    ]
+    burst_atr = sum(burst_trs) / len(burst_trs) if burst_trs else atr
+
+    effective = max(atr, burst_atr, (baseline_atr or atr) * 0.85)
+    base = baseline_atr or atr
+    if base <= 0:
+        return effective, mult_normal
+
+    ratio = effective / base
+    if ratio <= 1.0:
+        span = max(0.01, 1.0 - calm_ratio_floor)
+        t = max(0.0, min(1.0, (ratio - calm_ratio_floor) / span))
+        mult = mult_calm + t * (mult_normal - mult_calm)
+    else:
+        t = min(1.0, (ratio - 1.0) / 0.75)
+        mult = mult_normal + t * (mult_fast - mult_normal)
+    return effective, round(max(mult_calm, min(mult_fast, mult)), 3)
+
+
 def pip_levels(
     side: Side,
     *,

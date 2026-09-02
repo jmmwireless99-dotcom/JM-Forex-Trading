@@ -1476,6 +1476,85 @@ class TradingEngine:
         async with self._lock:
             return await self._execute(request, account=account)
 
+    def _position_uses_asia_stops(self, pos: Position) -> bool:
+        if pos.leg_index is not None and pos.leg_index > 1:
+            return False
+        return (pos.strategy or "") in {"EMA_RSI_Scalp", "AI_ML"}
+
+    def _asia_levels_for_position(self, pos: Position):
+        from app.strategies.asia_stops import refresh_asia_position_stops
+        from app.strategies.entry_setup import true_atr
+
+        bars = self.signal_candles.closed_history(pos.symbol, 240)
+        atr = true_atr(bars, 14)
+        if not bars or atr is None:
+            return None
+        return refresh_asia_position_stops(
+            pos.side,
+            entry=pos.entry_price,
+            candles=bars,
+            atr=atr,
+            sl_tp_scale=pos.sl_tp_scale or 1.0,
+        )
+
+    async def _maybe_dynamic_asia_stops(self, tick: Tick) -> None:
+        if not self.settings.asia_dynamic_stops:
+            return
+        from app.strategies.asia_stops import refresh_asia_position_stops, stops_materially_changed
+        from app.strategies.entry_setup import true_atr
+        from app.strategies.session import classify_session
+
+        session = classify_session(tick.timestamp)
+        if session.label not in {"asia", "off_hours"}:
+            return
+
+        bars = self.signal_candles.closed_history(tick.symbol, 240)
+        atr = true_atr(bars, 14)
+        if not bars or atr is None or atr <= 0:
+            return
+
+        for acct in self.accounts.all():
+            if self._is_mt_demo_account(acct) or self._account_executes_via_mt(acct):
+                continue
+            changed = False
+            for pos in acct.broker.open_positions():
+                if not self._position_uses_asia_stops(pos) or not pos.vol_auto_stops:
+                    continue
+                levels = refresh_asia_position_stops(
+                    pos.side,
+                    entry=pos.entry_price,
+                    candles=bars,
+                    atr=atr,
+                    sl_tp_scale=pos.sl_tp_scale or 1.0,
+                )
+                if levels is None:
+                    continue
+                if not stops_materially_changed(
+                    stop_loss=pos.stop_loss,
+                    take_profit=pos.take_profit,
+                    new_sl=levels.stop_loss,
+                    new_tp=levels.take_profit,
+                ):
+                    continue
+                updated = acct.broker.set_stops(
+                    pos.id,
+                    stop_loss=levels.stop_loss,
+                    take_profit=levels.take_profit,
+                )
+                if updated:
+                    changed = True
+            if changed:
+                acct.journal.update_open_pnl(acct.broker.open_positions())
+                await self._emit(
+                    "positions",
+                    {
+                        "account_id": acct.id,
+                        "positions": [
+                            p.model_dump(mode="json") for p in self.open_positions(acct)
+                        ],
+                    },
+                )
+
     async def set_position_stops(
         self,
         position_id: str,
@@ -1485,6 +1564,8 @@ class TradingEngine:
         auto: bool = False,
         stop_loss_pips: float | None = None,
         take_profit_pips: float | None = None,
+        scale: float | None = None,
+        vol_auto: bool | None = None,
         account: PaperAccount | None = None,
     ) -> Position | None:
         """Attach / update SL & TP on an open position (manual desk helper)."""
@@ -1498,20 +1579,43 @@ class TradingEngine:
             )
             if pos is None:
                 return None
+            if vol_auto is not None:
+                pos.vol_auto_stops = vol_auto
+            if scale is not None:
+                pos.sl_tp_scale = max(0.5, min(2.0, (pos.sl_tp_scale or 1.0) * scale))
+
             sl = stop_loss
             tp = take_profit
-            if auto or (sl is None and tp is None):
-                auto_sl, auto_tp = acct.risk.stops_from_entry(
-                    symbol=pos.symbol,
-                    side=pos.side,
-                    entry=pos.entry_price,
-                    stop_loss_pips=stop_loss_pips,
-                    take_profit_pips=take_profit_pips,
-                )
-                if sl is None:
-                    sl = auto_sl
-                if tp is None:
-                    tp = auto_tp
+            pip = 0.1
+            if stop_loss_pips is not None or take_profit_pips is not None:
+                pos.vol_auto_stops = False
+                entry = pos.entry_price
+                if stop_loss_pips is not None:
+                    dist = float(stop_loss_pips) * pip
+                    sl = entry - dist if pos.side == Side.BUY else entry + dist
+                if take_profit_pips is not None:
+                    dist = float(take_profit_pips) * pip
+                    tp = entry + dist if pos.side == Side.BUY else entry - dist
+            elif scale is not None and sl is None and tp is None:
+                levels = self._asia_levels_for_position(pos)
+                if levels is not None:
+                    sl, tp = levels.stop_loss, levels.take_profit
+            elif auto or (sl is None and tp is None):
+                levels = self._asia_levels_for_position(pos)
+                if levels is not None:
+                    sl, tp = levels.stop_loss, levels.take_profit
+                else:
+                    auto_sl, auto_tp = acct.risk.stops_from_entry(
+                        symbol=pos.symbol,
+                        side=pos.side,
+                        entry=pos.entry_price,
+                        stop_loss_pips=stop_loss_pips,
+                        take_profit_pips=take_profit_pips,
+                    )
+                    if sl is None:
+                        sl = auto_sl
+                    if tp is None:
+                        tp = auto_tp
             updated = acct.broker.set_stops(
                 position_id, stop_loss=sl, take_profit=tp
             )
@@ -1663,6 +1767,7 @@ class TradingEngine:
                                 )
                         else:
                             strat.feed(tick)
+                    await self._maybe_dynamic_asia_stops(tick)
                     allow_entries = await self._apply_auto_router(tick)
                     if allow_entries and not uses_m3_entry:
                         bars = self.signal_candles.closed_history(tick.symbol, 240)
