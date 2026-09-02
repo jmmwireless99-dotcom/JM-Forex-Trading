@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # Deploy JM Lab to VPS over SSH — never runs deploy-fx-portal.sh.
+#
+# IMPORTANT: Lab uses its own git worktree (JM_VPS_LAB_DIR, default
+# /opt/jm-lab-src) — completely separate checkout from the JM FX repo
+# (JM_VPS_DIR, /opt/jm-forex-trading). Both scripts used to `git checkout`
+# the SAME directory, so a Lab deploy would silently switch the on-disk
+# source for jm-forex.service too — harmless only until that service ever
+# restarts, at which point it reloads whatever branch Lab last checked out.
+# The worktree keeps the two checkouts (and running services) independent.
 set -euo pipefail
 
 HOST="${JM_VPS_HOST:-72.62.73.235}"
 USER="${JM_VPS_USER:?Set JM_VPS_USER (e.g. root)}"
-DIR="${JM_VPS_DIR:-/opt/jm-forex-trading}"
+FX_DIR="${JM_VPS_DIR:-/opt/jm-forex-trading}"
+DIR="${JM_VPS_LAB_DIR:-/opt/jm-lab-src}"
 BRANCH="${BRANCH:-cursor/lab-demo-trading-c11c}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
@@ -25,8 +34,27 @@ fi
 
 echo "Deploying JM Lab only (${BRANCH}) → ${USER}@${HOST}"
 "${SSH[@]}" "set -euo pipefail
-  cd '${DIR}'
+  FX_DIR='${FX_DIR}'
+  DIR='${DIR}'
   export BRANCH='${BRANCH}'
+
+  # One-time: create the isolated Lab worktree (does not touch \$FX_DIR's checkout).
+  if [[ ! -d \"\$DIR/.git\" && ! -f \"\$DIR/.git\" ]]; then
+    echo '[0/5] Creating isolated Lab worktree at' \"\$DIR\" '...'
+    git -C \"\$FX_DIR\" fetch origin \"\$BRANCH\"
+    git -C \"\$FX_DIR\" worktree add \"\$DIR\" -B \"\$BRANCH\" \"origin/\$BRANCH\" 2>/dev/null \\
+      || git -C \"\$FX_DIR\" worktree add \"\$DIR\" \"origin/\$BRANCH\" --detach
+
+    # Migrate existing Lab data (trade history) from the old shared checkout
+    # into the new isolated worktree — one-time, only if not already present.
+    if [[ -f \"\$FX_DIR/lab-backend/data/lab_accounts.json\" && ! -f \"\$DIR/lab-backend/data/lab_accounts.json\" ]]; then
+      echo 'Migrating existing lab_accounts.json into the new worktree...'
+      mkdir -p \"\$DIR/lab-backend/data\"
+      cp -a \"\$FX_DIR/lab-backend/data/lab_accounts.json\" \"\$DIR/lab-backend/data/lab_accounts.json\"
+    fi
+  fi
+
+  cd \"\$DIR\"
   chmod +x scripts/deploy-lab-portal.sh scripts/deploy-lab-backend.sh scripts/install-apache-lab-snippet.sh 2>/dev/null || true
   if [[ -x scripts/install-apache-lab-snippet.sh ]]; then
     ./scripts/install-apache-lab-snippet.sh || true

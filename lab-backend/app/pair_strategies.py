@@ -6,22 +6,30 @@ from typing import Any
 STRATEGIES: dict[str, dict[str, Any]] = {
     "EMA_RSI_SCALP": {
         "name": "EMA+RSI Scalper",
-        "description": "M5 EMA 20/50 + RSI 14 — tight zones for EUR/USD scalping.",
+        "description": "M5 EMA 20/50 + RSI 14 — trend + candle confirm for EUR/USD.",
         "pairs": ["EURUSD"],
     },
     "BREAKOUT": {
         "name": "Range Breakout",
-        "description": "M5 close breaks 24-bar high/low — trend/breakout style for GBP/USD.",
+        "description": "M5 close breaks 24-bar range with buffer — GBP/USD.",
         "pairs": ["GBPUSD"],
     },
     "MEAN_REVERT": {
         "name": "Mean Reversion (grid-lite)",
-        "description": "Buy range bottom / sell range top — ranging pairs (no martingale).",
+        "description": "Fade range edges with trend + rejection filter — no martingale.",
         "pairs": ["AUDNZD", "EURCHF"],
     },
     "EMA_RSI_TREND": {
-        "name": "EMA+RSI Trend",
-        "description": "M5 EMA 20/50 + RSI 14 — wider zones for volatile XAUUSD.",
+        "name": "Gold EMA+RSI (Review)",
+        "description": (
+            "M5 EMA 20/50/200 + RSI(8) · oversold 40 / overbought 60 · "
+            "30p SL / 75p TP (1:2.5) · min 15p signal candle · 1% auto risk."
+        ),
+        "pairs": ["XAUUSD"],
+    },
+    "GOLD_EMA_RSI": {
+        "name": "Gold EMA+RSI (Review)",
+        "description": "Alias for EMA_RSI_TREND gold review preset.",
         "pairs": ["XAUUSD"],
     },
 }
@@ -30,38 +38,51 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "EURUSD": {
         "strategy": "EMA_RSI_SCALP",
-        "lots": 0.01,
-        "sl_pips": 12.0,
-        "tp_pips": 24.0,
+        "lots": 0.03,
+        "sl_pips": 14.0,
+        "tp_pips": 28.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 3,
         "label": "Scalper · EMA+RSI",
-    },
-    "GBPUSD": {
-        "strategy": "BREAKOUT",
-        "lots": 0.01,
-        "sl_pips": 18.0,
-        "tp_pips": 36.0,
-        "label": "Breakout · 24-bar range",
     },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
-        "sl_pips": 14.0,
-        "tp_pips": 20.0,
+        "lots": 0.03,
+        "sl_pips": 16.0,
+        "tp_pips": 32.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 4,
         "label": "Mean revert · range edges",
     },
     "EURCHF": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
-        "sl_pips": 10.0,
-        "tp_pips": 16.0,
-        "label": "Mean revert · Asian range",
+        "lots": 0.03,
+        "sl_pips": 14.0,
+        "tp_pips": 28.0,
+        "min_bars_between": 4,
+        "cooldown_bars_after_loss": 6,
+        "label": "Mean revert · filtered",
     },
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
-        "lots": 0.01,
-        "sl_pips": 20.0,
-        "tp_pips": 40.0,
-        "label": "Trend · EMA+RSI gold",
+        "lots": 0.03,
+        "sl_pips": 30.0,
+        "tp_pips": 75.0,
+        "min_bars_between": 4,
+        "cooldown_bars_after_loss": 5,
+        # Flat 0.03 lot per trade like the other 4 pairs — auto_risk sizing
+        # (1% equity / SL distance) would otherwise override the flat lot.
+        "auto_risk": False,
+        "risk_pct": 1.0,
+        "max_spread_pips": 3.5,
+        "breakout_min_pips": 15.0,
+        "ema_fast": 20,
+        "ema_medium": 50,
+        "ema_slow": 200,
+        "rsi_period": 8,
+        "rsi_oversold": 40.0,
+        "rsi_overbought": 60.0,
+        "label": "Gold · EMA20/50/200 + RSI8",
     },
 }
 
