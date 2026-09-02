@@ -205,7 +205,10 @@ class EmaRsiScalpStrategy(Strategy):
         entry = tick.ask if side == Side.BUY else tick.bid
         settings = get_settings()
         session = classify_session(tick.timestamp)
-        if session.label == "asia":
+        if session.label == "asia" and not settings.asia_use_structure_stops:
+            # Legacy fixed-pip mode (opt-in) — does not adapt to the calmer
+            # Asia morning tape. Default is the Aug 19 ATR structure baseline
+            # below, shared with every other session.
             levels = pip_levels(
                 side,
                 entry=entry,

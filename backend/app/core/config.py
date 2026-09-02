@@ -26,7 +26,12 @@ class Settings(BaseSettings):
     # pip=0.1 → 90 pips = $9.00 move on XAUUSD; TP at 2.5R = 225 pips ($22.50)
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
-    # Asia desk (PH 7AM–8PM, EMA_RSI child) — fixed pip SL/TP on auto signals
+    # Asia desk (PH 7AM–8PM, EMA_RSI child) — Aug 19 baseline used ATR structure
+    # stops (adapts to actual morning volatility); fixed 120p/225p pips (added
+    # Aug 31) does not shrink/grow with the calmer Asia morning tape and was
+    # linked to worse morning results. Default back to ATR structure.
+    asia_use_structure_stops: bool = True
+    # Legacy fixed pip SL/TP — only used when asia_use_structure_stops=false
     asia_stop_loss_pips: float = 120.0
     asia_take_profit_pips: float = 225.0
 
