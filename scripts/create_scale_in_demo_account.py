@@ -102,9 +102,13 @@ def main() -> None:
         "follow_auto": acct.follow_auto,
         "scale_in": {
             "max_legs": settings.scale_in_max_legs,
-            "step_pips": settings.scale_in_step_pips,
+            "structure_pullback": settings.scale_in_structure_pullback,
+            "min_pullback_atr": settings.scale_in_min_pullback_atr,
+            "step_pips": settings.scale_in_step_pips
+            if not settings.scale_in_structure_pullback
+            else None,
             "lots_per_leg": lots,
-            "note": "0.01/0.02/0.03 per $1k balance per leg (× balance tier)",
+            "note": "Legs 2–3: M1 structure zone (ATR + swing); leg 1 = M5 signal",
         },
         "next_steps": [
             "Login dashboard with account code + token above",

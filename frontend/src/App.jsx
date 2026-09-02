@@ -652,7 +652,7 @@ export default function App() {
             {mtLinkedOnly ? (
               mtLinkedOnline ? ' · Sync OK' : ' · Sync offline'
             ) : scaleInMode ? (
-              ' · Scale-in 3L'
+              ' · Scale-in 3L · M1 structure'
             ) : mode !== 'paper' ? (
               mtOnline ? ' · MT online' : ' · MT offline'
             ) : (

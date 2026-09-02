@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     entry_cooldown_seconds: int = 120
     # Scale-in demo accounts only (scale_in_mode on paper account — not global)
     scale_in_max_legs: int = 3
+    # Legs 2–3: M1 structure pullback (ATR + swing zone) — market-based, not fixed pips
+    scale_in_structure_pullback: bool = True
+    scale_in_min_pullback_atr: float = 0.55
+    scale_in_swing_lookback: int = 5
+    scale_in_zone_atr: float = 0.4
+    # Legacy fixed pip step (legs 2–3 only when scale_in_structure_pullback=false)
     scale_in_step_pips: float = 18.0
     scale_in_base_lot_per_1k: float = 0.01
     scale_in_leg_cooldown_seconds: int = 60
