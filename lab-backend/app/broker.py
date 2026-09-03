@@ -78,6 +78,14 @@ class LabBroker:
     def _half_spread(self, symbol: str) -> float:
         return self._pip(symbol) * self.SPREAD_PIPS.get(symbol, 1.0) / 2
 
+    def entry_price(self, symbol: str, side: Side, mid: float | None = None) -> float:
+        tick = self._ticks.get(symbol)
+        if tick:
+            return float(tick["ask"] if side == "BUY" else tick["bid"])
+        hs = self._half_spread(symbol)
+        m = mid if mid is not None else 0.0
+        return m + hs if side == "BUY" else m - hs
+
     def update_tick(self, symbol: str, mid: float) -> list[Position]:
         hs = self._half_spread(symbol)
         self._ticks[symbol] = {"mid": mid, "bid": mid - hs, "ask": mid + hs}

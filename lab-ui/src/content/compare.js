@@ -34,11 +34,11 @@ export const PAIR_PRESETS = {
   },
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 20,
     tp_pips: 40,
-    label: 'Trend · EMA+RSI gold',
-    botStyle: 'Trend · Session scalp',
+    label: 'Gold scalper · EMA+RSI',
+    botStyle: 'Trend · M5 scalper (lab paper)',
   },
 }
 
@@ -56,8 +56,8 @@ export const STRATEGY_INFO = {
     description: 'Buy bottom 25% / sell top 25% of range. Grid-lite for AUD/NZD & EUR/CHF.',
   },
   EMA_RSI_TREND: {
-    name: 'EMA+RSI Trend',
-    description: 'Wider RSI zones for gold trends. Paper demo only — live gold on /fx/.',
+    name: 'Gold EMA+RSI Scalper',
+    description: 'M5 EMA 20/50 + RSI 14 — wider zones (35–56 buy, 42–65 sell). Paper lab only.',
   },
 }
 
@@ -131,14 +131,14 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
       : id === 'GBPUSD'
         ? 'London open · NY volatility'
         : id === 'XAUUSD'
-          ? 'JM FX Manila schedule'
+          ? '24h · M5 scalper'
           : 'London / NY',
   labAuto: p.label,
   strategy: p.strategy,
   sl_pips: p.sl_pips,
   tp_pips: p.tp_pips,
   risk: id === 'AUDNZD' || id === 'EURCHF' ? 'Medium (demo)' : id === 'GBPUSD' ? 'Medium' : 'Low–medium',
-  status: id === 'XAUUSD' ? 'live-ref' : 'live',
+  status: 'live',
   note:
     id === 'EURUSD'
       ? '#1 liquidity — auto scalper preset applied on Start auto.'
@@ -148,7 +148,7 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
           ? 'Mean revert at range edges — no martingale, max 1 position.'
           : id === 'EURCHF'
             ? 'Tighter Asian range mean revert preset.'
-            : 'EMA+RSI trend preset — production desk at /fx/.',
+            : 'Gold M5 scalper — separate from JM FX production desk at /fx/.',
 }))
 
 export const PAIR_EXPERIMENTS = PAIR_GUIDE

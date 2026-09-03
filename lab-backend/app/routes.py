@@ -39,7 +39,7 @@ class AutoBody(BaseModel):
     lots: float | None = Field(None, ge=0.01, le=50)
     sl_pips: float | None = Field(None, ge=1, le=500)
     tp_pips: float | None = Field(None, ge=1, le=500)
-    strategy: str = "EMA_RSI"
+    strategy: str | None = None
 
 
 def _auth(account_id: str | None, token: str | None):

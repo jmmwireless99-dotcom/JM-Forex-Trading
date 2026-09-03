@@ -20,8 +20,11 @@ STRATEGIES: dict[str, dict[str, Any]] = {
         "pairs": ["AUDNZD", "EURCHF"],
     },
     "EMA_RSI_TREND": {
-        "name": "EMA+RSI Trend",
-        "description": "M5 EMA 20/50 + RSI 14 — wider zones for volatile XAUUSD.",
+        "name": "Gold EMA+RSI Scalper",
+        "description": (
+            "M5 EMA 20/50 + RSI 14 — wider zones for XAUUSD scalping "
+            "(restored from strict EMA200/RSI8 review preset)."
+        ),
         "pairs": ["XAUUSD"],
     },
 }
@@ -30,38 +33,50 @@ STRATEGIES: dict[str, dict[str, Any]] = {
 PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "EURUSD": {
         "strategy": "EMA_RSI_SCALP",
-        "lots": 0.01,
-        "sl_pips": 12.0,
-        "tp_pips": 24.0,
+        "lots": 0.03,
+        "sl_pips": 14.0,
+        "tp_pips": 28.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 3,
+        "max_spread_pips": 2.0,
         "label": "Scalper · EMA+RSI",
     },
     "GBPUSD": {
         "strategy": "BREAKOUT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 18.0,
         "tp_pips": 36.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 3,
         "label": "Breakout · 24-bar range",
     },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
-        "sl_pips": 14.0,
-        "tp_pips": 20.0,
+        "lots": 0.03,
+        "sl_pips": 16.0,
+        "tp_pips": 32.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 4,
         "label": "Mean revert · range edges",
     },
     "EURCHF": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
-        "sl_pips": 10.0,
-        "tp_pips": 16.0,
-        "label": "Mean revert · Asian range",
+        "lots": 0.03,
+        "sl_pips": 14.0,
+        "tp_pips": 28.0,
+        "min_bars_between": 4,
+        "cooldown_bars_after_loss": 6,
+        "label": "Mean revert · filtered",
     },
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 20.0,
         "tp_pips": 40.0,
-        "label": "Trend · EMA+RSI gold",
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 4,
+        "max_spread_pips": 3.5,
+        "label": "Gold scalper · EMA+RSI",
     },
 }
 
@@ -72,4 +87,8 @@ def preset_for(symbol: str) -> dict[str, Any]:
 
 
 def strategy_info(strategy_id: str) -> dict[str, Any]:
-    return STRATEGIES.get(strategy_id, STRATEGIES["EMA_RSI_SCALP"])
+    sid = (strategy_id or "EMA_RSI_SCALP").upper()
+    # Legacy VPS ids → same gold scalper stack
+    if sid in {"GOLD_EMA_RSI", "EMA_RSI_TREND"} and sid not in STRATEGIES:
+        return STRATEGIES["EMA_RSI_TREND"]
+    return STRATEGIES.get(sid, STRATEGIES["EMA_RSI_SCALP"])
