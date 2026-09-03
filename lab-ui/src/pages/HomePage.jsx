@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from '../Nav.jsx'
-import { labApi } from '../api.js'
+import { labTradeApi } from '../api.js'
 
 export default function HomePage() {
   const [online, setOnline] = useState(null)
@@ -8,18 +8,18 @@ export default function HomePage() {
 
   useEffect(() => {
     let alive = true
-    labApi
-      .status()
+    labTradeApi
+      .health()
       .then((s) => {
         if (alive) {
-          setOnline(Boolean(s?.running))
+          setOnline(s?.status === 'ok')
           setErr('')
         }
       })
       .catch((e) => {
         if (alive) {
           setOnline(false)
-          setErr(e.message || 'Cannot reach JM FX API')
+          setErr(e.message || 'Cannot reach Lab API')
         }
       })
     return () => {
@@ -33,19 +33,18 @@ export default function HomePage() {
         <p className="lab-kicker">Separate from JM FX desk</p>
         <h1>JM Lab</h1>
         <p className="lab-lead">
-          Experimental UI for pair research, bot comparisons, and sandbox ideas.
-          The production gold desk at{' '}
+          4-pair paper trading sandbox — EUR/USD, AUD/NZD, EUR/CHF, and XAUUSD each run their
+          own scalping strategy on the lab backend. The production gold desk at{' '}
           <a href="/fx/" className="lab-link">
             /fx/
           </a>{' '}
-          is not changed by anything here.
+          is not controlled from here.
         </p>
         <div className="lab-pills">
           <span className={`lab-pill ${online === true ? 'ok' : online === false ? 'warn' : ''}`}>
-            JM FX API:{' '}
-            {online === null ? 'checking…' : online ? 'online (read-only)' : 'offline'}
+            Lab API: {online === null ? 'checking…' : online ? 'online' : 'offline'}
           </span>
-          <span className="lab-pill">Lab v0.1 · demo experiments</span>
+          <span className="lab-pill">4 pairs · demo · isolated backend</span>
         </div>
         {err ? <p className="lab-error-inline">{err}</p> : null}
       </section>
@@ -57,7 +56,7 @@ export default function HomePage() {
             Buksan bawat pair sa hiwalay na tab — may sariling account at auto-trader bawat isa.
           </p>
           <div className="lab-pair-url-grid">
-            {['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF'].map((id) => (
+            {['EURUSD', 'AUDNZD', 'EURCHF', 'XAUUSD'].map((id) => (
               <a key={id} href={`/lab/${id}`} className="lab-btn lab-btn-ghost" target="_blank" rel="noopener noreferrer">
                 /lab/{id}
               </a>
@@ -65,33 +64,33 @@ export default function HomePage() {
           </div>
         </article>
         <article className="lab-card">
-          <h2>Bot comparison</h2>
-          <p>JM FX gold stack vs generic Scalper, Grid, and Trend EAs — side by side.</p>
-          <Link to="compare" className="lab-btn">
-            Open comparison
+          <h2>4-pair test</h2>
+          <p>Run all four pairs in parallel — one demo account per symbol.</p>
+          <Link to="suite" className="lab-btn">
+            Open 4-pair suite
           </Link>
         </article>
         <article className="lab-card">
-          <h2>JM FX snapshot</h2>
-          <p>Live read-only view of session, block reason, and AI stats from the real desk.</p>
+          <h2>Lab status</h2>
+          <p>Auto-trader block reasons, equity, and last signals for each pair.</p>
           <Link to="snapshot" className="lab-btn">
-            View snapshot
+            View status
           </Link>
         </article>
         <article className="lab-card">
           <h2>Live demo trading</h2>
           <p>
-            Paper money with live EUR/USD, GBP/USD, and gold prices — separate lab backend, not JM FX.
+            Paper money with live EUR/USD, AUD/NZD, EUR/CHF, and gold prices — lab backend only.
           </p>
           <Link to="trade" className="lab-btn">
             Open live demo
           </Link>
         </article>
         <article className="lab-card">
-          <h2>Pair sandbox</h2>
-          <p>Placeholder for EUR/USD, GBP/USD, and other pair experiments.</p>
-          <Link to="pairs" className="lab-btn lab-btn-ghost">
-            Pair lab
+          <h2>Bot comparison</h2>
+          <p>Scalper vs mean-revert vs gold trend presets — side by side.</p>
+          <Link to="compare" className="lab-btn lab-btn-ghost">
+            Open comparison
           </Link>
         </article>
       </section>

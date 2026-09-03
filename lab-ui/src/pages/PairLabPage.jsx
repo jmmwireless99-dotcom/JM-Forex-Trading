@@ -29,27 +29,21 @@ export default function PairLabPage() {
             </p>
             <p className="lab-muted">Lab auto: {p.labAuto} · Risk: {p.risk}</p>
             <p>{p.note}</p>
-            {p.id !== 'XAUUSD' ? (
-              <a
-                href="#trade"
-                className="lab-btn"
-                onClick={(e) => {
-                  e.preventDefault()
-                  try {
-                    sessionStorage.setItem('jm_lab_trade_symbol', p.id)
-                  } catch {
-                    /* ignore */
-                  }
-                  window.location.hash = 'trade'
-                }}
-              >
-                Demo trade {p.label}
-              </a>
-            ) : (
-              <a href="/fx/" className="lab-btn lab-btn-ghost">
-                JM FX gold desk ↗
-              </a>
-            )}
+            <a
+              href="#trade"
+              className="lab-btn"
+              onClick={(e) => {
+                e.preventDefault()
+                try {
+                  sessionStorage.setItem('jm_lab_trade_symbol', p.id)
+                } catch {
+                  /* ignore */
+                }
+                window.location.hash = 'trade'
+              }}
+            >
+              Demo trade {p.label}
+            </a>
           </article>
         ))}
       </div>

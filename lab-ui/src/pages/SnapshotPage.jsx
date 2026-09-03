@@ -1,30 +1,30 @@
 import { useEffect, useState } from 'react'
-import { labApi } from '../api.js'
+import { labTradeApi } from '../api.js'
+import { PAIR_PRESETS } from '../content/compare.js'
 
-function sessionLabel(label) {
-  const map = {
-    asia: 'Asia · EMA_RSI',
-    london_ny_overlap: 'Overlap · SMC',
-    new_york: 'NY · VWAP',
-    off_hours: 'Off-hours',
-    weekend: 'Weekend',
-  }
-  return map[label] || label || '—'
+function fmtPrice(symbol, n) {
+  const d = symbol === 'XAUUSD' ? 2 : 5
+  return Number(n || 0).toFixed(d)
+}
+
+function fmtMoney(n) {
+  return Number(n || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 export default function SnapshotPage() {
-  const [desk, setDesk] = useState(null)
   const [status, setStatus] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
-    ;(async () => {
+    async function load() {
       try {
-        const [d, s] = await Promise.all([labApi.desk(), labApi.status()])
+        const s = await labTradeApi.suiteStatus()
         if (!alive) return
-        setDesk(d)
         setStatus(s)
         setError('')
       } catch (e) {
@@ -33,112 +33,115 @@ export default function SnapshotPage() {
       } finally {
         if (alive) setLoading(false)
       }
-    })()
-    const id = setInterval(async () => {
-      try {
-        const d = await labApi.desk()
-        if (alive) setDesk(d)
-      } catch {
-        /* ignore refresh errors */
-      }
-    }, 30_000)
+    }
+    load()
+    const id = setInterval(load, 30_000)
     return () => {
       alive = false
       clearInterval(id)
     }
   }, [])
 
-  if (loading) return <p className="lab-loading">Loading JM FX snapshot…</p>
+  if (loading) return <p className="lab-loading">Loading lab suite status…</p>
   if (error) {
     return (
       <div className="lab-page">
         <div className="lab-error-box">
-          <p>Could not load JM FX API (read-only).</p>
+          <p>Could not load Lab API.</p>
           <p className="lab-muted">{error}</p>
           <p className="lab-muted">
-            Local dev: start the JM FX backend on port 8000, or set VITE_JM_API to your desk URL.
+            Local dev: start the lab backend on port 8001, or set VITE_LAB_API to your lab URL.
           </p>
         </div>
       </div>
     )
   }
 
-  const rec = desk?.recommended_now || {}
-  const ai = desk?.ai || {}
-  const hist = ai.history || {}
+  const pairs = status?.pairs || []
 
   return (
     <div className="lab-page">
       <header className="lab-page-head">
-        <h1>JM FX live snapshot</h1>
-        <p className="lab-muted">Read-only mirror — production desk is not controlled from Lab.</p>
+        <h1>4-pair lab status</h1>
+        <p className="lab-muted">
+          Live paper suite — EUR/USD, AUD/NZD, EUR/CHF, XAUUSD. Fully separate from JM FX desk.
+        </p>
       </header>
 
       <div className="lab-stat-grid">
         <article className="lab-stat">
           <span className="lab-stat-label">Engine</span>
-          <strong>{status?.running ? 'Running' : 'Stopped'}</strong>
-          <span className="lab-muted">{status?.mode || '—'} · {status?.active_strategy}</span>
+          <strong>{status?.engine_running ? 'Running' : 'Stopped'}</strong>
+          <span className="lab-muted">Lab backend · port 8001</span>
         </article>
         <article className="lab-stat">
-          <span className="lab-stat-label">Session</span>
-          <strong>{sessionLabel(rec.session || desk?.session?.label)}</strong>
-          <span className="lab-muted">{desk?.session?.reason}</span>
+          <span className="lab-stat-label">Suite</span>
+          <strong>{status?.suite_size ?? 4} pairs</strong>
+          <span className="lab-muted">{status?.auto_enabled_count ?? 0} auto ON</span>
         </article>
         <article className="lab-stat">
-          <span className="lab-stat-label">Active stack</span>
-          <strong>{rec.display || rec.child_strategy || '—'}</strong>
-          <span className="lab-muted">Auto: {desk?.auto?.enabled ? 'ON' : 'OFF'}</span>
-        </article>
-        <article className="lab-stat">
-          <span className="lab-stat-label">Gold mid (paper)</span>
-          <strong>
-            {status?.connection?.paper_mid != null
-              ? Number(status.connection.paper_mid).toFixed(2)
-              : '—'}
-          </strong>
-          <span className="lab-muted">Signal TF: {desk?.signal_timeframe || 'M5'}</span>
+          <span className="lab-stat-label">Service</span>
+          <strong>{status?.service || 'JM Lab Trading'}</strong>
+          <span className="lab-muted">Paper money only</span>
         </article>
       </div>
 
-      <section className="lab-panel">
-        <h2>Last block / checklist</h2>
-        <p className="lab-block-reason">{desk?.last_block_reason || 'No block reason recorded'}</p>
-        {desk?.entry_checklist?.length ? (
-          <ul className="lab-checklist">
-            {desk.entry_checklist.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section className="lab-panel">
-        <h2>AI &amp; ML history (from production desk)</h2>
-        <div className="lab-stat-grid lab-stat-grid-3">
-          <article className="lab-stat">
-            <span className="lab-stat-label">Labeled trades</span>
-            <strong>{hist.labeled ?? '—'}</strong>
-          </article>
-          <article className="lab-stat">
-            <span className="lab-stat-label">Win rate</span>
-            <strong>{hist.win_rate_pct != null ? `${hist.win_rate_pct}%` : '—'}</strong>
-          </article>
-          <article className="lab-stat">
-            <span className="lab-stat-label">Asia WR</span>
-            <strong>
-              {hist.by_session?.asia?.win_rate_pct != null
-                ? `${hist.by_session.asia.win_rate_pct}%`
-                : '—'}
-            </strong>
-          </article>
-        </div>
-      </section>
+      <div className="lab-card-grid">
+        {pairs.map((row) => {
+          const sym = row.symbol
+          const preset = row.pair_preset || PAIR_PRESETS[sym] || {}
+          const acc = row.account
+          const auto = row.auto
+          const tick = row.tick
+          return (
+            <article key={sym} className="lab-card">
+              <div className="lab-pair-head">
+                <h2>{sym}</h2>
+                <span className={`lab-tag lab-tag-${auto?.enabled ? 'live' : 'warn'}`}>
+                  {auto?.enabled ? 'auto ON' : 'auto OFF'}
+                </span>
+              </div>
+              <p className="lab-muted">
+                {preset.label || row.strategy_info?.name} · SL {preset.sl_pips}p / TP{' '}
+                {preset.tp_pips}p
+              </p>
+              <p>
+                <strong>Mid:</strong>{' '}
+                {tick?.mid != null ? fmtPrice(sym, tick.mid) : '—'}
+                {tick?.stale ? ' (stale)' : ''}
+              </p>
+              {acc ? (
+                <>
+                  <p>
+                    <strong>Account {acc.code}:</strong> ${fmtMoney(acc.equity)} equity ·{' '}
+                    {acc.open_positions} open
+                  </p>
+                  <p className="lab-muted">Daily P&amp;L: ${fmtMoney(acc.daily_pnl)}</p>
+                </>
+              ) : (
+                <p className="lab-muted">No suite account — open 4-pair test to bootstrap.</p>
+              )}
+              <p className="lab-block-reason">
+                {auto?.last_block_reason || 'No block reason — waiting for signal'}
+              </p>
+              {auto?.recent_signals?.length ? (
+                <ul className="lab-checklist">
+                  {auto.recent_signals.slice(0, 3).map((sig, i) => (
+                    <li key={`${sig.at}-${i}`}>
+                      {sig.side} {sig.symbol} · {sig.reason || sig.at}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
+          )
+        })}
+      </div>
 
       <p className="lab-muted lab-foot">
-        Open full desk:{' '}
+        JM FX production desk (separate):{' '}
         <a href="/fx/" className="lab-link">
-          jmtechsolution.cloud/fx/
+          /fx/
         </a>
       </p>
     </div>

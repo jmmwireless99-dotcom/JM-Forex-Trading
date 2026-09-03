@@ -26,39 +26,32 @@ STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
-# Default auto settings per pair when user starts auto
+# Default auto settings per pair when user starts auto (lots fixed at 0.03)
 PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "EURUSD": {
         "strategy": "EMA_RSI_SCALP",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 12.0,
         "tp_pips": 24.0,
         "label": "Scalper · EMA+RSI",
     },
-    "GBPUSD": {
-        "strategy": "BREAKOUT",
-        "lots": 0.01,
-        "sl_pips": 18.0,
-        "tp_pips": 36.0,
-        "label": "Breakout · 24-bar range",
-    },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 14.0,
         "tp_pips": 20.0,
         "label": "Mean revert · range edges",
     },
     "EURCHF": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 10.0,
         "tp_pips": 16.0,
         "label": "Mean revert · Asian range",
     },
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 20.0,
         "tp_pips": 40.0,
         "label": "Trend · EMA+RSI gold",

@@ -20,7 +20,7 @@ export default function Nav({ page, setPage }) {
     { id: 'trade', label: 'Live demo' },
     { id: 'suite', label: '4-pair test' },
     { id: 'compare', label: 'Compare' },
-    { id: 'snapshot', label: 'JM FX snapshot' },
+    { id: 'snapshot', label: 'Lab status' },
     { id: 'pairs', label: 'Pair lab' },
   ]
 

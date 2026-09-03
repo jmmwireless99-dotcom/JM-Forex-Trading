@@ -46,11 +46,10 @@ export default function ComparePage() {
       <section className="lab-callout">
         <h2>Lab sandbox pairs (live demo)</h2>
         <ul>
-          <li><strong>EUR/USD</strong> — best overall / scalper (low spread)</li>
-          <li><strong>GBP/USD</strong> — trend &amp; breakout bots</li>
-          <li><strong>AUD/NZD</strong> — grid / mean-reversion research</li>
-          <li><strong>EUR/CHF</strong> — ranging / Asian session scalper</li>
-          <li><strong>XAUUSD</strong> — JM FX production desk (read-only here)</li>
+          <li><strong>EUR/USD</strong> — EMA+RSI scalper (low spread)</li>
+          <li><strong>AUD/NZD</strong> — mean reversion at range edges</li>
+          <li><strong>EUR/CHF</strong> — Asian session mean revert</li>
+          <li><strong>XAUUSD</strong> — gold EMA+RSI trend (lab backend, not JM FX)</li>
         </ul>
       </section>
 

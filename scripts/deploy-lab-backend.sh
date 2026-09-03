@@ -2,7 +2,9 @@
 # Install/restart JM Lab trading API (port 8001). Does NOT touch jm-forex.service.
 #
 # On VPS:
-#   cd /opt/jm-forex-trading && ./scripts/deploy-lab-backend.sh
+#   cd /opt/jm-lab-src && ./scripts/deploy-lab-backend.sh
+#   (isolated worktree — see scripts/remote-deploy-lab.sh, does not share a
+#   checkout with /opt/jm-forex-trading, which runs jm-forex.service)
 #
 # Optional env:
 #   BRANCH=cursor/lab-demo-trading-c11c   (default: main)

@@ -1,6 +1,6 @@
 /** Path-based pair URLs: /lab/EURUSD, /lab/audnzd, etc. */
 
-export const PAIR_URL_SYMBOLS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF']
+export const PAIR_URL_SYMBOLS = ['EURUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
 
 export function normalizePairSymbol(raw) {
   const sym = String(raw || '').toUpperCase().replace(/[^A-Z]/g, '')

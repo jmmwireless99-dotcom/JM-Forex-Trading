@@ -6,7 +6,8 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 import logging
 
-from app.engine import get_ticks, store
+from app.accounts import PAIR_SUITE_SYMBOLS
+from app.engine import get_ticks, is_engine_running, store
 from app.feed import SUPPORTED, fetch_candles, fetch_quote, fetch_quote_live
 from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_info
 
@@ -42,6 +43,13 @@ class AutoBody(BaseModel):
     strategy: str = "EMA_RSI"
 
 
+class UpdateStopsBody(BaseModel):
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    clear_stop_loss: bool = False
+    clear_take_profit: bool = False
+
+
 def _auth(account_id: str | None, token: str | None):
     if not account_id:
         raise HTTPException(400, "Missing X-JM-Lab-Account-Id")
@@ -53,7 +61,66 @@ def _auth(account_id: str | None, token: str | None):
 
 @router.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "JM Lab Trading", "symbols": SUPPORTED}
+    return {
+        "status": "ok",
+        "service": "JM Lab Trading",
+        "symbols": SUPPORTED,
+        "engine_running": is_engine_running(),
+    }
+
+
+@router.get("/suite/status")
+async def suite_status() -> dict:
+    """4-pair lab suite overview — fully separate from JM FX production desk."""
+    ticks = get_ticks()
+    pairs: list[dict[str, Any]] = []
+    for sym in PAIR_SUITE_SYMBOLS:
+        acc = store.find_suite_account(sym)
+        preset = preset_for(sym)
+        tick = ticks.get(sym)
+        row: dict[str, Any] = {
+            "symbol": sym,
+            "pair_preset": preset,
+            "strategy_info": strategy_info(preset["strategy"]),
+            "tick": tick,
+            "account": None,
+            "auto": None,
+        }
+        if acc is None:
+            pairs.append(row)
+            continue
+        if tick:
+            acc.broker.update_tick(sym, tick["mid"])
+        row["account"] = {
+            "code": acc.code,
+            "label": acc.label,
+            "equity": acc.broker.equity(),
+            "balance": acc.broker.balance,
+            "daily_pnl": acc.broker.daily_pnl(),
+            "open_positions": len(acc.broker.open_positions()),
+        }
+        a = acc.auto
+        row["auto"] = {
+            "enabled": a.enabled,
+            "symbol": a.symbol,
+            "strategy": a.strategy,
+            "lots": a.lots,
+            "sl_pips": a.sl_pips,
+            "tp_pips": a.tp_pips,
+            "last_block_reason": a.last_block_reason,
+            "last_signal_at": a.last_signal_at,
+            "recent_signals": list(a.signals)[:5],
+        }
+        pairs.append(row)
+    enabled = sum(1 for p in pairs if (p.get("auto") or {}).get("enabled"))
+    return {
+        "ok": True,
+        "service": "JM Lab Trading",
+        "engine_running": is_engine_running(),
+        "suite_size": len(PAIR_SUITE_SYMBOLS),
+        "auto_enabled_count": enabled,
+        "pairs": pairs,
+    }
 
 
 @router.get("/symbols")
@@ -140,7 +207,7 @@ async def create_account(body: CreateAccountBody) -> dict:
 
 @router.post("/accounts/pair-suite")
 async def create_pair_suite(body: PairSuiteBody) -> dict:
-    """One account per pair (EURUSD, GBPUSD, AUDNZD, EURCHF) for parallel dry-run."""
+    """One account per pair (EURUSD, AUDNZD, EURCHF, XAUUSD) for parallel dry-run."""
     rows = store.bootstrap_pair_suite(deposit=body.deposit, start_auto=body.start_auto)
     accounts = []
     for row in rows:
@@ -238,6 +305,54 @@ async def close_position(
         raise HTTPException(404, "Position not found")
     store.persist()
     return {"ok": True, "position": closed.to_dict(), "account": acc.snapshot()}
+
+
+@router.patch("/positions/{position_id}/stops")
+async def update_position_stops(
+    position_id: str,
+    body: UpdateStopsBody,
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    for sym, t in get_ticks().items():
+        acc.broker.update_tick(sym, t["mid"])
+    try:
+        updated = acc.broker.update_stops(
+            position_id,
+            stop_loss=body.stop_loss,
+            take_profit=body.take_profit,
+            clear_stop_loss=body.clear_stop_loss,
+            clear_take_profit=body.clear_take_profit,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if updated is None:
+        raise HTTPException(404, "Position not found")
+    store.persist()
+    return {"ok": True, "position": updated.to_dict(), "account": acc.snapshot()}
+
+
+@router.post("/auto/sync-preset")
+async def sync_auto_preset(
+    x_jm_lab_account_id: str | None = Header(None),
+    x_jm_lab_account_token: str | None = Header(None),
+) -> dict:
+    """Apply latest pair SL/TP/lots preset to this account's auto config."""
+    acc = _auth(x_jm_lab_account_id, x_jm_lab_account_token)
+    p = preset_for(acc.auto.symbol)
+    acc.auto.sl_pips = float(p["sl_pips"])
+    acc.auto.tp_pips = float(p["tp_pips"])
+    acc.auto.lots = float(p["lots"])
+    store.persist()
+    info = strategy_info(acc.auto.strategy)
+    return {
+        "ok": True,
+        "auto": acc.auto.to_dict(),
+        "pair_preset": p,
+        "strategy_info": info,
+        "message": f"Preset applied · {p['lots']:.2f} lot · SL {p['sl_pips']:.0f}p / TP {p['tp_pips']:.0f}p",
+    }
 
 
 @router.get("/auto")
