@@ -200,13 +200,19 @@ def evaluate_strategy(
             rsi_buy=(40.0, 54.0),
             rsi_sell=(46.0, 60.0),
         )
-    if sid in {"EMA_RSI_TREND", "GOLD_EMA_RSI"}:
-        # Simple M5 scalper — replaced strict EMA200/RSI8 review (starved entries).
+    if sid == "EMA_RSI_TREND":
         return evaluate_ema_rsi(
             candles,
             symbol=symbol,
-            rsi_buy=(35.0, 56.0),
-            rsi_sell=(42.0, 65.0),
+            rsi_buy=(36.0, 55.0),
+            rsi_sell=(45.0, 64.0),
+        )
+    if sid == "GOLD_EMA_RSI":
+        return evaluate_ema_rsi(
+            candles,
+            symbol=symbol,
+            rsi_buy=(36.0, 55.0),
+            rsi_sell=(45.0, 64.0),
         )
     if sid == "BREAKOUT":
         return evaluate_breakout(candles, symbol=symbol)

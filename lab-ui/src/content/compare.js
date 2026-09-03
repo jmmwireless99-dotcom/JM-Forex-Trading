@@ -2,23 +2,15 @@
 export const PAIR_PRESETS = {
   EURUSD: {
     strategy: 'EMA_RSI_SCALP',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 12,
     tp_pips: 24,
     label: 'Scalper · EMA+RSI',
     botStyle: 'Best overall · Scalper · General EA',
   },
-  GBPUSD: {
-    strategy: 'BREAKOUT',
-    lots: 0.01,
-    sl_pips: 18,
-    tp_pips: 36,
-    label: 'Breakout · 24-bar range',
-    botStyle: 'Trend follower · Breakout',
-  },
   AUDNZD: {
     strategy: 'MEAN_REVERT',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 14,
     tp_pips: 20,
     label: 'Mean revert · range edges',
@@ -26,7 +18,7 @@ export const PAIR_PRESETS = {
   },
   EURCHF: {
     strategy: 'MEAN_REVERT',
-    lots: 0.01,
+    lots: 0.03,
     sl_pips: 10,
     tp_pips: 16,
     label: 'Mean revert · Asian range',
@@ -37,8 +29,8 @@ export const PAIR_PRESETS = {
     lots: 0.03,
     sl_pips: 20,
     tp_pips: 40,
-    label: 'Gold scalper · EMA+RSI',
-    botStyle: 'Trend · M5 scalper (lab paper)',
+    label: 'Trend · EMA+RSI gold',
+    botStyle: 'Trend · EMA+RSI wider zones',
   },
 }
 
@@ -47,17 +39,13 @@ export const STRATEGY_INFO = {
     name: 'EMA+RSI Scalper',
     description: 'M5 EMA 20/50 + RSI — buy zone 40–54, sell 46–60. Best for EUR/USD.',
   },
-  BREAKOUT: {
-    name: 'Range Breakout',
-    description: 'M5 close breaks 24-bar high or low. Built for GBP/USD volatility.',
-  },
   MEAN_REVERT: {
     name: 'Mean Reversion',
     description: 'Buy bottom 25% / sell top 25% of range. Grid-lite for AUD/NZD & EUR/CHF.',
   },
   EMA_RSI_TREND: {
-    name: 'Gold EMA+RSI Scalper',
-    description: 'M5 EMA 20/50 + RSI 14 — wider zones (35–56 buy, 42–65 sell). Paper lab only.',
+    name: 'EMA+RSI Trend',
+    description: 'M5 EMA 20/50 + RSI 14 — wider buy 36–55 / sell 45–64 for gold.',
   },
 }
 
@@ -101,20 +89,19 @@ export const BOT_ROWS = [
   {
     id: 'trend',
     name: 'Trend / Breakout EA',
-    symbol: 'GBP/USD, XAUUSD',
+    symbol: 'XAUUSD',
     type: 'Trend follow / breakout',
     spread: 'Medium',
     session: 'London open, NY',
     blowUp: 'Medium',
     martingale: 'No',
-    verdict: 'Lab: Breakout + EMA trend auto',
+    verdict: 'Lab: EMA trend auto',
     highlight: false,
   },
 ]
 
 const PAIR_LABELS = {
   EURUSD: 'EUR/USD',
-  GBPUSD: 'GBP/USD',
   AUDNZD: 'AUD/NZD',
   EURCHF: 'EUR/CHF',
   XAUUSD: 'XAUUSD (Gold)',
@@ -128,27 +115,23 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
   session:
     id === 'AUDNZD' || id === 'EURCHF'
       ? 'Asian · quiet hours'
-      : id === 'GBPUSD'
-        ? 'London open · NY volatility'
-        : id === 'XAUUSD'
-          ? '24h · M5 scalper'
-          : 'London / NY',
+      : id === 'XAUUSD'
+        ? 'London / NY · gold volatility'
+        : 'London / NY',
   labAuto: p.label,
   strategy: p.strategy,
   sl_pips: p.sl_pips,
   tp_pips: p.tp_pips,
-  risk: id === 'AUDNZD' || id === 'EURCHF' ? 'Medium (demo)' : id === 'GBPUSD' ? 'Medium' : 'Low–medium',
+  risk: id === 'AUDNZD' || id === 'EURCHF' ? 'Medium (demo)' : 'Low–medium',
   status: 'live',
   note:
     id === 'EURUSD'
       ? '#1 liquidity — auto scalper preset applied on Start auto.'
-      : id === 'GBPUSD'
-        ? 'Breakout auto on each new M5 bar when flat.'
-        : id === 'AUDNZD'
-          ? 'Mean revert at range edges — no martingale, max 1 position.'
-          : id === 'EURCHF'
-            ? 'Tighter Asian range mean revert preset.'
-            : 'Gold M5 scalper — separate from JM FX production desk at /fx/.',
+      : id === 'AUDNZD'
+        ? 'Mean revert at range edges — no martingale, max 1 position.'
+        : id === 'EURCHF'
+          ? 'Tighter Asian range mean revert preset.'
+          : 'EMA+RSI trend preset — wider RSI zones for gold.',
 }))
 
 export const PAIR_EXPERIMENTS = PAIR_GUIDE
@@ -158,5 +141,5 @@ export const LAB_TIPS = [
   'Use ECN / raw-spread broker on live — bots die on wide spreads.',
   'Run bots on VPS 24/7 — Lab server keeps auto running.',
   'Backtest weeks of demo before real money.',
-  'JM Lab = paper only. JM FX gold desk = /fx/.',
+  'JM Lab = paper only · 4 pairs on separate lab backend (not JM FX).',
 ]
