@@ -369,12 +369,13 @@ def evaluate_strategy(
         return evaluate_breakout(candles, symbol=symbol, buffer_pct=0.015)
     if sid == "MEAN_REVERT":
         if symbol == "EURCHF":
+            # EUR/CHF Asian ranges are often 8–14 pips over 36 M5 bars — 18p blocked all signals
             return evaluate_mean_revert(
                 candles,
                 symbol=symbol,
                 lookback=36,
                 edge_pct=0.15,
-                min_range_pips=18.0,
+                min_range_pips=8.0,
             )
         return evaluate_mean_revert(
             candles,

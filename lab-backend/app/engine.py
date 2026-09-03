@@ -31,6 +31,10 @@ def get_ticks() -> dict[str, dict]:
     return dict(_ticks)
 
 
+def is_engine_running() -> bool:
+    return _running
+
+
 def _active_symbols() -> set[str]:
     """Pairs with auto-trading or open positions — refresh these every tick loop."""
     out: set[str] = set()

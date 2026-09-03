@@ -117,14 +117,14 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
     id === 'AUDNZD' || id === 'EURCHF'
       ? 'Asian · quiet hours'
       : id === 'XAUUSD'
-        ? 'JM FX Manila schedule'
+        ? 'London / NY · gold volatility'
         : 'London / NY',
   labAuto: p.label,
   strategy: p.strategy,
   sl_pips: p.sl_pips,
   tp_pips: p.tp_pips,
   risk: id === 'AUDNZD' || id === 'EURCHF' ? 'Medium (demo)' : 'Low–medium',
-  status: id === 'XAUUSD' ? 'live-ref' : 'live',
+  status: 'live',
   note:
     id === 'EURUSD'
       ? '#1 liquidity — auto scalper preset applied on Start auto.'
@@ -132,7 +132,7 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
         ? 'Mean revert at range edges — no martingale, max 1 position.'
         : id === 'EURCHF'
           ? 'Tighter Asian range mean revert preset.'
-          : 'EMA+RSI trend preset — production desk at /fx/.',
+          : 'Gold EMA+RSI trend preset — lab backend, separate from JM FX desk.',
 }))
 
 export const PAIR_EXPERIMENTS = PAIR_GUIDE
@@ -142,5 +142,5 @@ export const LAB_TIPS = [
   'Use ECN / raw-spread broker on live — bots die on wide spreads.',
   'Run bots on VPS 24/7 — Lab server keeps auto running.',
   'Backtest weeks of demo before real money.',
-  'JM Lab = paper only. JM FX gold desk = /fx/.',
+  'JM Lab = paper only · 4 pairs on separate lab backend (not JM FX).',
 ]

@@ -214,6 +214,7 @@ export const labTradeApi = {
     labRequestAs(session, '/auto/sync-preset', { method: 'POST' }),
   setAutoFor: (session, body) => labTradeApi.setAuto(body, session),
   strategies: () => labRequest('/strategies'),
+  suiteStatus: () => labRequest('/suite/status'),
 }
 
 export const labApi = {

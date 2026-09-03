@@ -6,7 +6,8 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 import logging
 
-from app.engine import get_ticks, store
+from app.accounts import PAIR_SUITE_SYMBOLS
+from app.engine import get_ticks, is_engine_running, store
 from app.feed import SUPPORTED, fetch_candles, fetch_quote, fetch_quote_live
 from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_info
 
@@ -60,7 +61,66 @@ def _auth(account_id: str | None, token: str | None):
 
 @router.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "JM Lab Trading", "symbols": SUPPORTED}
+    return {
+        "status": "ok",
+        "service": "JM Lab Trading",
+        "symbols": SUPPORTED,
+        "engine_running": is_engine_running(),
+    }
+
+
+@router.get("/suite/status")
+async def suite_status() -> dict:
+    """4-pair lab suite overview — fully separate from JM FX production desk."""
+    ticks = get_ticks()
+    pairs: list[dict[str, Any]] = []
+    for sym in PAIR_SUITE_SYMBOLS:
+        acc = store.find_suite_account(sym)
+        preset = preset_for(sym)
+        tick = ticks.get(sym)
+        row: dict[str, Any] = {
+            "symbol": sym,
+            "pair_preset": preset,
+            "strategy_info": strategy_info(preset["strategy"]),
+            "tick": tick,
+            "account": None,
+            "auto": None,
+        }
+        if acc is None:
+            pairs.append(row)
+            continue
+        if tick:
+            acc.broker.update_tick(sym, tick["mid"])
+        row["account"] = {
+            "code": acc.code,
+            "label": acc.label,
+            "equity": acc.broker.equity(),
+            "balance": acc.broker.balance,
+            "daily_pnl": acc.broker.daily_pnl(),
+            "open_positions": len(acc.broker.open_positions()),
+        }
+        a = acc.auto
+        row["auto"] = {
+            "enabled": a.enabled,
+            "symbol": a.symbol,
+            "strategy": a.strategy,
+            "lots": a.lots,
+            "sl_pips": a.sl_pips,
+            "tp_pips": a.tp_pips,
+            "last_block_reason": a.last_block_reason,
+            "last_signal_at": a.last_signal_at,
+            "recent_signals": list(a.signals)[:5],
+        }
+        pairs.append(row)
+    enabled = sum(1 for p in pairs if (p.get("auto") or {}).get("enabled"))
+    return {
+        "ok": True,
+        "service": "JM Lab Trading",
+        "engine_running": is_engine_running(),
+        "suite_size": len(PAIR_SUITE_SYMBOLS),
+        "auto_enabled_count": enabled,
+        "pairs": pairs,
+    }
 
 
 @router.get("/symbols")
