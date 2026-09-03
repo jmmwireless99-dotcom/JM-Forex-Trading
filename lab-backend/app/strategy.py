@@ -67,13 +67,8 @@ def evaluate_ema_rsi(
     bar_time = _bar_time(candles)
     bullish = ef > es
     bearish = ef < es
-    cur = candles[-1]
-    bull_bar = float(cur["close"]) > float(cur["open"])
-    bear_bar = float(cur["close"]) < float(cur["open"])
 
     if bullish and rsi_buy[0] <= rv <= rsi_buy[1]:
-        if not bull_bar:
-            return None, f"BUY setup but bearish M5 bar (RSI {rv:.1f})"
         return (
             LabSignal(
                 side="BUY",
@@ -87,8 +82,6 @@ def evaluate_ema_rsi(
             None,
         )
     if bearish and rsi_sell[0] <= rv <= rsi_sell[1]:
-        if not bear_bar:
-            return None, f"SELL setup but bullish M5 bar (RSI {rv:.1f})"
         return (
             LabSignal(
                 side="SELL",
@@ -259,7 +252,6 @@ def evaluate_mean_revert(
     lookback: int = 48,
     edge_pct: float = 0.25,
     min_bars: int = 52,
-    min_range_pips: float = 12.0,
 ) -> tuple[LabSignal | None, str | None]:
     if len(candles) < min_bars:
         return None, f"Need {min_bars}+ M5 bars (have {len(candles)})"
@@ -268,32 +260,15 @@ def evaluate_mean_revert(
     hi = max(float(c["high"]) for c in window)
     lo = min(float(c["low"]) for c in window)
     span = hi - lo
-    pip = _pip(symbol)
-    span_pips = span / pip if pip else 0
     if span <= 0:
         return None, "Flat range — no edge"
-    if span_pips < min_range_pips:
-        return None, f"Range too tight ({span_pips:.1f} pips, need {min_range_pips:.0f}+)"
-
-    closes = [float(c["close"]) for c in candles]
-    e_fast = ema(closes, 20)
-    e_slow = ema(closes, 50)
-    i = len(closes) - 1
-    ef, es = e_fast[i], e_slow[i]
 
     close = float(candles[-1]["close"])
-    cur = candles[-1]
-    bull_bar = close > float(cur["open"])
-    bear_bar = close < float(cur["open"])
     pos = (close - lo) / span
     bar_time = _bar_time(candles)
     pct = round(pos * 100, 1)
 
     if pos <= edge_pct:
-        if ef is not None and es is not None and ef < es and close < ef:
-            return None, f"Range bottom but downtrend — skip BUY ({pct}%)"
-        if not bull_bar:
-            return None, f"Range bottom {pct}% but bearish bar — skip fade"
         return (
             LabSignal(
                 side="BUY",
@@ -304,10 +279,6 @@ def evaluate_mean_revert(
             None,
         )
     if pos >= 1.0 - edge_pct:
-        if ef is not None and es is not None and ef > es and close > ef:
-            return None, f"Range top but uptrend — skip SELL ({pct}%)"
-        if not bear_bar:
-            return None, f"Range top {pct}% but bullish bar — skip fade"
         return (
             LabSignal(
                 side="SELL",
@@ -336,54 +307,25 @@ def evaluate_strategy(
             rsi_sell=(46.0, 60.0),
         )
     if sid == "EMA_RSI_TREND":
-        from app.pair_strategies import preset_for
-
-        p = preset_for(symbol)
-        return evaluate_gold_ema_rsi(
+        return evaluate_ema_rsi(
             candles,
             symbol=symbol,
-            ema_fast=int(p.get("ema_fast", 20)),
-            ema_medium=int(p.get("ema_medium", 50)),
-            ema_slow=int(p.get("ema_slow", 200)),
-            rsi_period=int(p.get("rsi_period", 8)),
-            rsi_oversold=float(p.get("rsi_oversold", 40)),
-            rsi_overbought=float(p.get("rsi_overbought", 60)),
-            breakout_min_pips=float(p.get("breakout_min_pips", 15)),
+            rsi_buy=(36.0, 55.0),
+            rsi_sell=(45.0, 64.0),
         )
     if sid == "GOLD_EMA_RSI":
-        from app.pair_strategies import preset_for
-
-        p = preset_for(symbol)
-        return evaluate_gold_ema_rsi(
+        return evaluate_ema_rsi(
             candles,
             symbol=symbol,
-            ema_fast=int(p.get("ema_fast", 20)),
-            ema_medium=int(p.get("ema_medium", 50)),
-            ema_slow=int(p.get("ema_slow", 200)),
-            rsi_period=int(p.get("rsi_period", 8)),
-            rsi_oversold=float(p.get("rsi_oversold", 40)),
-            rsi_overbought=float(p.get("rsi_overbought", 60)),
-            breakout_min_pips=float(p.get("breakout_min_pips", 15)),
+            rsi_buy=(36.0, 55.0),
+            rsi_sell=(45.0, 64.0),
         )
     if sid == "BREAKOUT":
-        return evaluate_breakout(candles, symbol=symbol, buffer_pct=0.015)
+        return evaluate_breakout(candles, symbol=symbol)
     if sid == "MEAN_REVERT":
-        if symbol == "EURCHF":
-            # EUR/CHF Asian ranges are often 8–14 pips over 36 M5 bars — 18p blocked all signals
-            return evaluate_mean_revert(
-                candles,
-                symbol=symbol,
-                lookback=36,
-                edge_pct=0.15,
-                min_range_pips=8.0,
-            )
-        return evaluate_mean_revert(
-            candles,
-            symbol=symbol,
-            lookback=48,
-            edge_pct=0.18,
-            min_range_pips=15.0,
-        )
+        lb = 36 if symbol == "EURCHF" else 48
+        edge = 0.22 if symbol == "EURCHF" else 0.25
+        return evaluate_mean_revert(candles, symbol=symbol, lookback=lb, edge_pct=edge)
     if sid == "EMA_RSI":
         return evaluate_ema_rsi(candles, symbol=symbol)
 

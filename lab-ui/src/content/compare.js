@@ -3,34 +3,34 @@ export const PAIR_PRESETS = {
   EURUSD: {
     strategy: 'EMA_RSI_SCALP',
     lots: 0.03,
-    sl_pips: 14,
-    tp_pips: 28,
+    sl_pips: 12,
+    tp_pips: 24,
     label: 'Scalper · EMA+RSI',
     botStyle: 'Best overall · Scalper · General EA',
   },
   AUDNZD: {
     strategy: 'MEAN_REVERT',
     lots: 0.03,
-    sl_pips: 16,
-    tp_pips: 32,
+    sl_pips: 14,
+    tp_pips: 20,
     label: 'Mean revert · range edges',
     botStyle: 'Grid · Mean reversion · Range',
   },
   EURCHF: {
     strategy: 'MEAN_REVERT',
     lots: 0.03,
-    sl_pips: 14,
-    tp_pips: 28,
+    sl_pips: 10,
+    tp_pips: 16,
     label: 'Mean revert · Asian range',
     botStyle: 'Grid · Asian session scalper',
   },
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
     lots: 0.03,
-    sl_pips: 30,
-    tp_pips: 75,
-    label: 'Gold · EMA20/50/200 + RSI8',
-    botStyle: 'Review preset · 0.03 lot · 30/75 pips',
+    sl_pips: 20,
+    tp_pips: 40,
+    label: 'Trend · EMA+RSI gold',
+    botStyle: 'Trend · EMA+RSI wider zones',
   },
 }
 
@@ -44,9 +44,8 @@ export const STRATEGY_INFO = {
     description: 'Buy bottom 25% / sell top 25% of range. Grid-lite for AUD/NZD & EUR/CHF.',
   },
   EMA_RSI_TREND: {
-    name: 'Gold EMA+RSI (Review)',
-    description:
-      'M5 EMA 20 (yellow) / 50 (blue) / 200 (purple) · RSI(8) oversold 40 / overbought 60 · 30p SL · 75p TP · 1% auto risk.',
+    name: 'EMA+RSI Trend',
+    description: 'M5 EMA 20/50 + RSI 14 — wider buy 36–55 / sell 45–64 for gold.',
   },
 }
 
@@ -132,7 +131,7 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
         ? 'Mean revert at range edges — no martingale, max 1 position.'
         : id === 'EURCHF'
           ? 'Tighter Asian range mean revert preset.'
-          : 'Gold EMA+RSI trend preset — lab backend, separate from JM FX desk.',
+          : 'EMA+RSI trend preset — wider RSI zones for gold.',
 }))
 
 export const PAIR_EXPERIMENTS = PAIR_GUIDE
