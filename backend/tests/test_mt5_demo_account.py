@@ -124,6 +124,8 @@ async def test_mt_demo_rejects_paper_deposit(mt5_engine):
 async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
     engine, acct = mt5_engine
 
+    captured: list[str] = []
+
     def fake_ea():
         import time
 
@@ -131,6 +133,7 @@ async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
             if engine.mt.command_file.exists():
                 text = engine.mt.command_file.read_text()
                 if "OPEN" in text and "GOLD#" in text:
+                    captured.append(text)
                     cmd_id = text.strip().splitlines()[-1].split(",")[0]
                     engine.mt.ack_file.write_text(f"{cmd_id},OK,888\n")
                     return
@@ -152,5 +155,6 @@ async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
         account=acct,
     )
     t.join(timeout=3)
-    assert "GOLD#" in engine.mt.command_file.read_text()
+    assert captured
+    assert "GOLD#" in captured[0]
     assert order.status.value == "FILLED"
