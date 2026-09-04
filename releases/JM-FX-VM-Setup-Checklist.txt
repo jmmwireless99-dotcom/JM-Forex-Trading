@@ -1,0 +1,108 @@
+================================================================================
+  JM FX — ONE-PAGE VM SETUP CHECKLIST (Proxmox Windows + DDDC3D MT5)
+  Desk: https://jmtechsolution.cloud/fx/   |   Updated: Sep 2026
+================================================================================
+
+PART A — PROXMOX VM (24/7)
+--------------------------
+[ ] VM Windows10 (VMID 115) status = Running sa Proxmox (192.168.200.23:8006)
+[ ] Proxmox host naka-on 24/7 — huwag i-shutdown ang server machine
+[ ] VM Options → Start at boot = YES
+      Shell: qm set 115 --onboot 1
+[ ] Windows VM: Power & sleep → Sleep = NEVER
+[ ] Windows VM: Auto-login (optional) — netplwiz → uncheck password required
+[ ] Task Scheduler: start MT5 + bridge on boot (see Part D)
+
+PART B — DOWNLOAD BRIDGE FILES (sa Windows VM)
+----------------------------------------------
+[ ] MT5 EA v2 ZIP:  https://jmtechsolution.cloud/fx/api/downloads/mt5-ea-v2.zip
+[ ] MT4 A76321 ZIP: https://jmtechsolution.cloud/fx/api/downloads/mt4-a76321.zip
+      (kung may MT4 Live account din)
+
+PART C — MT5 SETUP (DDDC3D account)
+-----------------------------------
+[ ] Install XM MetaTrader 5 + login demo 169250320
+[ ] MT5 → File → Open Data Folder → MQL5\Experts\
+[ ] Copy JM_Forex_Bridge.mq5 → Compile F7 (version 2.00, 0 errors)
+[ ] MT5 → Tools → Options → Expert Advisors:
+      [x] Allow algorithmic trading
+      [x] Allow WebRequest → add URL: https://jmtechsolution.cloud
+[ ] Drag JM_Forex_Bridge sa GOLD# chart. Inputs:
+      InpSymbol          = GOLD#
+      InpUseCloudBridge  = true
+      InpApiUrl          = https://jmtechsolution.cloud/fx/api
+      InpBridgeToken     = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+      UseCommonFolder    = true
+[ ] Algo Trading button = GREEN (toolbar)
+[ ] HUWAG buksan ang PC agent BAT (cloud mode — EA lang)
+[ ] Experts tab message:
+      "JM Forex MT5 Bridge v2 — CLOUD mode (no PC agent)"
+
+PART D — AUTO-START ON VM BOOT (Task Scheduler)
+-----------------------------------------------
+[ ] Win+R → taskschd.msc → Create Task
+      Name: JM-FX-MT5-AutoStart
+      Trigger: At startup (delay 90 seconds)
+      Action: Start program
+        Program: C:\Program Files\MetaTrader 5\terminal64.exe
+      [x] Run whether user is logged on or not
+      [x] Run with highest privileges
+[ ] (Optional) Second task: re-attach EA if MT5 restarts — manual check lang
+
+PART E — MT4 SETUP (A76321 — kung may MT4 Live)
+-----------------------------------------------
+[ ] Separate XM MT4 REAL terminal (hiwalay sa MT5 demo)
+[ ] Copy JM_Forex_Bridge.mq4 → MQL4\Experts\ → Compile F7
+[ ] WebRequest allow: https://jmtechsolution.cloud
+[ ] Attach sa GOLD chart:
+      InpSymbol = GOLD
+      InpUseCloudBridge = true
+      InpBridgeToken = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+[ ] AutoTrading ON
+[ ] Experts tab: "JM Forex MT4 Bridge v2 — CLOUD mode (no PC agent)"
+
+PART F — JM FX DESK LOGIN
+-------------------------
+[ ] Browser: https://jmtechsolution.cloud/fx/
+
+      MT5 DEMO (DDDC3D):
+        Code:  DDDC3D
+        Token: (see JM-FX-ACCOUNT.txt sa MT5 zip)
+
+      MT4 LIVE (A76321):
+        Code:  A76321
+        Token: (see A76321-ACCOUNT.txt sa MT4 zip)
+
+[ ] Click Start engine (green play)
+
+PART G — VERIFY CONNECTED (dapat lahat OK)
+------------------------------------------
+[ ] MT5 status: https://jmtechsolution.cloud/fx/api/mt/remote/status?token=...
+      → "mt_online": true
+
+[ ] MT4 status: https://jmtechsolution.cloud/fx/api/mt4/real/status
+      → "online": true
+
+[ ] Dashboard shows:
+      MT5:  DESK LIVE · MT5 LIVE · Sync OK · MT: online
+      MT4:  DESK LIVE · MT4 LIVE · Sync OK · MT: online
+
+[ ] Test manual Buy 0.01 → dapat FILLED within ~2–5 seconds (not 2+ minutes)
+
+PART H — TROUBLESHOOT QUICK FIX
+-------------------------------
+Problem                          Fix
+-------------------------------- ------------------------------------------
+Sync offline / MT offline        Algo Trading ON? EA attached? VM running?
+Error 4060 sa Experts tab        Allow WebRequest URL (Part C)
+Waiting for PC Agent             InpUseCloudBridge = true (HUWAG agent BAT)
+Trade sobrang bagal              Recompile EA v2; restart MT5; check pending:
+                                   .../mt/remote/command → pending: false
+VM off pag off ang PC mo         Proxmox host = separate machine, 24/7 on
+MT4 offline pero MT5 OK          Separate terminal — attach EA sa MT4 REAL
+
+================================================================================
+  SUPPORT: https://jmtechsolution.cloud/fx/
+  MT5 pack: /fx/api/downloads/mt5-ea-v2.zip
+  MT4 pack: /fx/api/downloads/mt4-a76321.zip
+================================================================================

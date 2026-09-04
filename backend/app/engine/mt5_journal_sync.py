@@ -36,7 +36,7 @@ def wait_mt_position(
     ticket: str,
     *,
     timeout: float = 5.0,
-    poll: float = 0.12,
+    poll: float = 0.06,
 ) -> Position | None:
     deadline = time.time() + timeout
     want = str(ticket)
