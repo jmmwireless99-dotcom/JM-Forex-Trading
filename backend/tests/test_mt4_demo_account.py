@@ -82,6 +82,8 @@ async def test_mt4_demo_rejects_paper_deposit(mt4_engine):
 async def test_mt4_demo_manual_order_uses_mt4_bridge(mt4_engine):
     engine, acct = mt4_engine
 
+    saved_cmd: list[str] = []
+
     def fake_ea():
         import time
 
@@ -89,6 +91,7 @@ async def test_mt4_demo_manual_order_uses_mt4_bridge(mt4_engine):
             if engine.mt4.command_file.exists():
                 text = engine.mt4.command_file.read_text()
                 if "OPEN" in text and "XAUUSD" in text:
+                    saved_cmd.append(text)
                     cmd_id = text.strip().splitlines()[-1].split(",")[0]
                     engine.mt4.ack_file.write_text(f"{cmd_id},OK,999\n")
                     return
@@ -110,5 +113,6 @@ async def test_mt4_demo_manual_order_uses_mt4_bridge(mt4_engine):
         account=acct,
     )
     t.join(timeout=3)
-    assert "XAUUSD" in engine.mt4.command_file.read_text()
+    assert saved_cmd
+    assert "XAUUSD" in saved_cmd[0]
     assert order.status.value == "FILLED"

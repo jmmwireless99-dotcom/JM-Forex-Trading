@@ -49,6 +49,8 @@ SEED_STRATEGIES: list[dict] = [
             "reward_r": 2.0,
             "min_stop_atr": 1.15,
             "min_tp_atr": 2.3,
+            "asia_stop_loss_pips": 120,
+            "asia_take_profit_pips": 225,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
@@ -83,6 +85,27 @@ SEED_STRATEGIES: list[dict] = [
             "swing_lookback": 6,
             "atr_pad": 0.55,
             "max_trades_per_day": 4,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
+    {
+        "name": "NewsBreakout",
+        "timeframe": "M5",
+        "description": (
+            "Post-release momentum on high-impact USD news days "
+            "(NFP, CPI, FOMC, Core PCE) — auto-runs instead of AI_ML"
+        ),
+        "parameters": {
+            "events": ["NFP", "CPI", "FOMC", "Core PCE"],
+            "post_release_window_min": [5, 60],
+            "min_stop_atr": 3.0,
+            "min_tp_atr": 6.0,
+            "reward_r": 2.0,
+            "max_trades_per_day": 2,
+            "require_retest": True,
+            "retest_valid_bars": 6,
+            "retest_pad_atr": 0.35,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },

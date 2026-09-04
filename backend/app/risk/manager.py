@@ -33,6 +33,21 @@ class RiskManager:
     def record_realized_pnl(self, pnl: float) -> None:
         self._daily_realized_pnl += pnl
 
+    def daily_loss_hit(self) -> bool:
+        """True once today's realized loss hits max_daily_loss_pct (0 = disabled).
+
+        Shared gate used for every paper account type — including scale-in
+        books, which bypass RiskManager.evaluate() for their own position
+        sizing but must still respect the same capital-protection circuit
+        breaker.
+        """
+        if self.settings.max_daily_loss_pct <= 0:
+            return False
+        max_daily_loss = self._starting_balance * (
+            self.settings.max_daily_loss_pct / 100.0
+        )
+        return self._daily_realized_pnl <= -max_daily_loss
+
     def pip_size(self, symbol: str) -> float:
         return self.PIP_SIZES.get(symbol.upper(), 0.0001)
 
@@ -60,15 +75,11 @@ class RiskManager:
             return RiskDecision(False, f"Already have an open position on {request.symbol}")
 
         # Daily loss kill-switch (disabled when max_daily_loss_pct <= 0)
-        if self.settings.max_daily_loss_pct > 0:
-            max_daily_loss = self._starting_balance * (
-                self.settings.max_daily_loss_pct / 100.0
+        if self.daily_loss_hit():
+            return RiskDecision(
+                False,
+                f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
             )
-            if self._daily_realized_pnl <= -max_daily_loss:
-                return RiskDecision(
-                    False,
-                    f"Daily loss limit hit ({self.settings.max_daily_loss_pct}%)",
-                )
 
         # Position sizing from risk % and stop distance
         stop_pips = self.settings.default_stop_loss_pips

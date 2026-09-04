@@ -54,6 +54,18 @@ def in_asia_ph_window(ph: int) -> bool:
     return ASIA_PH_START <= ph < ASIA_PH_END
 
 
+def is_ph_night(utc: datetime) -> bool:
+    """PH gabi desk — 8:00PM–6:59AM (SMC + early EMA, not Asia daytime)."""
+    ph = ph_hour(utc)
+    return ph >= SMC_PH_START or ph < EARLY_EMA_PH_END
+
+
+def is_ph_evening_news_window(utc: datetime) -> bool:
+    """PH 7:00PM–6:59AM — allows 1hr pre-news before 8PM for ~8:30PM US prints."""
+    ph = ph_hour(utc)
+    return ph >= 19 or ph < EARLY_EMA_PH_END
+
+
 def classify_asia_desk(ts: datetime) -> SessionWindow:
     """PH desk: Asia 7AM–8PM · SMC 8PM–2AM · EMA_RSI 2AM–7AM."""
     utc = ts.astimezone(timezone.utc)
