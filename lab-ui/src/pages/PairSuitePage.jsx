@@ -7,7 +7,7 @@ import {
   savePairSuite,
 } from '../api.js'
 
-const SUITE_PAIRS = ['EURUSD', 'GBPUSD', 'AUDNZD', 'EURCHF']
+const SUITE_PAIRS = ['EURUSD', 'AUDNZD', 'EURCHF', 'XAUUSD']
 
 function money(n) {
   return Number(n || 0).toLocaleString(undefined, {

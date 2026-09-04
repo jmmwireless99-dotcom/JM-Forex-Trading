@@ -19,8 +19,6 @@ export default function Nav({ page, setPage }) {
     { id: 'home', label: 'Home' },
     { id: 'trade', label: 'Live demo' },
     { id: 'suite', label: '4-pair test' },
-    { id: 'compare', label: 'Compare' },
-    { id: 'snapshot', label: 'JM FX snapshot' },
     { id: 'pairs', label: 'Pair lab' },
   ]
 
@@ -42,9 +40,6 @@ export default function Nav({ page, setPage }) {
             </button>
           ))}
         </nav>
-        <a href="/fx/" className="lab-desk-link">
-          JM FX desk ↗
-        </a>
       </div>
     </header>
   )

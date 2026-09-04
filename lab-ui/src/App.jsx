@@ -40,8 +40,7 @@ export default function App() {
       <Nav page={page} setPage={setPage} />
       <main className="lab-main">{body}</main>
       <footer className="lab-footer">
-        Experimental UI · JM FX production desk unchanged ·{' '}
-        <a href="/fx/">/fx/</a>
+        JM Lab · 4-pair paper trading · separate lab backend
       </footer>
     </div>
   )
