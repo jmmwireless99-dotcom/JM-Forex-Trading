@@ -81,11 +81,14 @@ def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
     positions = bridge.open_positions()
     assert positions[0].symbol == "XAUUSD"
 
+    saved_cmd: list[str] = []
+
     def fake_ea():
         for _ in range(40):
             if bridge.command_file.exists():
                 text = bridge.command_file.read_text()
                 if "OPEN" in text and "GOLD#" in text:
+                    saved_cmd.append(text)
                     cmd_id = text.strip().splitlines()[-1].split(",")[0]
                     bridge.ack_file.write_text(f"{cmd_id},OK,777\n")
                     return
@@ -108,7 +111,8 @@ def test_gold_symbol_maps_desk_to_mt_and_back(tmp_path: Path):
     )
     t.join(timeout=3)
     assert order.status.value == "FILLED"
-    cmd = bridge.command_file.read_text()
+    assert saved_cmd
+    cmd = saved_cmd[0]
     assert "GOLD#" in cmd
     assert "XAUUSD" not in cmd.split("OPEN")[1].split("\n")[0]
 
@@ -135,7 +139,7 @@ def test_remote_online_uses_any_heartbeat_file(tmp_path: Path):
 def test_remote_defaults_longer_order_timeout(tmp_path: Path):
     bridge = MT4FileBridge(tmp_path, symbol="GOLD#", remote_mode=True)
     assert bridge.online_max_age == 45.0
-    assert bridge.order_timeout == 60.0
+    assert bridge.order_timeout == 30.0
 
 
 def test_repair_legacy_xauusd_zero_tick(tmp_path: Path):

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # pip=0.1 → 90 pips = $9.00 move on XAUUSD; TP at 2.5R = 225 pips ($22.50)
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
+    # Asia desk (PH 7AM–8PM, EMA_RSI child) — fixed pip SL/TP on auto signals
+    asia_stop_loss_pips: float = 120.0
+    asia_take_profit_pips: float = 225.0
 
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
@@ -110,9 +113,10 @@ class Settings(BaseSettings):
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""
-    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 60s remote)
+    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 30s remote)
     mt_bridge_online_max_age: float = 0.0
     mt_bridge_order_timeout: float = 0.0
+    mt_bridge_ack_poll_seconds: float = 0.02
 
     # Investment dashboard (30% / 30 days default yield model)
     invest_secret: str = "jm-fx-invest-dev-secret-change-me"
