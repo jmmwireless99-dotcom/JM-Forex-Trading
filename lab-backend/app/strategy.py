@@ -207,6 +207,13 @@ def evaluate_strategy(
             rsi_buy=(36.0, 55.0),
             rsi_sell=(45.0, 64.0),
         )
+    if sid == "GOLD_EMA_RSI":
+        return evaluate_ema_rsi(
+            candles,
+            symbol=symbol,
+            rsi_buy=(36.0, 55.0),
+            rsi_sell=(45.0, 64.0),
+        )
     if sid == "BREAKOUT":
         return evaluate_breakout(candles, symbol=symbol)
     if sid == "MEAN_REVERT":

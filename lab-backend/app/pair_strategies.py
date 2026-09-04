@@ -26,41 +26,43 @@ STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
-# Default auto settings per pair when user starts auto
+# Original 4-pair lab presets (lots fixed at 0.03) — separate from JM FX desk
 PAIR_PRESETS: dict[str, dict[str, Any]] = {
     "EURUSD": {
         "strategy": "EMA_RSI_SCALP",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 12.0,
         "tp_pips": 24.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 3,
         "label": "Scalper · EMA+RSI",
-    },
-    "GBPUSD": {
-        "strategy": "BREAKOUT",
-        "lots": 0.01,
-        "sl_pips": 18.0,
-        "tp_pips": 36.0,
-        "label": "Breakout · 24-bar range",
     },
     "AUDNZD": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 14.0,
         "tp_pips": 20.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 4,
         "label": "Mean revert · range edges",
     },
     "EURCHF": {
         "strategy": "MEAN_REVERT",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 10.0,
         "tp_pips": 16.0,
+        "min_bars_between": 4,
+        "cooldown_bars_after_loss": 6,
         "label": "Mean revert · Asian range",
     },
     "XAUUSD": {
         "strategy": "EMA_RSI_TREND",
-        "lots": 0.01,
+        "lots": 0.03,
         "sl_pips": 20.0,
         "tp_pips": 40.0,
+        "min_bars_between": 3,
+        "cooldown_bars_after_loss": 4,
+        "max_spread_pips": 3.5,
         "label": "Trend · EMA+RSI gold",
     },
 }
@@ -72,4 +74,7 @@ def preset_for(symbol: str) -> dict[str, Any]:
 
 
 def strategy_info(strategy_id: str) -> dict[str, Any]:
-    return STRATEGIES.get(strategy_id, STRATEGIES["EMA_RSI_SCALP"])
+    sid = (strategy_id or "EMA_RSI_SCALP").upper()
+    if sid == "GOLD_EMA_RSI":
+        return STRATEGIES["EMA_RSI_TREND"]
+    return STRATEGIES.get(sid, STRATEGIES["EMA_RSI_SCALP"])

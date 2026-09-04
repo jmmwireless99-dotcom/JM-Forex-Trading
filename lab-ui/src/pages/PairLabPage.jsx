@@ -46,8 +46,11 @@ export default function PairLabPage() {
                 Demo trade {p.label}
               </a>
             ) : (
-              <a href="/fx/" className="lab-btn lab-btn-ghost">
-                JM FX gold desk ↗
+              <a
+                href="#/trade/xauusd"
+                className="lab-btn"
+              >
+                Demo trade {p.label}
               </a>
             )}
           </article>
