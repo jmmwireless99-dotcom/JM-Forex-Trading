@@ -143,14 +143,15 @@ def evaluate_scale_in(
     tick: Tick | None,
     settings: Settings,
 ) -> RiskDecision:
-    """Risk gate for scale-in paper accounts — allows up to N same-side legs."""
+    """Risk gate for scale-in paper accounts — allows up to N same-side legs.
+
+    The daily loss circuit breaker (max_daily_loss_pct) is checked centrally
+    in TradingEngine._execute() via RiskManager.daily_loss_hit() before this
+    function is even called, so every account type — scale-in included —
+    shares the same capital-protection gate.
+    """
     if request.lots <= 0:
         return RiskDecision(False, "Lot size must be positive")
-
-    if settings.max_daily_loss_pct > 0:
-        # Re-use standard daily loss from first RiskManager instance pattern — skip here;
-        # caller still runs after this only for scale-in accounts on paper.
-        pass
 
     legs = open_legs(open_positions, symbol=request.symbol, side=request.side)
     max_legs = int(getattr(settings, "scale_in_max_legs", 3))
@@ -177,6 +178,7 @@ def evaluate_scale_in(
 
 # Per-account throttle: account_id -> monotonic last add time
 _last_leg_add_at: dict[str, float] = {}
+_last_signal_entry_at: dict[str, float] = {}
 
 
 def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
@@ -186,3 +188,13 @@ def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
 
 def mark_leg_added(account_id: str) -> None:
     _last_leg_add_at[account_id] = time.time()
+
+
+def signal_entry_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
+    """Leg-1 spacing per scale-in book — not the engine-wide entry cooldown."""
+    last = _last_signal_entry_at.get(account_id, 0.0)
+    return (time.time() - last) >= cooldown_seconds
+
+
+def mark_signal_entry(account_id: str) -> None:
+    _last_signal_entry_at[account_id] = time.time()

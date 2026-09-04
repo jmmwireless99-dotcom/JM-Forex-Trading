@@ -42,3 +42,34 @@ def test_approves_and_sizes_lots():
     assert decision.approved is True
     assert decision.adjusted_lots is not None
     assert decision.adjusted_lots <= 1.0
+
+
+def test_daily_loss_hit_disabled_by_default():
+    risk = RiskManager(Settings())
+    risk.record_realized_pnl(-1_000_000.0)
+    assert risk.daily_loss_hit() is False
+
+
+def test_daily_loss_hit_triggers_at_threshold():
+    risk = RiskManager(Settings(max_daily_loss_pct=2.0))
+    risk.reset_daily(10_000)
+    assert risk.daily_loss_hit() is False
+    risk.record_realized_pnl(-150.0)
+    assert risk.daily_loss_hit() is False
+    risk.record_realized_pnl(-60.0)
+    assert risk.daily_loss_hit() is True
+
+
+def test_evaluate_rejects_once_daily_loss_hit():
+    risk = RiskManager(Settings(max_daily_loss_pct=1.0))
+    risk.reset_daily(10_000)
+    risk.record_realized_pnl(-150.0)
+    tick = Tick(symbol="EURUSD", bid=1.1, ask=1.1001, mid=1.10005)
+    decision = risk.evaluate(
+        OrderRequest(symbol="EURUSD", side=Side.BUY, lots=0.1),
+        balance=9_850,
+        open_positions=[],
+        tick=tick,
+    )
+    assert decision.approved is False
+    assert "daily loss" in decision.reason.lower()
