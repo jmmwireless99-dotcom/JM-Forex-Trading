@@ -5,7 +5,12 @@ from __future__ import annotations
 from app.core.config import get_settings
 from app.models.domain import Candle, Side, Signal, Tick
 from app.strategies.base import Strategy
-from app.strategies.entry_setup import structure_levels, true_atr
+from app.strategies.entry_setup import (
+    asia_hybrid_levels,
+    pip_levels,
+    structure_levels,
+    true_atr,
+)
 from app.strategies.indicators import ema, rsi
 from app.strategies.news_calendar import check_news_blackout
 from app.strategies.patterns import (
@@ -34,7 +39,7 @@ class EmaRsiScalpStrategy(Strategy):
         news_filter: bool | None = None,
         session_filter: bool | None = None,
         min_bars_between_signals: int = 4,  # ≥20m on M5 — space entries without starving Asia
-        # Asia scalp: tighter SL, 1:2 R — easier TP than swing sessions
+        # Non-Asia: ATR structure SL/TP. Asia session uses hybrid structure + caps.
         reward_r: float = 2.0,
         min_stop_atr: float = 1.15,
         min_tp_atr: float = 2.3,
@@ -202,17 +207,44 @@ class EmaRsiScalpStrategy(Strategy):
                 except StopIteration:
                     pass
 
-        levels = structure_levels(
-            side,
-            entry=tick.ask if side == Side.BUY else tick.bid,
-            candles=bars,
-            atr=atr,
-            swing_lookback=3,
-            atr_pad=0.3,
-            reward_r=self.reward_r,
-            min_stop_atr=self.min_stop_atr,
-            min_tp_atr=self.min_tp_atr,
-        )
+        entry = tick.ask if side == Side.BUY else tick.bid
+        settings = get_settings()
+        session = classify_session(tick.timestamp)
+        if session.label == "asia":
+            if settings.asia_hybrid_stops:
+                levels = asia_hybrid_levels(
+                    side,
+                    entry=entry,
+                    candles=bars,
+                    atr=atr,
+                    min_sl_pips=float(settings.asia_hybrid_min_sl_pips),
+                    max_sl_pips=float(settings.asia_hybrid_max_sl_pips),
+                    min_tp_pips=float(settings.asia_hybrid_min_tp_pips),
+                    max_tp_pips=float(settings.asia_hybrid_max_tp_pips),
+                    reward_r=float(settings.asia_hybrid_reward_r),
+                    swing_lookback=3,
+                    atr_pad=0.3,
+                    min_stop_atr=self.min_stop_atr,
+                )
+            else:
+                levels = pip_levels(
+                    side,
+                    entry=entry,
+                    stop_loss_pips=float(settings.asia_stop_loss_pips),
+                    take_profit_pips=float(settings.asia_take_profit_pips),
+                )
+        else:
+            levels = structure_levels(
+                side,
+                entry=entry,
+                candles=bars,
+                atr=atr,
+                swing_lookback=3,
+                atr_pad=0.3,
+                reward_r=self.reward_r,
+                min_stop_atr=self.min_stop_atr,
+                min_tp_atr=self.min_tp_atr,
+            )
         self._last_signal_bar_ts = cur.open_time or cur.timestamp
         self._last_signal_side = side
         return Signal(
