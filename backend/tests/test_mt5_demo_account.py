@@ -90,6 +90,14 @@ def test_mt_demo_in_auto_fill_targets_with_paper_followers(mt5_engine):
     ids = {a.id for a in targets}
     assert acct.id in ids
     assert other.id in ids
+    assert targets[0].id == acct.id
+
+
+def test_mt_demo_first_before_paper_followers(mt5_engine):
+    engine, acct = mt5_engine
+    engine.accounts.create(deposit=500.0, label="Paper follower", follow_auto=True)
+    targets = engine._auto_fill_targets()
+    assert targets[0].code == "DDDC3D"
 
 
 def test_mt_online_still_fans_out_to_all_followers(mt5_engine):
@@ -124,6 +132,8 @@ async def test_mt_demo_rejects_paper_deposit(mt5_engine):
 async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
     engine, acct = mt5_engine
 
+    saved_cmd: list[str] = []
+
     def fake_ea():
         import time
 
@@ -131,6 +141,7 @@ async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
             if engine.mt.command_file.exists():
                 text = engine.mt.command_file.read_text()
                 if "OPEN" in text and "GOLD#" in text:
+                    saved_cmd.append(text)
                     cmd_id = text.strip().splitlines()[-1].split(",")[0]
                     engine.mt.ack_file.write_text(f"{cmd_id},OK,888\n")
                     return
@@ -152,5 +163,6 @@ async def test_mt_demo_manual_order_uses_mt_bridge(mt5_engine):
         account=acct,
     )
     t.join(timeout=3)
-    assert "GOLD#" in engine.mt.command_file.read_text()
+    assert saved_cmd
+    assert "GOLD#" in saved_cmd[0]
     assert order.status.value == "FILLED"

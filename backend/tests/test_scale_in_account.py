@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
 
 from app.core.config import Settings
 from app.engine.trading_engine import TradingEngine
-from app.models.domain import OrderRequest, OrderStatus, Side, Tick, utcnow
+from app.models.domain import OrderRequest, OrderStatus, Side, Signal, Tick, utcnow
 from app.paper_accounts.registry import PaperAccountRegistry
-from app.risk.scale_in import plan_scale_in_entry, scale_in_lots
+from app.risk.scale_in import (
+    mark_signal_entry,
+    plan_scale_in_entry,
+    scale_in_lots,
+    signal_entry_cooldown_ok,
+)
 
 
 @pytest.fixture
@@ -89,3 +95,66 @@ def test_create_scale_in_demo_api_shape(scale_in_engine):
     payload = engine.create_scale_in_demo_account(deposit=1000.0)
     assert payload["ok"] is True
     assert payload["account"]["scale_in_mode"] is True
+
+
+@pytest.mark.asyncio
+async def test_scale_in_leg1_not_blocked_by_engine_cooldown(scale_in_engine):
+    """SCALE3 leg 1 must fill even when DDDC3D/global cooldown is armed."""
+    engine, acct = scale_in_engine
+    engine._entry_cooldown_until = time.time() + 600
+    tick = Tick(symbol="XAUUSD", bid=4500.0, ask=4500.3, mid=4500.15, timestamp=utcnow())
+    acct.broker._last_ticks["XAUUSD"] = tick
+    signal = Signal(
+        strategy="AI_ML/EMA_RSI_Scalp",
+        symbol="XAUUSD",
+        side=Side.BUY,
+        strength=0.9,
+        reason="test signal",
+        stop_loss=4488.0,
+        take_profit=4522.5,
+        timestamp=utcnow(),
+    )
+    await engine._handle_scale_in_signal_for_account(signal, tick, account=acct)
+    assert len(acct.broker.open_positions()) == 1
+    assert acct.journal.list(10)[0].status.value == "OPEN"
+
+
+@pytest.mark.asyncio
+async def test_scale_in_pullback_adds_share_anchor_stops(scale_in_engine):
+    """Legs 2–3 reuse leg-1 SL/TP and enter on 18p pullback."""
+    engine, acct = scale_in_engine
+    tick1 = Tick(symbol="XAUUSD", bid=4500.0, ask=4500.3, mid=4500.15, timestamp=utcnow())
+    acct.broker._last_ticks["XAUUSD"] = tick1
+    signal = Signal(
+        strategy="AI_ML/EMA_RSI_Scalp",
+        symbol="XAUUSD",
+        side=Side.BUY,
+        strength=0.9,
+        reason="test",
+        stop_loss=4488.0,
+        take_profit=4522.5,
+        timestamp=utcnow(),
+    )
+    await engine._handle_scale_in_signal_for_account(signal, tick1, account=acct)
+    anchor = acct.broker.open_positions()[0]
+    assert anchor.stop_loss == 4488.0
+    assert anchor.take_profit == 4522.5
+
+    tick2 = Tick(symbol="XAUUSD", bid=4498.0, ask=4498.3, mid=4498.15, timestamp=utcnow())
+    acct.broker._last_ticks["XAUUSD"] = tick2
+    from app.risk import scale_in as si
+
+    si._last_leg_add_at[acct.id] = 0.0
+    await engine._maybe_scale_in_adds(tick2)
+    legs = acct.broker.open_positions()
+    assert len(legs) == 2
+    assert legs[1].stop_loss == 4488.0
+    assert legs[1].take_profit == 4522.5
+    assert legs[1].leg_index == 2
+
+
+def test_signal_entry_cooldown_is_per_account():
+    assert signal_entry_cooldown_ok("acct-a", 300.0)
+    mark_signal_entry("acct-a")
+    assert not signal_entry_cooldown_ok("acct-a", 300.0)
+    assert signal_entry_cooldown_ok("acct-b", 300.0)
