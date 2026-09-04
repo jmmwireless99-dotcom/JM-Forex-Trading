@@ -96,12 +96,12 @@ def strategy_catalog() -> list[dict]:
                 "Wait for retest of EMA20/50 dynamic zone (or touch EMA20).",
                 "RSI 38–52 for BUY; RSI 48–62 for SELL.",
                 "Confirm with engulfing, pin bar, or soft directional M5 close.",
-                "Cooldown spacing ≥6 M5 bars; no auto reverse — holds to SL/TP.",
+                "Cooldown spacing ≥4 M5 bars (≥6 to flip side); no auto reverse — holds to SL/TP.",
             ],
             "entry_flow": [
                 "Trend aligned with EMA200 → pullback into EMA20/50 band.",
                 "RSI in buy/sell zone + pattern → MARKET entry on bar close.",
-                "SL/TP from ATR structure (Asia scalp: ~1.15×ATR SL · 1:2 TP).",
+                "SL/TP vol-adaptive (Asia: ~0.72–1.75× ATR · calm=tighter · fast=wider · auto M5 refresh).",
             ],
             "parameters": _seed_params("EMA_RSI_Scalp"),
             "safety": [
@@ -179,6 +179,44 @@ def strategy_catalog() -> list[dict]:
             "order_type": "MARKET",
             "reward_r": 2.5,
         },
+        {
+            "id": "NewsBreakout",
+            "name": "News Breakout",
+            "sessions": ["News days — NFP, CPI, FOMC, Core PCE"],
+            "session_slots": ["news_day"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "Auto-runs on high-impact USD news days instead of AI_ML. "
+                "Post-spike break flags a setup; entry only on retest + "
+                "rejection candle — pinakamaligtas na paraan, hindi habol-presyo."
+            ),
+            "entry_rules": [
+                "Desk auto-switches from AI_ML on PH evening when T-60m before news.",
+                "Arms 1 hour before NFP/CPI/FOMC/PCE — PH 7PM–7AM only.",
+                "Wait +5 min after release — skip initial whipsaw.",
+                "Strong M5 body breaking pre-release 6-bar range flags a pending setup.",
+                "Entry fires only when price retests the broken level with a "
+                "pin bar / engulfing rejection candle (within 6 M5 bars).",
+                "Wide ATR stops (3× SL · 2R TP) — max 2 trades per news day.",
+            ],
+            "entry_flow": [
+                "Router parks NewsBreakout T-60m → T+60m around release (PH evening).",
+                "Inside post-release window → directional break → pending (no order yet).",
+                "Retest of broken level + rejection candle within 6 bars → MARKET.",
+                "Missed retest (6 bars, ~30m) → setup dropped, no chase entry.",
+                "EMA_RSI / SMC unchanged on normal days.",
+            ],
+            "parameters": _seed_params("NewsBreakout"),
+            "safety": [
+                "Bypasses normal news blackout — designed for news volatility.",
+                "ML gate skipped for NewsBreakout signals (separate from AI_ML).",
+                "Normal strategies still block during news when news_filter=true.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 2.0,
+        },
         _MANUAL_CARD,
     ]
 
@@ -191,5 +229,6 @@ def entry_rules_short() -> list[str]:
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
+        "NewsBreakout — PH gabi T-60m→T+60m around news · post-spike entry · wide ATR stops",
         "Manual BUY/SELL with auto SL/TP always available",
     ]

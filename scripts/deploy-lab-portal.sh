@@ -2,7 +2,9 @@
 # Deploy JM Lab UI ONLY — does NOT rebuild JM FX, does NOT restart jm-forex.service.
 #
 # On VPS:
-#   cd /opt/jm-forex-trading && ./scripts/deploy-lab-portal.sh
+#   cd /opt/jm-lab-src && ./scripts/deploy-lab-portal.sh
+#   (isolated worktree — see scripts/remote-deploy-lab.sh, does not share a
+#   checkout with /opt/jm-forex-trading, which runs jm-forex.service)
 #
 # Optional env:
 #   BRANCH=cursor/experiment-lab-ui-c11c   (default: main)

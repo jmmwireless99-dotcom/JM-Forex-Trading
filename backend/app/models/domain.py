@@ -131,6 +131,10 @@ class Position(BaseModel):
     closed_at: Optional[datetime] = None
     close_price: Optional[float] = None
     close_reason: Optional[str] = None
+    # Manual SL/TP multiplier on vol-adaptive base (0.5–2.0); 1.0 = no offset.
+    sl_tp_scale: float = 1.0
+    # When true, engine refreshes SL/TP from live vol on each M5 close.
+    vol_auto_stops: bool = True
 
 
 class AccountSnapshot(BaseModel):

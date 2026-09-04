@@ -6,8 +6,9 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from app.models.domain import OrderRequest, Position, PositionStatus, Side, Tick
+from app.models.domain import Candle, OrderRequest, Position, PositionStatus, Side, Tick
 from app.risk.manager import RiskDecision
+from app.strategies.entry_setup import pulled_into_zone, true_atr
 
 if TYPE_CHECKING:
     from app.core.config import Settings
@@ -64,6 +65,56 @@ def price_depth_ok(
     return current >= last_entry + step
 
 
+def structure_pullback_ok(
+    *,
+    side: Side,
+    last_entry: float,
+    current: float,
+    candles: list[Candle],
+    atr: float | None,
+    min_pullback_atr: float,
+    swing_lookback: int,
+    zone_atr: float,
+) -> tuple[bool, str]:
+    """Leg 2+ add zone: min ATR pullback from last leg + M1 swing structure."""
+    if atr is None or atr <= 0:
+        return False, "No ATR for structure pullback"
+    if len(candles) < max(swing_lookback, 15):
+        return False, "Not enough M1 candles for structure pullback"
+
+    min_pull = min_pullback_atr * atr
+    lookback = max(2, swing_lookback)
+    window = candles[-lookback:]
+    zone_band = zone_atr * atr
+
+    if side == Side.BUY:
+        if current > last_entry - min_pull:
+            return (
+                False,
+                f"Need {min_pullback_atr:g}×ATR ({min_pull:.2f}) pullback for add",
+            )
+        swing = min(c.low for c in window)
+        at_zone = current <= swing + zone_band and current >= swing - zone_band
+        if not at_zone and not pulled_into_zone(
+            candles, mid=swing, band=zone_band, lookback=lookback
+        ):
+            return False, "Price not at M1 support structure"
+        return True, "M1 structure pullback OK"
+
+    if current < last_entry + min_pull:
+        return (
+            False,
+            f"Need {min_pullback_atr:g}×ATR ({min_pull:.2f}) rally for add",
+        )
+    swing = max(c.high for c in window)
+    at_zone = current >= swing - zone_band and current <= swing + zone_band
+    if not at_zone and not pulled_into_zone(
+        candles, mid=swing, band=zone_band, lookback=lookback
+    ):
+        return False, "Price not at M1 resistance structure"
+    return True, "M1 structure pullback OK"
+
+
 @dataclass
 class ScaleInPlan:
     allowed: bool
@@ -82,9 +133,12 @@ def plan_scale_in_entry(
     tick: Tick | None,
     settings: Settings,
     require_depth: bool,
+    candles: list[Candle] | None = None,
+    atr: float | None = None,
 ) -> ScaleInPlan:
     max_legs = int(getattr(settings, "scale_in_max_legs", 3))
     step_pips = float(getattr(settings, "scale_in_step_pips", 18.0))
+    use_structure = bool(getattr(settings, "scale_in_structure_pullback", True))
     legs = open_legs(open_positions, symbol=symbol, side=side)
 
     other_side = [
@@ -108,17 +162,37 @@ def plan_scale_in_entry(
             return ScaleInPlan(False, reason="No tick for scale-in depth check")
         last_entry = legs[-1].entry_price
         current = tick.bid if side == Side.BUY else tick.ask
-        if require_depth and not price_depth_ok(
-            side=side,
-            last_entry=last_entry,
-            current=current,
-            step_pips=step_pips,
-            symbol=symbol,
-        ):
-            return ScaleInPlan(
-                False,
-                reason=f"Need {step_pips:g}p deeper pullback for leg {leg}",
-            )
+        if require_depth:
+            if use_structure:
+                m1 = candles or []
+                atr_val = atr
+                if atr_val is None and len(m1) >= 15:
+                    atr_val = true_atr(m1, 14)
+                ok, detail = structure_pullback_ok(
+                    side=side,
+                    last_entry=last_entry,
+                    current=current,
+                    candles=m1,
+                    atr=atr_val,
+                    min_pullback_atr=float(
+                        getattr(settings, "scale_in_min_pullback_atr", 0.55)
+                    ),
+                    swing_lookback=int(getattr(settings, "scale_in_swing_lookback", 5)),
+                    zone_atr=float(getattr(settings, "scale_in_zone_atr", 0.4)),
+                )
+                if not ok:
+                    return ScaleInPlan(False, reason=detail)
+            elif not price_depth_ok(
+                side=side,
+                last_entry=last_entry,
+                current=current,
+                step_pips=step_pips,
+                symbol=symbol,
+            ):
+                return ScaleInPlan(
+                    False,
+                    reason=f"Need {step_pips:g}p deeper pullback for leg {leg}",
+                )
 
     lots = scale_in_lots(balance, leg, settings)
     if setup_id == "":
@@ -143,14 +217,15 @@ def evaluate_scale_in(
     tick: Tick | None,
     settings: Settings,
 ) -> RiskDecision:
-    """Risk gate for scale-in paper accounts — allows up to N same-side legs."""
+    """Risk gate for scale-in paper accounts — allows up to N same-side legs.
+
+    The daily loss circuit breaker (max_daily_loss_pct) is checked centrally
+    in TradingEngine._execute() via RiskManager.daily_loss_hit() before this
+    function is even called, so every account type — scale-in included —
+    shares the same capital-protection gate.
+    """
     if request.lots <= 0:
         return RiskDecision(False, "Lot size must be positive")
-
-    if settings.max_daily_loss_pct > 0:
-        # Re-use standard daily loss from first RiskManager instance pattern — skip here;
-        # caller still runs after this only for scale-in accounts on paper.
-        pass
 
     legs = open_legs(open_positions, symbol=request.symbol, side=request.side)
     max_legs = int(getattr(settings, "scale_in_max_legs", 3))
@@ -177,6 +252,7 @@ def evaluate_scale_in(
 
 # Per-account throttle: account_id -> monotonic last add time
 _last_leg_add_at: dict[str, float] = {}
+_last_signal_entry_at: dict[str, float] = {}
 
 
 def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
@@ -186,3 +262,13 @@ def leg_add_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
 
 def mark_leg_added(account_id: str) -> None:
     _last_leg_add_at[account_id] = time.time()
+
+
+def signal_entry_cooldown_ok(account_id: str, cooldown_seconds: float) -> bool:
+    """Leg-1 spacing per scale-in book — not the engine-wide entry cooldown."""
+    last = _last_signal_entry_at.get(account_id, 0.0)
+    return (time.time() - last) >= cooldown_seconds
+
+
+def mark_signal_entry(account_id: str) -> None:
+    _last_signal_entry_at[account_id] = time.time()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -22,7 +22,14 @@ from app.models.domain import OrderRequest, Side, utcnow
 from app.paper_accounts import PaperAccount
 from app.strategies import STRATEGY_REGISTRY, list_strategy_names
 from app.strategies.catalog import entry_rules_short, strategy_catalog
-from app.strategies.news_calendar import check_news_blackout
+from app.strategies.news_calendar import (
+    check_news_blackout,
+    check_news_trading_window,
+    forex_factory_desk,
+    is_news_day,
+    primary_news_event,
+    should_run_news_strategy,
+)
 from app.strategies.session import classify_session
 
 router = APIRouter()
@@ -231,6 +238,10 @@ class PositionStopsBody(BaseModel):
     auto: bool = False
     stop_loss_pips: float | None = Field(default=None, gt=0, le=500)
     take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
+    # Multiply current SL/TP distance from entry (0.9 = tighten 10%, 1.1 = widen 10%).
+    scale: float | None = Field(default=None, gt=0.5, le=2.0)
+    # Enable/disable M5 vol-auto refresh while position is open.
+    vol_auto: bool | None = None
 
 
 @router.get("/health")
@@ -608,6 +619,23 @@ async def desk() -> dict:
     now = utcnow()
     session = classify_session(now)
     news = check_news_blackout(now)
+    news_day = is_news_day(now)
+    primary = primary_news_event(now) if news_day else None
+    news_armed = should_run_news_strategy(now)
+    news_window = check_news_trading_window(now) if news_armed.active else None
+    ff_calendar = forex_factory_desk(now)
+    next_ff = ff_calendar.get("next_usd_high") or {}
+    release_at = news_armed.release_at or (primary.when if primary else None)
+    scheduled_name = (
+        primary.name if primary else news_armed.event or next_ff.get("title")
+    )
+    if release_at is None and next_ff.get("when_utc"):
+        try:
+            release_at = datetime.fromisoformat(
+                str(next_ff["when_utc"]).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            release_at = None
     strategy = engine.strategy
     block = getattr(strategy, "last_block_reason", None)
     return {
@@ -630,14 +658,30 @@ async def desk() -> dict:
             "event": news.event,
             "reason": news.reason,
             "filter_enabled": settings.news_filter,
+            "news_day": news_day,
+            "news_breakout_auto": settings.news_breakout_auto,
+            "scheduled_event": scheduled_name,
+            "scheduled_release_utc": (
+                release_at.isoformat() if release_at else next_ff.get("when_utc")
+            ),
+            "news_strategy_armed": news_armed.active,
+            "news_strategy_reason": news_armed.reason,
+            "minutes_from_release": news_armed.minutes_from_release,
+            "forex_factory": ff_calendar,
+            "trading_window_active": bool(news_window and news_window.active),
+            "trading_window_reason": news_window.reason if news_window else "",
         },
         "signal_timeframe": f"M{max(1, settings.signal_period_seconds // 60)}",
         "chart_timeframe": f"M{max(1, settings.candle_period_seconds // 60)}",
         "entry_rules": entry_rules_short(),
         "strategy_details": strategy_catalog(),
-        "recommended_asia": "AI_ML → EMA_RSI_Scalp",
+        "recommended_asia": (
+            "NewsBreakout (news evening)" if news_armed.active else "AI_ML → EMA_RSI_Scalp"
+        ),
         "recommended_london": "Stand aside",
-        "recommended_overlap": "AI_ML → Liquidity_Sweep_SMC",
+        "recommended_overlap": (
+            "NewsBreakout (news evening)" if news_armed.active else "AI_ML → Liquidity_Sweep_SMC"
+        ),
         "recommended_ny": "AI_ML → EMA_VWAP_Scalp",
         "recommended_sr_scalp": "AI_ML → Liquidity_Sweep_SMC",
         "asia_desk_only": settings.asia_desk_only,
@@ -974,10 +1018,18 @@ async def set_position_stops(
     account: PaperAccount = Depends(require_paper_account),
 ) -> dict:
     """Attach / update SL & TP after a manual (or any) open."""
-    if not body.auto and body.stop_loss is None and body.take_profit is None:
+    if (
+        not body.auto
+        and body.stop_loss is None
+        and body.take_profit is None
+        and body.scale is None
+        and body.stop_loss_pips is None
+        and body.take_profit_pips is None
+        and body.vol_auto is None
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Provide stop_loss/take_profit or set auto=true",
+            detail="Provide stop_loss/take_profit, scale, pips, vol_auto, or set auto=true",
         )
     updated = await get_engine().set_position_stops(
         position_id,
@@ -988,6 +1040,8 @@ async def set_position_stops(
         or body.take_profit_pips is not None,
         stop_loss_pips=body.stop_loss_pips,
         take_profit_pips=body.take_profit_pips,
+        scale=body.scale,
+        vol_auto=body.vol_auto,
         account=account,
     )
     if updated is None:

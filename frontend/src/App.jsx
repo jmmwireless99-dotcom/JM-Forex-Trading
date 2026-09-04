@@ -26,6 +26,16 @@ function pnlClass(n) {
   return ''
 }
 
+function slTpPips(position) {
+  const entry = Number(position.entry_price)
+  const sl = position.stop_loss != null ? Number(position.stop_loss) : null
+  const tp = position.take_profit != null ? Number(position.take_profit) : null
+  return {
+    sl: sl != null ? Math.round(Math.abs(entry - sl) / 0.1) : null,
+    tp: tp != null ? Math.round(Math.abs(tp - entry) / 0.1) : null,
+  }
+}
+
 /** Map engine labels back to select value (clean slate = manual_only). */
 function normalizeStrategy(label) {
   if (!label) return 'manual_only'
@@ -612,16 +622,42 @@ export default function App() {
 
   async function attachAutoStops(id) {
     await run(async () => {
-      await api.setStops(id, { auto: true })
+      await api.setStops(id, { auto: true, vol_auto: true })
       const pos = await api.positions()
       setPositions(pos.open || [])
-      setOrderNote('Auto SL/TP attached')
+      setOrderNote('Vol-adaptive SL/TP attached (auto-adjust on)')
+      return null
+    })
+  }
+
+  async function adjustStops(id, scale, label) {
+    await run(async () => {
+      await api.setStops(id, { scale })
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote(`SL/TP ${label}`)
+      return null
+    })
+  }
+
+  async function toggleVolAuto(id, enabled) {
+    await run(async () => {
+      await api.setStops(id, { vol_auto: enabled, auto: enabled })
+      const pos = await api.positions()
+      setPositions(pos.open || [])
+      setOrderNote(enabled ? 'Auto SL/TP adjust ON' : 'Auto SL/TP adjust OFF (manual)')
       return null
     })
   }
 
   const sessionTier = desk?.session?.tier || '—'
-  const newsBlocked = Boolean(desk?.news?.blocked)
+  const newsInfo = desk?.news || {}
+  const newsBlocked = Boolean(newsInfo.blocked)
+  const newsArmed = Boolean(newsInfo.news_strategy_armed)
+  const newsEntryOpen = Boolean(newsInfo.trading_window_active)
+  const ffCalendar = newsInfo.forex_factory || {}
+  const ffEvents = ffCalendar.events_today || []
+  const ffFetchedAt = ffCalendar.fetched_at
   const mtOnline = Boolean(mt?.online || mt?.mt_online)
   const mt4Online = Boolean(mt4Bridge?.online)
   const mtLinkedOnline = mt5Only ? mtOnline : mt4Real ? mt4Online : mtOnline
@@ -646,7 +682,7 @@ export default function App() {
             {mtLinkedOnly ? (
               mtLinkedOnline ? ' · Sync OK' : ' · Sync offline'
             ) : scaleInMode ? (
-              ' · Scale-in 3L'
+              ' · Scale-in 3L · M1 structure'
             ) : mode !== 'paper' ? (
               mtOnline ? ' · MT online' : ' · MT offline'
             ) : (
@@ -801,7 +837,16 @@ export default function App() {
             Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
             {autoInfo?.decision?.regime || sessionTier}
           </span>
-          <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
+          <span>
+            News:{' '}
+            {newsArmed
+              ? newsEntryOpen
+                ? 'NewsBreakout LIVE'
+                : 'NewsBreakout armed'
+              : newsBlocked
+                ? 'BLACKOUT'
+                : 'clear'}
+          </span>
           <span>
             MT:{' '}
             {mtLinkedOnly
@@ -1487,7 +1532,9 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((p) => (
+                {positions.map((p) => {
+                  const dist = slTpPips(p)
+                  return (
                   <tr key={p.id}>
                     <td>{p.symbol}</td>
                     <td>
@@ -1495,8 +1542,22 @@ export default function App() {
                     </td>
                     <td>{p.lots}</td>
                     <td>{p.entry_price}</td>
-                    <td>{p.stop_loss ?? '—'}</td>
-                    <td>{p.take_profit ?? '—'}</td>
+                    <td>
+                      {p.stop_loss ?? '—'}
+                      {dist.sl != null ? (
+                        <span className="meta" style={{ display: 'block', fontSize: '0.75rem' }}>
+                          {dist.sl}p
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>
+                      {p.take_profit ?? '—'}
+                      {dist.tp != null ? (
+                        <span className="meta" style={{ display: 'block', fontSize: '0.75rem' }}>
+                          {dist.tp}p
+                        </span>
+                      ) : null}
+                    </td>
                     <td className={pnlClass(p.unrealized_pnl)}>
                       ${money(p.unrealized_pnl)}
                     </td>
@@ -1506,11 +1567,42 @@ export default function App() {
                           className="btn-ghost"
                           disabled={busy}
                           onClick={() => attachAutoStops(p.id)}
-                          title="Auto attach desk default SL/TP"
+                          title="Vol-adaptive SL/TP from live ATR"
                         >
                           Auto SL/TP
                         </button>
-                      ) : null}
+                      ) : (
+                        <>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => adjustStops(p.id, 0.9, 'tightened 10%')}
+                            title="Tighten SL/TP distance 10%"
+                          >
+                            −10%
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => adjustStops(p.id, 1.1, 'widened 10%')}
+                            title="Widen SL/TP distance 10%"
+                          >
+                            +10%
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            disabled={busy}
+                            onClick={() => toggleVolAuto(p.id, !p.vol_auto_stops)}
+                            title={
+                              p.vol_auto_stops
+                                ? 'Pause M5 vol-auto adjust'
+                                : 'Resume M5 vol-auto adjust'
+                            }
+                          >
+                            {p.vol_auto_stops ? 'Auto ON' : 'Auto OFF'}
+                          </button>
+                        </>
+                      )}
                       <button
                         className="btn-ghost"
                         disabled={busy}
@@ -1520,7 +1612,7 @@ export default function App() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           )}
@@ -1624,6 +1716,169 @@ export default function App() {
               </table>
             </div>
           )}
+        </section>
+
+        <section className="panel news-panel" style={{ gridColumn: '1 / -1' }}>
+          <h2>News calendar · NewsBreakout</h2>
+          <div
+            className={`news-box${newsArmed ? ' armed' : ''}${newsEntryOpen ? ' entry-live' : ''}${newsBlocked ? ' blackout' : ''}`}
+          >
+            <div className="auto-head">
+              <strong>
+                {newsInfo.scheduled_event || (newsInfo.news_day ? 'News day' : 'No high-impact news today')}
+              </strong>
+              <span className={`side ${newsArmed ? (newsEntryOpen ? 'buy' : 'sell') : 'sell'}`}>
+                {newsArmed
+                  ? newsEntryOpen
+                    ? 'ENTRY OPEN'
+                    : 'ARMED'
+                  : newsInfo.news_day
+                    ? 'WAITING'
+                    : 'OFF'}
+              </span>
+            </div>
+            <p className="auto-reason">
+              {newsInfo.news_strategy_reason ||
+                newsInfo.reason ||
+                'NFP · CPI · FOMC · Core PCE — auto NewsBreakout PH 7PM–7AM, T-60m before release'}
+            </p>
+            <div className="news-grid meta">
+              <span>
+                Release (PH):{' '}
+                {newsInfo.scheduled_release_utc
+                  ? new Date(newsInfo.scheduled_release_utc).toLocaleString('en-PH', {
+                      timeZone: 'Asia/Manila',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
+                  : '—'}
+              </span>
+              <span>
+                EMA_RSI blackout:{' '}
+                <strong>{newsBlocked ? 'ON (stand aside)' : 'clear'}</strong>
+                {newsInfo.event ? ` · ${newsInfo.event}` : ''}
+              </span>
+              <span>
+                NewsBreakout auto:{' '}
+                <strong>{newsInfo.news_breakout_auto === false ? 'disabled' : 'enabled'}</strong>
+              </span>
+              <span>
+                Entry window:{' '}
+                <strong>
+                  {newsEntryOpen
+                    ? 'post-spike (+5 to +60m)'
+                    : newsArmed
+                      ? 'armed — wait for release'
+                      : 'closed'}
+                </strong>
+              </span>
+            </div>
+            {newsInfo.trading_window_reason ? (
+              <div className="meta" style={{ marginTop: '0.55rem' }}>
+                {newsInfo.trading_window_reason}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="news-ff-head meta">
+            <span>
+              Source:{' '}
+              <a
+                href={ffCalendar.source_url || 'https://www.forexfactory.com/calendar'}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Forex Factory
+              </a>
+              {ffCalendar.enabled === false ? ' (proxy fallback)' : ' · live feed'}
+            </span>
+            <span>
+              Updated:{' '}
+              {ffFetchedAt
+                ? new Date(ffFetchedAt).toLocaleTimeString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                  })
+                : '—'}
+            </span>
+          </div>
+
+          {ffCalendar.last_error ? (
+            <div className="meta news-ff-error">Feed: {ffCalendar.last_error}</div>
+          ) : null}
+
+          <div className="news-ff-scroll">
+            <table className="table news-ff-table">
+              <thead>
+                <tr>
+                  <th>Time (PH)</th>
+                  <th>CCY</th>
+                  <th>Impact</th>
+                  <th>Event</th>
+                  <th>Actual</th>
+                  <th>Forecast</th>
+                  <th>Previous</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ffEvents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="meta">
+                      Loading Forex Factory calendar…
+                    </td>
+                  </tr>
+                ) : (
+                  ffEvents.map((ev) => {
+                    const phTime = new Date(ev.when_utc).toLocaleString('en-PH', {
+                      timeZone: 'Asia/Manila',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
+                    const impact = (ev.impact || 'Low').toLowerCase()
+                    const rowClass = [
+                      ev.imminent ? 'news-ff-imminent' : '',
+                      ev.is_past ? 'news-ff-past' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                    const countdown =
+                      ev.minutes_until > 0
+                        ? `in ${ev.minutes_until}m`
+                        : ev.minutes_until < 0
+                          ? `${Math.abs(ev.minutes_until)}m ago`
+                          : 'now'
+                    return (
+                      <tr key={`${ev.when_utc}-${ev.title}-${ev.country}`} className={rowClass}>
+                        <td>
+                          {phTime}
+                          <div className="meta news-ff-countdown">{countdown}</div>
+                        </td>
+                        <td>{ev.country}</td>
+                        <td>
+                          <span className={`news-impact news-impact-${impact}`}>
+                            {ev.impact}
+                          </span>
+                        </td>
+                        <td>{ev.title}</td>
+                        <td>{ev.actual || '—'}</td>
+                        <td>{ev.forecast || '—'}</td>
+                        <td>{ev.previous || '—'}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
 
       </div>

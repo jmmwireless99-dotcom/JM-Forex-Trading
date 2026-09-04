@@ -31,6 +31,129 @@ def true_atr(candles: list[Candle], period: int = 14) -> float | None:
     return sum(trs[-period:]) / period
 
 
+def bar_true_range(candle: Candle, prev_close: float | None) -> float:
+    if prev_close is None:
+        return candle.high - candle.low
+    return max(
+        candle.high - candle.low,
+        abs(candle.high - prev_close),
+        abs(candle.low - prev_close),
+    )
+
+
+def volatility_stop_scale(
+    candles: list[Candle],
+    atr: float,
+    *,
+    baseline_period: int = 48,
+    burst_bars: int = 3,
+    mult_min: float = 1.0,
+    mult_max: float = 1.75,
+) -> tuple[float, float]:
+    """Return (effective_atr, multiplier) — wider stops when gold is moving fast.
+
+    Uses max(short ATR, recent burst TR, baseline ATR) plus a ratio multiplier
+    when current speed exceeds the M5 baseline (typical on PH night SMC desk).
+    """
+    if not candles or atr <= 0:
+        return atr, mult_min
+
+    baseline_atr = (
+        true_atr(candles, baseline_period)
+        if len(candles) >= baseline_period + 1
+        else atr
+    )
+    start = max(1, len(candles) - burst_bars)
+    burst_trs = [
+        bar_true_range(candles[i], candles[i - 1].close) for i in range(start, len(candles))
+    ]
+    burst_atr = sum(burst_trs) / len(burst_trs) if burst_trs else atr
+
+    effective = max(atr, burst_atr, (baseline_atr or atr) * 0.85)
+    base = baseline_atr or atr
+    if base <= 0:
+        return effective, mult_min
+
+    ratio = effective / base
+    # ratio 1.0 → mult_min; ratio ≥ ~1.75 → mult_max (smooth, not fixed pips)
+    span = max(0.01, mult_max - mult_min)
+    t = min(1.0, max(0.0, (ratio - 1.0) / 0.75))
+    mult = mult_min + span * t
+    return effective, round(max(mult_min, min(mult_max, mult)), 3)
+
+
+def adaptive_vol_stop_scale(
+    candles: list[Candle],
+    atr: float,
+    *,
+    baseline_period: int = 48,
+    burst_bars: int = 3,
+    mult_calm: float = 0.72,
+    mult_normal: float = 1.0,
+    mult_fast: float = 1.75,
+    calm_ratio_floor: float = 0.55,
+) -> tuple[float, float]:
+    """Bidirectional vol scale — tighter stops when gold is slow, wider when fast.
+
+  ratio < 1 (calm Asia morning) → mult trends toward mult_calm (easier TP).
+  ratio > 1 (burst / news tape)   → mult trends toward mult_fast (room to breathe).
+    """
+    if not candles or atr <= 0:
+        return atr, mult_normal
+
+    baseline_atr = (
+        true_atr(candles, baseline_period)
+        if len(candles) >= baseline_period + 1
+        else atr
+    )
+    start = max(1, len(candles) - burst_bars)
+    burst_trs = [
+        bar_true_range(candles[i], candles[i - 1].close) for i in range(start, len(candles))
+    ]
+    burst_atr = sum(burst_trs) / len(burst_trs) if burst_trs else atr
+
+    effective = max(atr, burst_atr, (baseline_atr or atr) * 0.85)
+    base = baseline_atr or atr
+    if base <= 0:
+        return effective, mult_normal
+
+    ratio = effective / base
+    if ratio <= 1.0:
+        span = max(0.01, 1.0 - calm_ratio_floor)
+        t = max(0.0, min(1.0, (ratio - calm_ratio_floor) / span))
+        mult = mult_calm + t * (mult_normal - mult_calm)
+    else:
+        t = min(1.0, (ratio - 1.0) / 0.75)
+        mult = mult_normal + t * (mult_fast - mult_normal)
+    return effective, round(max(mult_calm, min(mult_fast, mult)), 3)
+
+
+def pip_levels(
+    side: Side,
+    *,
+    entry: float,
+    stop_loss_pips: float,
+    take_profit_pips: float,
+    pip: float = 0.1,
+) -> Levels:
+    """Fixed pip SL/TP from entry (XAUUSD pip=0.1 → 120p = $12.00)."""
+    sl_dist = stop_loss_pips * pip
+    tp_dist = take_profit_pips * pip
+    if side == Side.BUY:
+        sl = entry - sl_dist
+        tp = entry + tp_dist
+    else:
+        sl = entry + sl_dist
+        tp = entry - tp_dist
+    risk = abs(entry - sl)
+    return Levels(
+        stop_loss=round(sl, 2),
+        take_profit=round(tp, 2),
+        risk=round(risk, 2),
+        reward_r=round(tp_dist / risk, 2) if risk else 0.0,
+    )
+
+
 def structure_levels(
     side: Side,
     *,
