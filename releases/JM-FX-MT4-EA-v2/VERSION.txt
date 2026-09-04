@@ -1,0 +1,4 @@
+JM-FX-MT4-EA-v2
+Built: 2026-09-01T05:14:45Z
+EA version: 2.00
+Mode: cloud direct (MT4 real, no PC agent)

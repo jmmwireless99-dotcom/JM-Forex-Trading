@@ -39,6 +39,8 @@ async def downloads_mt5_bridge_index() -> dict:
     return {
         "complete_zip": f"{base}/jmfx-complete.zip",
         "mt4_real_ea_v2_zip": f"{base}/mt4-real-ea-v2.zip",
+        "mt4_bridge_zip": f"{base}/mt4-bridge.zip",
+        "mt4_ea_v2_zip": f"{base}/mt4-ea-v2.zip",
         "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
@@ -50,8 +52,30 @@ async def downloads_mt5_bridge_index() -> dict:
         "account_txt": f"{base}/JM-FX-ACCOUNT.txt",
         "github_complete_zip": f"{gh}/JM-FX-Complete-Pack.zip",
         "github_mt4_real_ea_v2_zip": f"{gh}/JM-FX-MT4-Real-EA-v2.zip",
+        "github_mt4_bridge_zip": f"{gh}/JM-FX-MT4-Bridge-Pack.zip",
+        "github_mt4_ea_v2_zip": f"{gh}/JM-FX-MT4-EA-v2.zip",
         "github_ea_v2_zip": f"{gh}/JM-FX-MT5-EA-v2.zip",
         "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
+    }
+
+
+@router.get("/downloads/mt4-bridge")
+async def downloads_mt4_bridge_index() -> dict:
+    """Direct download links for XM MT4 bridge pack (Windows PC)."""
+    base = "https://jmtechsolution.cloud/fx/api/downloads"
+    gh = "https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/main/releases"
+    return {
+        "zip": f"{base}/mt4-bridge.zip",
+        "ea_v2_zip": f"{base}/mt4-ea-v2.zip",
+        "real_ea_v2_zip": f"{base}/mt4-real-ea-v2.zip",
+        "ea_mq4": f"{base}/JM_Forex_Bridge.mq4",
+        "readme": f"{base}/mt4-readme.txt",
+        "account_txt": f"{base}/JM-FX-MT4-ACCOUNTS.txt",
+        "a76321_zip": f"{base}/mt4-a76321.zip",
+        "complete_zip": f"{base}/jmfx-complete.zip",
+        "github_zip": f"{gh}/JM-FX-MT4-Bridge-Pack.zip",
+        "github_ea_v2_zip": f"{gh}/JM-FX-MT4-EA-v2.zip",
+        "github_real_ea_v2_zip": f"{gh}/JM-FX-MT4-Real-EA-v2.zip",
     }
 
 
@@ -64,13 +88,18 @@ def _release_file(name: str) -> Path:
         "jmfx-complete.zip": _RELEASES / "JM-FX-Complete-Pack.zip",
         "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
         "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
+        "mt4-bridge.zip": _RELEASES / "JM-FX-MT4-Bridge-Pack.zip",
+        "mt4-ea-v2.zip": _RELEASES / "JM-FX-MT4-EA-v2.zip",
+        "mt4-a76321.zip": _RELEASES / "JM-FX-MT4-A76321-Pack.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
         "install-python.bat": _RELEASES / "JM-FX-Complete-Pack/install-python.bat",
         "install-python.ps1": _RELEASES / "JM-FX-Complete-Pack/install-python.ps1",
         "jm_mt5_pc_agent.py": _RELEASES / "JM-FX-MT5-Bridge-Pack/pc-agent/jm_mt5_pc_agent.py",
         "JM_Forex_Bridge.mq5": _RELEASES / "JM-FX-MT5-Bridge-Pack/Experts/JM_Forex_Bridge.mq5",
-        "JM_Forex_Bridge.mq4": _RELEASES / "JM-FX-MT4-Real-EA-v2/Experts/JM_Forex_Bridge.mq4",
+        "JM_Forex_Bridge.mq4": _RELEASES / "JM-FX-MT4-Bridge-Pack/Experts/JM_Forex_Bridge.mq4",
+        "mt4-readme.txt": _RELEASES / "JM-FX-MT4-Bridge-Pack/README.txt",
+        "JM-FX-MT4-ACCOUNTS.txt": _RELEASES / "JM-FX-MT4-Bridge-Pack/JM-FX-MT4-ACCOUNTS.txt",
         "mt5-readme.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/README.txt",
         "JM-FX-ACCOUNT.txt": _RELEASES / "JM-FX-MT5-Bridge-Pack/JM-FX-ACCOUNT.txt",
         "complete-readme.txt": _RELEASES / "JM-FX-Complete-Pack/README.txt",
@@ -94,6 +123,36 @@ async def download_jmfx_complete_zip() -> FileResponse:
 async def download_mt4_real_ea_v2_zip() -> FileResponse:
     path = _release_file("mt4-real-ea-v2.zip")
     return FileResponse(path, filename="JM-FX-MT4-Real-EA-v2.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-bridge.zip")
+async def download_mt4_bridge_zip() -> FileResponse:
+    path = _release_file("mt4-bridge.zip")
+    return FileResponse(path, filename="JM-FX-MT4-Bridge-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-ea-v2.zip")
+async def download_mt4_ea_v2_zip() -> FileResponse:
+    path = _release_file("mt4-ea-v2.zip")
+    return FileResponse(path, filename="JM-FX-MT4-EA-v2.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-a76321.zip")
+async def download_mt4_a76321_zip() -> FileResponse:
+    path = _release_file("mt4-a76321.zip")
+    return FileResponse(path, filename="JM-FX-MT4-A76321-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/mt4-readme.txt")
+async def download_mt4_readme() -> FileResponse:
+    path = _release_file("mt4-readme.txt")
+    return FileResponse(path, filename="README-MT4-Bridge.txt", media_type="text/plain")
+
+
+@router.get("/downloads/JM-FX-MT4-ACCOUNTS.txt")
+async def download_mt4_accounts_txt() -> FileResponse:
+    path = _release_file("JM-FX-MT4-ACCOUNTS.txt")
+    return FileResponse(path, filename="JM-FX-MT4-ACCOUNTS.txt", media_type="text/plain")
 
 
 @router.get("/downloads/mt5-ea-v2.zip")
