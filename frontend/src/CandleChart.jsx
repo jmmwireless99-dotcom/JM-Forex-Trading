@@ -3,20 +3,26 @@ import { createChart, LineStyle } from 'lightweight-charts'
 import { api } from './api'
 
 const RANGE_OPTS = [
-  { id: 'live', label: 'Live', hint: 'Engine M1' },
-  { id: 'm5', label: 'M5', hint: '5m · ~5 days' },
+  { id: 'm5', label: 'M5', hint: 'Desk signal · ~1 month' },
+  { id: 'm1tape', label: 'M1', hint: 'Engine M1 · ~4h' },
   { id: 'm15', label: 'M15', hint: '15m · ~5 days' },
   { id: 'h1', label: 'H1', hint: '1h · ~1 month' },
   { id: '1m', label: '1M Daily', hint: '1 day / bar' },
 ]
 
 const RANGE_ALIASES = {
+  live: 'm5',
   '1w': 'h1',
   '1m_h1': 'h1',
   '60': 'h1',
   '5': 'm5',
   '15': 'm15',
 }
+
+/** Max bars sent to lightweight-charts (full month retained for scroll). */
+const MAX_CHART_BARS = 8640
+/** Default visible window on desk M5 (~2 trading days). */
+const M5_VISIBLE_BARS = 576
 
 function loadRange() {
   try {
@@ -26,7 +32,7 @@ function loadRange() {
   } catch {
     /* ignore */
   }
-  return 'live'
+  return 'm5'
 }
 
 function toChartCandle(c) {
@@ -38,6 +44,23 @@ function toChartCandle(c) {
     low: Number(c.low),
     close: Number(c.close),
   }
+}
+
+function mergeCandleRows(...groups) {
+  const map = new Map()
+  for (const group of groups) {
+    for (const c of group) {
+      const row = typeof c.time === 'number' && Number.isFinite(c.open) ? c : toChartCandle(c)
+      if (Number.isFinite(row.time)) map.set(row.time, row)
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.time - b.time)
+}
+
+/** Reject mixing engine/paper prices with market OHLC (prevents fake crash candles). */
+function priceNear(a, b, pct = 0.04) {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return false
+  return Math.abs(a - b) / b <= pct
 }
 
 function emaSeries(closes, period) {
@@ -139,7 +162,7 @@ function formatDayLabel(unixSec) {
 }
 
 /** First bar of each UTC day → square marker (daily separators). */
-function dayBoundaryMarkers(rows) {
+function dayBoundaryMarkers(rows, { maxLabels = 14 } = {}) {
   const out = []
   let prev = null
   for (const r of rows) {
@@ -151,8 +174,12 @@ function dayBoundaryMarkers(rows) {
       position: 'aboveBar',
       color: 'rgba(240, 199, 94, 0.9)',
       shape: 'square',
-      text: formatDayLabel(r.time),
+      text: '', // label only on recent days — long text stacks vertically
     })
+  }
+  // Label only the most recent N day boundaries to avoid chart clutter
+  for (const m of out.slice(-maxLabels)) {
+    m.text = formatDayLabel(m.time)
   }
   return out
 }
@@ -163,8 +190,13 @@ function sliceLastDays(rows, days) {
   return rows.filter((r) => r.time >= cutoff)
 }
 
+function sliceLastBars(rows, maxBars) {
+  if (!rows.length || rows.length <= maxBars) return rows
+  return rows.slice(-maxBars)
+}
+
 function rangeFetchSpec(range) {
-  if (range === 'm5') return { interval: '5', limit: 1000, days: 5, dayMarks: true }
+  if (range === 'm5') return { kind: 'desk_m5', days: 31 }
   if (range === 'm15') return { interval: '15', limit: 1000, days: 5, dayMarks: true }
   if (range === 'h1') return { interval: '60', limit: 800, days: 31, dayMarks: true }
   if (range === '1m') return { interval: '1d', limit: 45, days: 31, dayMarks: true }
@@ -189,6 +221,8 @@ function resolveLivePrice(livePrice, liveCandle, candles) {
 export default function CandleChart({
   candles = [],
   liveCandle = null,
+  signalCandles = [],
+  liveSignalCandle = null,
   livePrice = null,
   symbol = 'XAUUSD',
   positions = [],
@@ -207,6 +241,8 @@ export default function CandleChart({
   const livePriceLineRef = useRef(null)
   const candleTimesRef = useRef([])
   const displayRowsRef = useRef([])
+  const fitOnceRef = useRef(false)
+  const m5ZoomKeyRef = useRef('')
 
   const [range, setRange] = useState(loadRange)
   const [histRows, setHistRows] = useState([])
@@ -222,16 +258,24 @@ export default function CandleChart({
     [positions],
   )
 
-  const liveRows = useMemo(
-    () => buildCandleRows(candles, liveCandle),
-    [candles, liveCandle],
-  )
+  const m1Rows = useMemo(() => buildCandleRows(candles, liveCandle), [candles, liveCandle])
 
-  const displayRows = range === 'live' ? liveRows : histRows
+  // M5 uses market gold OHLC only — engine signal candles can sit on a different
+  // paper mid (e.g. 4436 vs PAXG 2471) and must NOT be merged into the chart.
+  const displayRows = useMemo(() => {
+    if (range === 'm1tape') return sliceLastBars(m1Rows, MAX_CHART_BARS)
+    return sliceLastBars(histRows, MAX_CHART_BARS)
+  }, [range, m1Rows, histRows])
+
+  useEffect(() => {
+    fitOnceRef.current = false
+    m5ZoomKeyRef.current = ''
+  }, [range])
 
   useEffect(() => {
     if (!hostRef.current) return undefined
     const chart = createChart(hostRef.current, {
+      autoSize: true,
       layout: {
         background: { color: 'transparent' },
         textColor: '#c5d4cf',
@@ -242,7 +286,7 @@ export default function CandleChart({
       },
       rightPriceScale: {
         borderColor: 'rgba(125, 255, 179, 0.15)',
-        scaleMargins: { top: 0.05, bottom: 0.28 },
+        scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
         borderColor: 'rgba(125, 255, 179, 0.15)',
@@ -261,7 +305,6 @@ export default function CandleChart({
       borderDownColor: '#ff6b6b',
       wickUpColor: '#7dffb3',
       wickDownColor: '#ff6b6b',
-      // Last-value line tracks the forming bar (kept live on every TF).
       priceLineVisible: true,
       lastValueVisible: true,
       priceLineColor: 'rgba(255, 255, 255, 0.85)',
@@ -301,7 +344,7 @@ export default function CandleChart({
       title: 'RSI',
     })
     chart.priceScale('rsi').applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0.02 },
+      scaleMargins: { top: 0.82, bottom: 0.04 },
       borderVisible: false,
       drawTicks: false,
     })
@@ -335,17 +378,7 @@ export default function CandleChart({
     chartRef.current = chart
     seriesRef.current = series
 
-    const ro = new ResizeObserver(() => {
-      if (!hostRef.current) return
-      chart.applyOptions({
-        width: hostRef.current.clientWidth,
-        height: hostRef.current.clientHeight,
-      })
-    })
-    ro.observe(hostRef.current)
-
     return () => {
-      ro.disconnect()
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
@@ -357,9 +390,15 @@ export default function CandleChart({
     }
   }, [])
 
-  // Fetch 1W / 1M history (gold market OHLC — desk engine only keeps ~hours live)
+  // Fetch history: desk M5 merges market gold + engine signal tail
   useEffect(() => {
     const spec = rangeFetchSpec(range)
+    if (range === 'm1tape') {
+      setHistStatus('idle')
+      setHistError('')
+      setHistRows([])
+      return undefined
+    }
     if (!spec) {
       setHistStatus('idle')
       setHistError('')
@@ -370,9 +409,28 @@ export default function CandleChart({
     setHistError('')
     ;(async () => {
       try {
+        if (spec.kind === 'desk_m5') {
+          const market = await api.goldCandles({ interval: '5', limit: 9000, days: spec.days })
+          if (!alive) return
+          let marketRows = (market.candles || [])
+            .map((c) => ({
+              time: Number(c.time),
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close),
+            }))
+            .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close) && r.close > 500)
+          marketRows = sliceLastDays(marketRows, spec.days)
+          if (!marketRows.length) throw new Error('No M5 market candles returned')
+          setHistRows(marketRows)
+          setHistStatus('ready')
+          return
+        }
         const data = await api.goldCandles({
           interval: spec.interval,
           limit: spec.limit,
+          days: spec.days,
         })
         if (!alive) return
         let rows = (data.candles || [])
@@ -399,7 +457,7 @@ export default function CandleChart({
     return () => {
       alive = false
     }
-  }, [range])
+  }, [range, symbol])
 
   // Candles + EMA + RSI
   useEffect(() => {
@@ -408,7 +466,7 @@ export default function CandleChart({
     displayRowsRef.current = data
     candleTimesRef.current = data.map((d) => d.time)
     if (!data.length) {
-      if (range !== 'live' && histStatus === 'loading') return
+      if (range !== 'm1tape' && histStatus === 'loading') return
       seriesRef.current.setData([])
       emaRefs.current.ema20?.setData([])
       emaRefs.current.ema50?.setData([])
@@ -417,7 +475,13 @@ export default function CandleChart({
       return
     }
     seriesRef.current.setData(data)
-    chartRef.current?.timeScale().scrollToRealTime()
+    const ts = chartRef.current?.timeScale()
+    if (ts && range === 'm1tape') {
+      ts.scrollToRealTime()
+    } else if (ts && range !== 'm5' && !fitOnceRef.current) {
+      ts.fitContent()
+      fitOnceRef.current = true
+    }
 
     const closes = data.map((d) => d.close)
     const pack = (values, digits = 3) =>
@@ -446,18 +510,34 @@ export default function CandleChart({
     rsiRef.current.setData(pack(rsiSeries(closes, rsiPeriod), 2))
   }, [displayRows, showEma, showRsi, rsiPeriod, range, histStatus])
 
-  // LIVE price line + forming-bar update on every timeframe (desk tick mid)
+  // M5: zoom to recent window once history is loaded (not on every live tick)
+  useEffect(() => {
+    if (range !== 'm5' || !chartRef.current || !displayRows.length) return
+    if (histStatus === 'loading') return
+    const key = `${range}|${histStatus}|${histRows.length}`
+    if (m5ZoomKeyRef.current === key) return
+    m5ZoomKeyRef.current = key
+    const ts = chartRef.current.timeScale()
+    const from = Math.max(0, displayRows.length - M5_VISIBLE_BARS)
+    ts.setVisibleLogicalRange({ from, to: displayRows.length + 2 })
+  }, [range, histStatus, histRows.length, displayRows.length])
+
+  // LIVE price line; update forming M5 bar only on desk tabs (not Yahoo-only TF)
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
     const px = resolveLivePrice(livePrice, liveCandle, candles)
     if (px == null) return
 
-    const title = `LIVE ${px.toFixed(2)}`
+    const rows = displayRowsRef.current
+    const last = rows.length ? rows[rows.length - 1] : null
+    const pxOk = last ? priceNear(px, last.close, 0.04) : true
+
+    const title = pxOk ? `LIVE ${px.toFixed(2)}` : `DESK ${px.toFixed(2)}`
     if (!livePriceLineRef.current) {
       livePriceLineRef.current = series.createPriceLine({
         price: px,
-        color: '#ffffff',
+        color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
@@ -465,11 +545,15 @@ export default function CandleChart({
       })
     } else {
       try {
-        livePriceLineRef.current.applyOptions({ price: px, title })
+        livePriceLineRef.current.applyOptions({
+          price: px,
+          title,
+          color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
+        })
       } catch {
         livePriceLineRef.current = series.createPriceLine({
           price: px,
-          color: '#ffffff',
+          color: pxOk ? '#ffffff' : 'rgba(255, 180, 100, 0.85)',
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
@@ -478,9 +562,9 @@ export default function CandleChart({
       }
     }
 
-    const rows = displayRowsRef.current
-    if (!rows.length) return
-    const last = rows[rows.length - 1]
+    const canUpdateForming = (range === 'm5' || range === 'm1tape') && pxOk
+    if (!canUpdateForming || !last) return
+
     const updated = {
       time: last.time,
       open: last.open,
@@ -494,7 +578,7 @@ export default function CandleChart({
     } catch {
       /* series may be mid-reset */
     }
-  }, [livePrice, liveCandle, candles, displayRows, histStatus, range])
+  }, [livePrice, liveCandle, candles, range])
 
   // Entry / SL / TP
   useEffect(() => {
@@ -562,9 +646,9 @@ export default function CandleChart({
     }
 
     const spec = rangeFetchSpec(range)
-    const wantDayMarks = range === 'live' ? rows.length > 0 : Boolean(spec?.dayMarks)
+    const wantDayMarks =
+      range === 'm5' || range === 'm1tape' ? rows.length > 0 : Boolean(spec?.dayMarks)
     const dayMarks = wantDayMarks ? dayBoundaryMarkers(rows) : []
-    // On pure daily bars, every bar is a day — keep labels, lighter noise OK.
     const dayByTime = new Map(dayMarks.map((m) => [m.time, m]))
 
     const signalMarks = []
@@ -587,7 +671,6 @@ export default function CandleChart({
         shape: side === 'BUY' ? 'arrowUp' : 'arrowDown',
         text: `${side === 'BUY' ? '▲' : '▼'} ${tag}${dayTxt}`,
       })
-      // Prefer signal marker text when it lands on the day boundary bar
       if (day) dayByTime.delete(time)
     }
 
@@ -622,6 +705,7 @@ export default function CandleChart({
         <h2>{symbol} · desk tape</h2>
         <span className="meta">
           {livePx != null ? `LIVE ${livePx.toFixed(2)} · ` : ''}
+          {range === 'm5' ? 'M5 signal · ' : range === 'm1tape' ? 'M1 engine · ' : ''}
           {posCount ? `${posCount} open` : 'flat'} · {sigCount} signals
           {lastRsi != null ? ` · RSI ${lastRsi}` : ''}
           {displayRows.length ? ` · ${displayRows.length} bars` : ''}
@@ -669,11 +753,15 @@ export default function CandleChart({
         <span className="chart-leg buy">▲ BUY</span>
         <span className="chart-leg sell">▼ SELL</span>
       </div>
-      <div className="chart-canvas chart-canvas-rsi" ref={hostRef} />
-      {range !== 'live' ? (
+      <div className="desk-chart-shell desk-chart-shell-rsi">
+        <div className="desk-chart-host" ref={hostRef} />
+      </div>
+      {range !== 'm1tape' ? (
         <p className="desk-history-footnote">
-          History via market gold OHLC (GC=F / PAXG) · UTC day separators · white{' '}
-          <strong>LIVE</strong> price line + last bar track the desk tick on every timeframe.
+          {range === 'm5'
+            ? 'M5 market gold OHLC (GC=F / PAXG) · ~1 month · UTC day separators · white '
+            : 'History via market gold OHLC (GC=F / PAXG) · UTC day separators · white '}
+          <strong>LIVE</strong> line tracks desk tick when within 4% of the last bar.
         </p>
       ) : null}
     </div>
