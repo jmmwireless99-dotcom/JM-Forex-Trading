@@ -31,6 +31,32 @@ def true_atr(candles: list[Candle], period: int = 14) -> float | None:
     return sum(trs[-period:]) / period
 
 
+def pip_levels(
+    side: Side,
+    *,
+    entry: float,
+    stop_loss_pips: float,
+    take_profit_pips: float,
+    pip: float = 0.1,
+) -> Levels:
+    """Fixed pip SL/TP from entry (XAUUSD pip=0.1 → 120p = $12.00)."""
+    sl_dist = stop_loss_pips * pip
+    tp_dist = take_profit_pips * pip
+    if side == Side.BUY:
+        sl = entry - sl_dist
+        tp = entry + tp_dist
+    else:
+        sl = entry + sl_dist
+        tp = entry - tp_dist
+    risk = abs(entry - sl)
+    return Levels(
+        stop_loss=round(sl, 2),
+        take_profit=round(tp, 2),
+        risk=round(risk, 2),
+        reward_r=round(tp_dist / risk, 2) if risk else 0.0,
+    )
+
+
 def structure_levels(
     side: Side,
     *,
