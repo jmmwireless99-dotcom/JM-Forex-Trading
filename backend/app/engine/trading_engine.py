@@ -1301,11 +1301,14 @@ class TradingEngine:
         else:
             amount = float(deposit if deposit is not None else acct.broker.deposit)
             if self._is_scale_in_account(acct):
-                from app.risk.scale_in import scale_in_lots
+                from app.risk.scale_in import scale_in_lots, scale_in_step_pips_for_session
 
+                step_now = scale_in_step_pips_for_session(self.settings)
                 note = (
                     "Scale-in demo — up to 3 legs on pullbacks "
-                    f"({self.settings.scale_in_step_pips:g}p steps). "
+                    f"({step_now:g}p steps this session · "
+                    f"Asia {self.settings.scale_in_step_pips_asia:g}p · "
+                    f"Night {self.settings.scale_in_step_pips_night:g}p). "
                     "Other accounts unchanged."
                 )
             else:
@@ -1320,14 +1323,18 @@ class TradingEngine:
         pip_value_per_lot = 10.0  # XAUUSD desk convention in RiskManager
         suggested = risk_usd / (stop_pips * pip_value_per_lot) if stop_pips > 0 else 0.01
         suggested_lots = max(0.01, round(suggested, 2))
-        scale_in_lots_preview = None
         if account and self._is_scale_in_account(acct):
             from app.risk.scale_in import scale_in_lots as si_lots
+            from app.risk.scale_in import scale_in_step_pips_for_session
 
             scale_in_lots_preview = [
                 si_lots(amount, leg, self.settings)
                 for leg in range(1, int(self.settings.scale_in_max_legs) + 1)
             ]
+            scale_in_step = scale_in_step_pips_for_session(self.settings)
+        else:
+            scale_in_lots_preview = None
+            scale_in_step = None
         return {
             "deposit": round(amount, 2),
             "currency": self.settings.base_currency,
@@ -1337,7 +1344,11 @@ class TradingEngine:
             if account and self._is_scale_in_account(acct)
             else None,
             "scale_in_lots": scale_in_lots_preview,
-            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            "scale_in_step_pips": scale_in_step,
+            "scale_in_step_pips_asia": float(self.settings.scale_in_step_pips_asia)
+            if account and self._is_scale_in_account(acct)
+            else None,
+            "scale_in_step_pips_night": float(self.settings.scale_in_step_pips_night)
             if account and self._is_scale_in_account(acct)
             else None,
             "mt5_only": bool(account and self._is_mt5_demo_account(account)),
