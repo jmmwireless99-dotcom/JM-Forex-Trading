@@ -1,4 +1,5 @@
 import { PAIR_GUIDE, LAB_TIPS } from '../content/compare.js'
+import { pairTradePath } from '../routing.js'
 
 export default function PairLabPage() {
   return (
@@ -10,7 +11,7 @@ export default function PairLabPage() {
           <a href="#trade" className="lab-link">
             Live demo
           </a>{' '}
-          — separate from JM FX gold.
+          or open a dedicated pair URL below.
         </p>
       </header>
 
@@ -29,30 +30,9 @@ export default function PairLabPage() {
             </p>
             <p className="lab-muted">Lab auto: {p.labAuto} · Risk: {p.risk}</p>
             <p>{p.note}</p>
-            {p.id !== 'XAUUSD' ? (
-              <a
-                href="#trade"
-                className="lab-btn"
-                onClick={(e) => {
-                  e.preventDefault()
-                  try {
-                    sessionStorage.setItem('jm_lab_trade_symbol', p.id)
-                  } catch {
-                    /* ignore */
-                  }
-                  window.location.hash = 'trade'
-                }}
-              >
-                Demo trade {p.label}
-              </a>
-            ) : (
-              <a
-                href="#/trade/xauusd"
-                className="lab-btn"
-              >
-                Demo trade {p.label}
-              </a>
-            )}
+            <a href={pairTradePath(p.id)} className="lab-btn">
+              Demo trade {p.label}
+            </a>
           </article>
         ))}
       </div>

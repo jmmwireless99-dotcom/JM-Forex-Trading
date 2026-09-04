@@ -6,7 +6,7 @@ import { setLabSessionPair } from './api.js'
 export default function PairTradeApp({ pair }) {
   useEffect(() => {
     setLabSessionPair(pair)
-    document.title = `${pair} · JM Lab demo`
+    document.title = `${pair} · JM Lab paper`
     return () => setLabSessionPair(null)
   }, [pair])
 
@@ -14,11 +14,11 @@ export default function PairTradeApp({ pair }) {
     <div className="lab-app lab-pair-app">
       <header className="lab-nav lab-pair-nav">
         <div className="lab-nav-inner">
-          <a href="/lab/" className="lab-brand">
+          <a href="/lab/#suite" className="lab-brand">
             JM <span>Lab</span>
           </a>
-          <span className="lab-pair-nav-title">{pair} demo</span>
-          <nav className="lab-pair-nav-links" aria-label="Other pairs">
+          <span className="lab-pair-nav-title">{pair} · paper scalper</span>
+          <nav className="lab-pair-nav-links" aria-label="4-pair lab">
             {PAIR_URL_SYMBOLS.map((id) => (
               <a
                 key={id}
@@ -31,16 +31,13 @@ export default function PairTradeApp({ pair }) {
               </a>
             ))}
           </nav>
-          <a href="/fx/" className="lab-desk-link">
-            JM FX desk ↗
-          </a>
         </div>
       </header>
       <main className="lab-main">
         <TradePage fixedPair={pair} />
       </main>
       <footer className="lab-footer">
-        {pair} paper trading · open other pairs in new tabs ·{' '}
+        {pair} paper trading · lab backend only ·{' '}
         <a href="/lab/#suite">4-pair dashboard</a>
       </footer>
     </div>

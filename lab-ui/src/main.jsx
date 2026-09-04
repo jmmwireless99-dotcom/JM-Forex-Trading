@@ -7,7 +7,13 @@ import './Lab.css'
 
 function Root() {
   const pair = parsePairFromPath()
-  if (pair) return <PairTradeApp pair={pair} />
+  if (pair) {
+    // Pair URLs are lab-only trade pages — ignore #home etc. from shared /lab/ links
+    if (window.location.hash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+    return <PairTradeApp pair={pair} />
+  }
   return <App />
 }
 
