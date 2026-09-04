@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 
+from app.core.config import get_settings
+from app.strategies.news_calendar import primary_news_event, should_run_news_strategy
 from app.strategies.session import SessionTier, classify_session, next_session_hint
 
 
@@ -81,17 +83,31 @@ class AutoStrategyRouter:
         utc = ts.astimezone(timezone.utc)
         session = classify_session(utc)
         day = DAY_NAMES[utc.weekday()]
-        pick = self._pick(session.label)
-        child = self._child(session.label)
-        allow = session.tier != SessionTier.AVOID and pick is not None
-        if allow:
-            reason = f"Session {session.label}: AI_ML → {child}"
+        settings = get_settings()
+
+        news_run = should_run_news_strategy(utc) if settings.news_breakout_auto else None
+
+        if news_run and news_run.active:
+            event_name = news_run.event or "High-impact USD"
+            pick = "NewsBreakout"
+            child = None
+            allow = session.tier != SessionTier.AVOID
+            reason = news_run.reason or f"News evening ({event_name}): NewsBreakout"
+            regime = Regime.VOLATILE if allow else Regime.BLOCKED
         else:
-            reason = f"Session {session.label}: stand aside"
+            pick = self._pick(session.label)
+            child = self._child(session.label)
+            allow = session.tier != SessionTier.AVOID and pick is not None
+            if allow:
+                reason = f"Session {session.label}: AI_ML → {child}"
+            else:
+                reason = f"Session {session.label}: stand aside"
+            regime = Regime.RANGE if allow else Regime.BLOCKED
+
         decision = AutoDecision(
             allow,
             pick,
-            Regime.RANGE if allow else Regime.BLOCKED,
+            regime,
             session.label,
             day,
             utc.weekday(),
@@ -158,11 +174,11 @@ class AutoStrategyRouter:
                 "strategies": "AI_ML → EMA_RSI_Scalp",
             },
             {
-                "days": "Mon-Fri",
-                "utc": "12:00-17:59",
-                "ph": "20:00-01:59",
-                "slot": "SMC overlap",
-                "session": "london_ny_overlap",
-                "strategies": "AI_ML → Liquidity_Sweep_SMC",
+                "days": "News evenings (PH 7PM–7AM)",
+                "utc": "T-60m → T+60m around release",
+                "ph": "1hr before news → 1hr after",
+                "slot": "news_evening",
+                "session": "SMC / early Asia only",
+                "strategies": "NewsBreakout (auto — replaces AI_ML in window)",
             },
         ]

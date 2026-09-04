@@ -953,6 +953,117 @@ select {
   gap: 0.25rem;
 }
 
+.news-panel h2 {
+  margin-bottom: 0.65rem;
+}
+
+.news-box {
+  border: 1px solid rgba(125, 180, 255, 0.22);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(180deg, rgba(40, 70, 120, 0.18), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.armed {
+  border-color: rgba(242, 193, 78, 0.45);
+  background: linear-gradient(180deg, rgba(242, 193, 78, 0.14), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.entry-live {
+  border-color: rgba(125, 255, 179, 0.45);
+  background: linear-gradient(180deg, rgba(20, 99, 92, 0.24), rgba(255, 255, 255, 0.02));
+}
+
+.news-box.blackout:not(.armed) {
+  border-color: rgba(255, 107, 107, 0.35);
+}
+
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.45rem 1rem;
+  margin-top: 0.65rem;
+}
+
+.news-ff-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.85rem 0 0.45rem;
+}
+
+.news-ff-error {
+  color: #ffb4b4;
+  margin-bottom: 0.45rem;
+}
+
+.news-ff-scroll {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.news-ff-table {
+  margin: 0;
+  min-width: 720px;
+}
+
+.news-ff-table th,
+.news-ff-table td {
+  font-size: 0.84rem;
+  vertical-align: top;
+}
+
+.news-ff-countdown {
+  font-size: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.news-impact {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.news-impact-high {
+  background: rgba(255, 80, 80, 0.22);
+  color: #ff8a8a;
+}
+
+.news-impact-medium {
+  background: rgba(255, 165, 70, 0.2);
+  color: #ffc56e;
+}
+
+.news-impact-low,
+.news-impact-holiday {
+  background: rgba(240, 210, 80, 0.15);
+  color: #e8d57a;
+}
+
+.news-ff-imminent {
+  animation: news-flash 1.4s ease-in-out infinite;
+  background: rgba(242, 193, 78, 0.08);
+}
+
+.news-ff-past {
+  opacity: 0.55;
+}
+
+@keyframes news-flash {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(242, 193, 78, 0.15);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(125, 255, 179, 0.45);
+  }
+}
+
 .auto-head {
   display: flex;
   justify-content: space-between;

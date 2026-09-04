@@ -4,6 +4,7 @@ from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.ema_vwap_scalp import EmaVwapScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
 from app.strategies.manual_only import ManualOnlyStrategy
+from app.strategies.news_breakout import NewsBreakoutStrategy
 
 STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     AIMLStrategy.name: AIMLStrategy,
@@ -11,6 +12,7 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
     EmaVwapScalpStrategy.name: EmaVwapScalpStrategy,
     LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy,
+    NewsBreakoutStrategy.name: NewsBreakoutStrategy,
 }
 
 # Aliases for UI / older labels
@@ -27,6 +29,8 @@ _ALIASES = {
     "vwap_scalp": EmaVwapScalpStrategy.name,
     "smc": LiquiditySweepSmcStrategy.name,
     "liquidity_sweep_smc": LiquiditySweepSmcStrategy.name,
+    "news_breakout": NewsBreakoutStrategy.name,
+    "newsbreakout": NewsBreakoutStrategy.name,
 }
 
 META_STRATEGIES: list[str] = []
@@ -60,6 +64,7 @@ __all__ = [
     "EmaRsiScalpStrategy",
     "EmaVwapScalpStrategy",
     "LiquiditySweepSmcStrategy",
+    "NewsBreakoutStrategy",
     "Strategy",
     "create_strategy",
     "list_strategy_names",
