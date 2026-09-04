@@ -1377,10 +1377,6 @@ export default function App() {
 
         <section className="panel">
           <h2>Desk signals</h2>
-          <p className="meta" style={{ marginTop: 0 }}>
-            Shared desk tape — same BUY/SELL list on every browser. Paper fills stay on
-            this account ({accountMeta?.code || '…'}) only.
-          </p>
           <div className="signal-list">
             {signals.length === 0 ? (
               <div className="empty">Waiting for confluence signals…</div>
