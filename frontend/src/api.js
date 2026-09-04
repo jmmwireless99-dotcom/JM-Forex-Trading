@@ -108,6 +108,12 @@ export const api = {
   aiAdvice: () => request('/ai/advice'),
   aiHistory: (limit = 50) => request(`/ai/history?limit=${limit}`),
   aiRetrain: () => request('/ai/retrain', { method: 'POST' }),
+  claudeStatus: () => request('/ai/claude/status'),
+  claudeChartAnalysis: ({ interval = '5', symbol = 'XAUUSD', limit = 400 } = {}) =>
+    request('/ai/claude/chart', {
+      method: 'POST',
+      body: JSON.stringify({ interval: String(interval), symbol, limit }),
+    }),
   ticks: () => request('/ticks'),
   strategies: () => request('/strategies'),
   start: (strategy) =>

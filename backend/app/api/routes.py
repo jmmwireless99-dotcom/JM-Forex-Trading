@@ -233,6 +233,28 @@ class PositionStopsBody(BaseModel):
     take_profit_pips: float | None = Field(default=None, gt=0, le=1000)
 
 
+class ClaudeChartBody(BaseModel):
+    symbol: str = "XAUUSD"
+    interval: str = "5"
+    limit: int = Field(default=400, ge=50, le=1000)
+
+
+class TradingViewWebhookBody(BaseModel):
+    """TradingView alert JSON — paste alert message fields or raw payload."""
+
+    symbol: str | None = None
+    ticker: str | None = None
+    interval: str | None = None
+    timeframe: str | None = None
+    action: str | None = None
+    side: str | None = None
+    price: float | None = None
+    close: float | None = None
+    message: str | None = None
+    strategy: str | None = None
+    extra: dict | None = None
+
+
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "JM Forex"}
@@ -903,6 +925,74 @@ async def ai_retrain(
 ) -> dict:
     """Backfill journal labels and retrain the Machine Learning model."""
     return get_engine().ai_retrain(account)
+
+
+@router.get("/ai/claude/status")
+async def claude_status() -> dict:
+    from app.api.claude_deps import get_claude_analyst
+
+    return {"ok": True, **get_claude_analyst().status()}
+
+
+@router.post("/ai/claude/chart")
+async def claude_chart_analysis(body: ClaudeChartBody) -> dict:
+    """Claude reads TradingView-style gold OHLC + desk context."""
+    from app.api.claude_deps import get_claude_analyst
+    from app.market_data.gold_feed import fetch_gold_candles
+
+    analyst = get_claude_analyst()
+    if not analyst.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Claude not configured — set JM_ANTHROPIC_API_KEY on the server",
+        )
+    try:
+        feed = fetch_gold_candles(interval=body.interval, limit=body.limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gold feed failed: {e}") from e
+    engine = get_engine()
+    desk_resp = await desk()
+    tf = body.interval if body.interval.endswith("m") else f"{body.interval}m"
+    if tf == "60m":
+        tf = "H1"
+    elif tf in {"5", "5m"}:
+        tf = "M5"
+    result = await analyst.analyze_chart(
+        candles=feed.get("candles") or [],
+        symbol=body.symbol.upper(),
+        timeframe=tf,
+        desk=desk_resp,
+        signals=[s.model_dump(mode="json") for s in engine.recent_signals()[:8]],
+        meta=feed,
+    )
+    return {"ok": result.ok, "analysis": result.as_dict()}
+
+
+@router.post("/webhooks/tradingview")
+async def tradingview_webhook(
+    body: TradingViewWebhookBody,
+    secret: str | None = None,
+) -> dict:
+    """TradingView alert → Claude interprets alert + latest chart."""
+    from app.api.claude_deps import get_claude_analyst
+    from app.market_data.gold_feed import fetch_gold_candles
+
+    settings = get_settings()
+    if settings.tradingview_webhook_secret:
+        if secret != settings.tradingview_webhook_secret:
+            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    analyst = get_claude_analyst()
+    if not analyst.enabled:
+        raise HTTPException(status_code=503, detail="Claude not configured")
+    alert = body.model_dump(exclude_none=True)
+    try:
+        feed = fetch_gold_candles(interval="5m", limit=200)
+        candles = feed.get("candles") or []
+    except Exception:
+        candles = []
+    desk_resp = await desk()
+    result = await analyst.analyze_tradingview_alert(alert, candles=candles, desk=desk_resp)
+    return {"ok": result.ok, "analysis": result.as_dict(), "alert": alert}
 
 
 @router.get("/ticks")
