@@ -47,6 +47,7 @@ async def test_strategies_and_status(client):
     assert "EMA_RSI_Scalp" in names
     assert "EMA_VWAP_Scalp" in names
     assert "Liquidity_Sweep_SMC" in names
+    assert "NewsBreakout" in names
     assert "London_Judas_Sweep" not in names
 
     res = await client.get("/api/status")

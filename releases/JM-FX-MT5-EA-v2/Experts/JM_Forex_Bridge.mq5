@@ -11,7 +11,7 @@
 input string InpSymbol         = "GOLD#";
 input long   InpMagic          = 260719;
 input int    InpSlippagePoints = 30;
-input int    InpPollMs         = 100;
+input int    InpPollMs         = 50;
 input bool   UseCommonFolder   = true;
 input string CommandFile       = "jm_command.csv";
 input string StatusFile        = "jm_status.csv";
@@ -23,7 +23,7 @@ input string AckFile           = "jm_ack.csv";
 input bool   InpUseCloudBridge = true;
 input string InpApiUrl         = "https://jmtechsolution.cloud/fx/api";
 input string InpBridgeToken    = "gTXmD7O-194jS9gveB1I5c9qjmNdqdUv";
-input int    InpSyncEveryMs    = 400;
+input int    InpSyncEveryMs    = 150;
 
 CTrade trade;
 string g_last_cmd_id = "";

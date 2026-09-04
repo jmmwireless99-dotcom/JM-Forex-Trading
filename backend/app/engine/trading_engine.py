@@ -42,8 +42,10 @@ from app.risk.scale_in import (
     evaluate_scale_in,
     leg_add_cooldown_ok,
     mark_leg_added,
+    mark_signal_entry,
     open_legs,
     plan_scale_in_entry,
+    signal_entry_cooldown_ok,
 )
 from app.strategies import STRATEGY_REGISTRY, Strategy, create_strategy
 from app.strategies.auto_router import AutoStrategyRouter
@@ -54,6 +56,7 @@ Listener = Callable[[dict[str, Any]], Awaitable[None] | None]
 # Session-follow pool for auto transfer by time.
 _AUTO_POOL = (
     "AI_ML",
+    "NewsBreakout",
     "EMA_RSI_Scalp",
     "Liquidity_Sweep_SMC",
     "EMA_VWAP_Scalp",
@@ -355,6 +358,21 @@ class TradingEngine:
         if bridge and self._mt_bridge_live(bridge):
             return bridge.snapshot()
         return self._empty_mt_snapshot()
+
+    def _linked_mt_accounts(self) -> list[PaperAccount]:
+        """All MT-linked JM FX accounts — MT5 demo, MT4 demo, MT4 real (priority order)."""
+        out: list[PaperAccount] = []
+        seen: set[str] = set()
+        for getter in (
+            self.mt_demo_account,
+            self.mt4_demo_account,
+            self.mt4_real_account,
+        ):
+            acct = getter()
+            if acct is not None and acct.id not in seen:
+                seen.add(acct.id)
+                out.append(acct)
+        return out
 
     def _account_executes_via_mt(self, account: PaperAccount) -> bool:
         return self._is_mt_demo_account(account)
@@ -1256,7 +1274,8 @@ class TradingEngine:
             return
         if position is not None:
             row = acct.journal.record_open_position(position, mode=self.mode)
-            self._arm_entry_cooldown()
+            if not self._is_scale_in_account(acct):
+                self._arm_entry_cooldown()
             await self._persist_trade_open(order, position, signal_db_id=signal_db_id)
             if self.advisor.enabled:
                 try:
@@ -1303,11 +1322,18 @@ class TradingEngine:
             if self._is_scale_in_account(acct):
                 from app.risk.scale_in import scale_in_lots
 
-                note = (
-                    "Scale-in demo — up to 3 legs on pullbacks "
-                    f"({self.settings.scale_in_step_pips:g}p steps). "
-                    "Other accounts unchanged."
-                )
+                if self.settings.scale_in_structure_pullback:
+                    note = (
+                        "Scale-in demo — up to 3 legs on M1 structure pullbacks "
+                        f"({self.settings.scale_in_min_pullback_atr:g}×ATR + swing zone). "
+                        "Other accounts unchanged."
+                    )
+                else:
+                    note = (
+                        "Scale-in demo — up to 3 legs on pullbacks "
+                        f"({self.settings.scale_in_step_pips:g}p steps). "
+                        "Other accounts unchanged."
+                    )
             else:
                 note = "Paper demo capital for this account only — other clients cannot see it"
             paper = not self.using_mt()
@@ -1337,8 +1363,20 @@ class TradingEngine:
             if account and self._is_scale_in_account(acct)
             else None,
             "scale_in_lots": scale_in_lots_preview,
-            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            "scale_in_structure_pullback": bool(
+                self.settings.scale_in_structure_pullback
+            )
             if account and self._is_scale_in_account(acct)
+            else None,
+            "scale_in_min_pullback_atr": float(self.settings.scale_in_min_pullback_atr)
+            if account
+            and self._is_scale_in_account(acct)
+            and self.settings.scale_in_structure_pullback
+            else None,
+            "scale_in_step_pips": float(self.settings.scale_in_step_pips)
+            if account
+            and self._is_scale_in_account(acct)
+            and not self.settings.scale_in_structure_pullback
             else None,
             "mt5_only": bool(account and self._is_mt5_demo_account(account)),
             "mt4_only": bool(account and self._is_mt4_demo_account(account)),
@@ -1694,19 +1732,27 @@ class TradingEngine:
         """Accounts that receive auto strategy fills.
 
         One desk strategy signal fans out to every auto-follow client — same
-        AI_ML / EMA_RSI / SMC setup for all books. MT5 demo (DDDC3D) executes
-        on the bridge; paper accounts fill on their own book.
+        AI_ML / EMA_RSI / SMC setup for all books. MT-linked accounts execute
+        on their bridge first; paper accounts fill on their own book.
         """
-        mt_acct = self.mt_demo_account()
+        linked_mt = self._linked_mt_accounts()
         followers = self.accounts.auto_followers()
 
-        def _append_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
-            if mt_acct is None or mt_acct.id in {a.id for a in pool}:
+        def _prepend_linked_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
+            if not linked_mt:
                 return pool
-            return [*pool, mt_acct]
+            pool_ids = {a.id for a in pool}
+            mt_in_pool = [a for a in linked_mt if a.id in pool_ids]
+            mt_extra = [
+                a for a in linked_mt if a.id not in pool_ids and a.follow_auto
+            ]
+            ordered_mt = mt_in_pool + mt_extra
+            seen = {a.id for a in ordered_mt}
+            rest = [a for a in pool if a.id not in seen]
+            return [*ordered_mt, *rest]
 
         if not self.settings.auto_fill_single_book:
-            return _append_mt(followers)
+            return _prepend_linked_mt(followers)
 
         code = (self.settings.auto_fill_account_code or "").strip().upper()
         if code:
@@ -1723,8 +1769,8 @@ class TradingEngine:
         if followers:
             followers = sorted(followers, key=lambda a: a.created_at)
             return followers[:1]
-        if mt_acct is not None:
-            return [mt_acct]
+        if linked_mt:
+            return linked_mt[:1]
         return []
 
     async def _handle_scale_in_signal_for_account(
@@ -1735,6 +1781,7 @@ class TradingEngine:
         account: PaperAccount,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
+        defer_save: bool = False,
     ) -> None:
         """Up to 3 same-side legs on pullbacks — scale-in paper account only."""
         opens = self.open_positions(account)
@@ -1755,7 +1802,9 @@ class TradingEngine:
         if not plan.allowed:
             return
 
-        if plan.leg == 1 and time.time() < self._entry_cooldown_until:
+        if plan.leg == 1 and not signal_entry_cooldown_ok(
+            account.id, float(self.settings.entry_cooldown_seconds)
+        ):
             return
 
         if plan.leg > 1 and not leg_add_cooldown_ok(
@@ -1774,7 +1823,11 @@ class TradingEngine:
                 await self._emit("ai_advice", self._last_advice)
             except Exception:
                 advice = None
-        if advice is not None and self.advisor.should_block(advice):
+        if (
+            advice is not None
+            and (signal.strategy or "") != "NewsBreakout"
+            and self.advisor.should_block(advice)
+        ):
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,
@@ -1826,11 +1879,12 @@ class TradingEngine:
             tick=tick,
             signal_db_id=signal_db_id,
             account=account,
+            defer_save=defer_save,
         )
         if order.status == OrderStatus.FILLED:
             mark_leg_added(account.id)
             if plan.leg == 1:
-                self._arm_entry_cooldown()
+                mark_signal_entry(account.id)
 
         if london_signal_id and order:
             key = f"{account.id}:{order.id}"
@@ -1871,6 +1925,10 @@ class TradingEngine:
                 legs = open_legs(opens, symbol=pos.symbol, side=pos.side)
                 if len(legs) >= int(self.settings.scale_in_max_legs):
                     continue
+                m1_bars = self.candles.closed_history(pos.symbol, 240)
+                from app.strategies.entry_setup import true_atr
+
+                atr = true_atr(m1_bars, 14) if m1_bars else None
                 plan = plan_scale_in_entry(
                     symbol=pos.symbol,
                     side=pos.side,
@@ -1879,15 +1937,21 @@ class TradingEngine:
                     tick=tick,
                     settings=self.settings,
                     require_depth=True,
+                    candles=m1_bars,
+                    atr=atr,
                 )
                 if not plan.allowed or plan.leg <= 1:
                     continue
+                anchor = legs[0]
                 request = OrderRequest(
                     symbol=pos.symbol,
                     side=pos.side,
                     lots=plan.lots,
-                    strategy=legs[0].strategy or "scale_in",
-                    comment=f"scale_in_pullback|L{plan.leg}",
+                    strategy=anchor.strategy or "scale_in",
+                    comment=f"scale_in_structure|L{plan.leg}",
+                    stop_loss=anchor.stop_loss,
+                    take_profit=anchor.take_profit,
+                    attach_stops=anchor.stop_loss is None and anchor.take_profit is None,
                     setup_id=plan.setup_id,
                     leg_index=plan.leg,
                 )
@@ -1903,18 +1967,96 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Desk book never receives client auto fills (unless MT mode).
         targets = self._auto_fill_targets()
         if not targets:
             return
-        for acct in targets:
-            await self._handle_signal_for_account(
-                signal,
-                tick,
-                account=acct,
-                signal_db_id=signal_db_id,
-                london_signal_id=london_signal_id,
+
+        entry_px = None
+        if tick is not None:
+            entry_px = tick.ask if signal.side == Side.BUY else tick.bid
+        if signal.limit_price is not None:
+            entry_px = signal.limit_price
+
+        cached_advice = None
+        if self.advisor.enabled:
+            try:
+                cached_advice = self.advisor.advise_signal(signal, entry=entry_px)
+                self._last_advice = cached_advice.as_dict()
+                await self._emit("ai_advice", self._last_advice)
+            except Exception:
+                cached_advice = None
+
+        if cached_advice is not None and self.advisor.should_block(cached_advice):
+            await asyncio.gather(
+                *[
+                    self._journal_fill(
+                        Order(
+                            symbol=signal.symbol,
+                            side=signal.side,
+                            lots=0.01,
+                            strategy=signal.strategy,
+                            comment=(signal.reason or "")[:60],
+                            status=OrderStatus.REJECTED,
+                            reject_reason=(
+                                f"AI_ML_SKIP p={cached_advice.win_probability:.0%} · "
+                                + (
+                                    cached_advice.reasons[0]
+                                    if cached_advice.reasons
+                                    else "low ML win probability"
+                                )
+                            ),
+                            stop_loss=signal.stop_loss,
+                            take_profit=signal.take_profit,
+                        ),
+                        signal_db_id=signal_db_id,
+                        account=acct,
+                    )
+                    for acct in targets
+                ]
             )
+            return
+
+        mt_targets = [a for a in targets if self._account_executes_via_mt(a)]
+        paper_targets = [a for a in targets if not self._account_executes_via_mt(a)]
+
+        async def _mt_for_bridge(accts: list[PaperAccount]) -> None:
+            for acct in accts:
+                await self._handle_signal_for_account(
+                    signal,
+                    tick,
+                    account=acct,
+                    signal_db_id=signal_db_id,
+                    london_signal_id=london_signal_id,
+                    cached_advice=cached_advice,
+                )
+
+        async def _paper_fan_out() -> None:
+            if not paper_targets:
+                return
+            await asyncio.gather(
+                *[
+                    self._handle_signal_for_account(
+                        signal,
+                        tick,
+                        account=acct,
+                        signal_db_id=signal_db_id,
+                        london_signal_id=london_signal_id,
+                        cached_advice=cached_advice,
+                        defer_save=True,
+                    )
+                    for acct in paper_targets
+                ]
+            )
+            self.accounts.save()
+
+        by_bridge: dict[str, list[PaperAccount]] = {}
+        for acct in mt_targets:
+            key = self._demo_platform(acct) or "mt5"
+            by_bridge.setdefault(key, []).append(acct)
+        fan_out: list[Any] = [_paper_fan_out()]
+        if by_bridge:
+            fan_out.extend(_mt_for_bridge(accts) for accts in by_bridge.values())
+        await asyncio.gather(*fan_out)
 
     async def _handle_signal_for_account(
         self,
@@ -1924,6 +2066,8 @@ class TradingEngine:
         account: PaperAccount,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
+        cached_advice: Any | None = None,
+        defer_save: bool = False,
     ) -> None:
         if self._is_scale_in_account(account):
             await self._handle_scale_in_signal_for_account(
@@ -1932,6 +2076,7 @@ class TradingEngine:
                 account=account,
                 signal_db_id=signal_db_id,
                 london_signal_id=london_signal_id,
+                defer_save=defer_save,
             )
             return
 
@@ -1955,15 +2100,19 @@ class TradingEngine:
             entry_px = tick.ask if signal.side == Side.BUY else tick.bid
         if signal.limit_price is not None:
             entry_px = signal.limit_price
-        advice = None
-        if self.advisor.enabled:
+        advice = cached_advice
+        if advice is None and self.advisor.enabled:
             try:
                 advice = self.advisor.advise_signal(signal, entry=entry_px)
                 self._last_advice = advice.as_dict()
                 await self._emit("ai_advice", self._last_advice)
             except Exception:
                 advice = None
-        if advice is not None and self.advisor.should_block(advice):
+        if (
+            advice is not None
+            and (signal.strategy or "") != "NewsBreakout"
+            and self.advisor.should_block(advice)
+        ):
             rejected = Order(
                 symbol=signal.symbol,
                 side=signal.side,
@@ -2012,6 +2161,7 @@ class TradingEngine:
             tick=tick,
             signal_db_id=signal_db_id,
             account=account,
+            defer_save=defer_save,
         )
         if london_signal_id and order:
             key = f"{account.id}:{order.id}"
@@ -2038,6 +2188,7 @@ class TradingEngine:
         *,
         signal_db_id: str | None = None,
         account: PaperAccount | None = None,
+        defer_save: bool = False,
     ) -> Order:
         acct = account or self._desk
         tick = tick or self._recent_ticks.get(request.symbol)
@@ -2113,7 +2264,7 @@ class TradingEngine:
                     {**rejected.model_dump(mode="json"), "account_id": acct.id},
                 )
                 return rejected
-            order = bridge.place_order(request)
+            order = await asyncio.to_thread(bridge.place_order, request)
             row = None
             if order.status == OrderStatus.FILLED:
                 mt_pos = None
@@ -2194,7 +2345,8 @@ class TradingEngine:
                         pos = p
                         break
             await self._journal_fill(order, pos, signal_db_id=signal_db_id, account=acct)
-            self.accounts.save()
+            if not defer_save:
+                self.accounts.save()
 
         await self._emit(
             "order", {**order.model_dump(mode="json"), "account_id": acct.id}

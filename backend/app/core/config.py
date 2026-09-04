@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # pip=0.1 → 90 pips = $9.00 move on XAUUSD; TP at 2.5R = 225 pips ($22.50)
     default_stop_loss_pips: float = 90.0
     default_take_profit_pips: float = 225.0
+    # Asia desk (PH 7AM–8PM, EMA_RSI child) — fixed pip SL/TP on auto signals
+    asia_stop_loss_pips: float = 120.0
+    asia_take_profit_pips: float = 225.0
 
     # Market simulation — gold-only desk
     tick_interval_seconds: float = 1.0
@@ -39,9 +42,18 @@ class Settings(BaseSettings):
     entry_cooldown_seconds: int = 120
     # Scale-in demo accounts only (scale_in_mode on paper account — not global)
     scale_in_max_legs: int = 3
+    # Legs 2–3: M1 structure pullback (ATR + swing zone) — market-based, not fixed pips
+    scale_in_structure_pullback: bool = True
+    scale_in_min_pullback_atr: float = 0.55
+    scale_in_swing_lookback: int = 5
+    scale_in_zone_atr: float = 0.4
+    # Legacy fixed pip step (legs 2–3 only when scale_in_structure_pullback=false)
     scale_in_step_pips: float = 18.0
     scale_in_base_lot_per_1k: float = 0.01
     scale_in_leg_cooldown_seconds: int = 60
+    # Liquidity_Sweep_SMC (PH night 8PM–2AM) — vol-adaptive ATR stops, not fixed pips
+    smc_vol_adaptive_stops: bool = True
+    smc_vol_mult_max: float = 1.75
     # Chart candles (M1) vs signal timeframe for entries (M5)
     candle_period_seconds: int = 60
     signal_period_seconds: int = 300
@@ -51,6 +63,11 @@ class Settings(BaseSettings):
     # JM_SESSION_FILTER=true  JM_NEWS_FILTER=true  JM_PRIME_SESSION_ONLY=false
     session_filter: bool = False
     news_filter: bool = True
+    # Live Forex Factory calendar (real release times)
+    forex_factory_enabled: bool = True
+    forex_factory_refresh_seconds: int = 300
+    # Auto-switch to NewsBreakout on NFP/CPI/FOMC/PCE days
+    news_breakout_auto: bool = True
     prime_session_only: bool = False
     # true = PH desk 7AM–8PM · 8PM–2AM SMC · 2AM–7AM EMA_RSI
     # JM_ASIA_DESK_ONLY=true
@@ -110,9 +127,10 @@ class Settings(BaseSettings):
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""
-    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 60s remote)
+    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 30s remote)
     mt_bridge_online_max_age: float = 0.0
     mt_bridge_order_timeout: float = 0.0
+    mt_bridge_ack_poll_seconds: float = 0.02
 
     # Investment dashboard (30% / 30 days default yield model)
     invest_secret: str = "jm-fx-invest-dev-secret-change-me"
