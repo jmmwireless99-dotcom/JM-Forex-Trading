@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/jm-forex-trading/lab-backend
+WorkingDirectory=/opt/jm-lab-src/lab-backend
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/jm-forex-trading/lab-backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
+ExecStart=/opt/jm-lab-src/lab-backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=3
 

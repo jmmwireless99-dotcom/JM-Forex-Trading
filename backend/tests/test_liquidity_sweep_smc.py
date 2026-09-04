@@ -133,6 +133,53 @@ def test_smc_sl_beyond_swept_level():
     assert wide.risk >= tight.risk * 0.9
 
 
+def test_smc_vol_adaptive_wider_than_calm():
+    """Fast night tape should produce wider SMC stops than calm baseline."""
+    from app.strategies.liquidity_sweep_smc import SweepMemory, _smc_structure_levels
+
+    now = datetime(2026, 7, 21, 14, 0, tzinfo=timezone.utc)
+    calm: list = []
+    for i in range(95):
+        ts = datetime(2026, 7, 21, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * i)
+        calm.append(_bar(ts, 2352.0, 2352.4, 2351.6, 2352.0))
+    ts = datetime(2026, 7, 21, 7, 55, tzinfo=timezone.utc)
+    calm.append(_bar(ts, 2354.5, 2355.6, 2354.2, 2354.7))
+    atr = 1.2
+    sweep = SweepMemory("SELL", "ASIAN_HIGH sweep", 2355.0, ts, ts.date(), bar_index=len(calm) - 1)
+    entry = 2354.6
+
+    calm_levels = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=calm,
+        atr=atr,
+        sweep=sweep,
+        pad=0.08,
+        vol_adaptive=False,
+    )
+    fast = list(calm)
+    for i in (-3, -2, -1):
+        c = fast[i]
+        fast[i] = _bar(
+            c.timestamp - timedelta(minutes=5),
+            c.open,
+            c.high + 5.0,
+            c.low - 5.0,
+            c.close + 2.5,
+        )
+    fast_levels = _smc_structure_levels(
+        Side.SELL,
+        entry=entry,
+        candles=fast,
+        atr=atr,
+        sweep=sweep,
+        pad=0.08,
+        vol_adaptive=True,
+    )
+    assert fast_levels.risk > calm_levels.risk
+    assert fast_levels.stop_loss >= calm_levels.stop_loss
+
+
 def test_smc_choppy_market_can_fire_after_sweep():
     """Sinusoidal chop should eventually produce a sweep + entry."""
     import math
