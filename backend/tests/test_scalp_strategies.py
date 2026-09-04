@@ -149,6 +149,29 @@ def test_ema_rsi_buy_on_forced_setup():
         assert signal.take_profit is not None
 
 
+def test_pip_levels_fixed_asia_stops():
+    from app.strategies.entry_setup import pip_levels
+
+    buy = pip_levels(
+        Side.BUY,
+        entry=2400.0,
+        stop_loss_pips=120,
+        take_profit_pips=225,
+    )
+    assert buy.stop_loss == 2388.0
+    assert buy.take_profit == 2422.5
+    assert buy.risk == 12.0
+
+    sell = pip_levels(
+        Side.SELL,
+        entry=2400.0,
+        stop_loss_pips=120,
+        take_profit_pips=225,
+    )
+    assert sell.stop_loss == 2412.0
+    assert sell.take_profit == 2377.5
+
+
 def test_smc_waits_for_sweep():
     strat = LiquiditySweepSmcStrategy(news_filter=False, session_filter=False)
     # Flat tape — no swing break / no sweep → must stand aside
