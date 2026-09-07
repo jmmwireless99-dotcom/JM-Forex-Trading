@@ -159,7 +159,7 @@ def strategy_catalog() -> list[dict]:
                 "immediate rejection, retest, FVG/OB, or momentum entry."
             ),
             "entry_rules": [
-                "Mark liquidity: Asian High/Low (PH 8AM–3PM box) + PDH/PDL + swing pool.",
+                "Mark liquidity: Asian High/Low (PH 7AM–8PM box) + PDH/PDL + swing pool.",
                 "Sweep: wick beyond level with rejection (not a clean breakout).",
                 "Enter on sweep bar, retest of swept level, FVG/OB, or soft momentum.",
                 "Structure shift (MSS) preferred but not required when sweep is fresh.",
@@ -187,7 +187,7 @@ def entry_rules_short() -> list[str]:
     """One-line summaries kept for backward compatibility."""
     return [
         "AI_ML — session child (EMA_RSI) + AI & Machine Learning filter",
-        "PH desk — Aug 19 Asia 8AM–3PM EMA_RSI only · stand aside outside",
+        "PH desk — 7AM–8PM EMA_RSI · 8PM–2AM SMC · 2AM–7AM EMA_RSI",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",

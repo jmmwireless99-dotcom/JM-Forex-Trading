@@ -854,7 +854,10 @@ class TradingEngine:
             "active_strategy": self.active_name,
             "child_strategy": child,
             "display": display,
-            "session_slot": self._last_session_slot,
+            "session_slot": (
+                (decision.slot if decision is not None else None)
+                or self._last_session_slot
+            ),
             "last_transfer": self._last_transfer_note,
             "decision": decision.as_dict() if decision else None,
             "recommended": rec,

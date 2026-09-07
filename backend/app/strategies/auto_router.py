@@ -147,10 +147,26 @@ class AutoStrategyRouter:
         return [
             {
                 "days": "Mon-Fri",
-                "utc": "00:00-06:59",
-                "ph": "08:00-14:59",
+                "utc": "23:00-11:59",
+                "ph": "07:00-19:59",
                 "slot": "Asia",
                 "session": "asia",
+                "strategies": "AI_ML → EMA_RSI_Scalp",
+            },
+            {
+                "days": "Mon-Fri",
+                "utc": "12:00-17:59",
+                "ph": "20:00-01:59",
+                "slot": "SMC",
+                "session": "london_ny_overlap",
+                "strategies": "AI_ML → Liquidity_Sweep_SMC",
+            },
+            {
+                "days": "Mon-Fri",
+                "utc": "18:00-22:59",
+                "ph": "02:00-06:59",
+                "slot": "Early Asia",
+                "session": "off_hours",
                 "strategies": "AI_ML → EMA_RSI_Scalp",
             },
         ]
