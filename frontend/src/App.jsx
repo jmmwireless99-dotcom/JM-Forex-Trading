@@ -36,17 +36,32 @@ function normalizeStrategy(label) {
 function sessionLabel(raw) {
   const key = String(raw || '').toLowerCase()
   const map = {
-    asia: 'Asia (PH 7AM–8PM)',
+    asia: 'Asia (PH 8AM–3PM)',
     london: 'London',
-    london_ny_overlap: 'SMC (PH 8PM–2AM)',
+    london_ny_overlap: 'SMC overlap',
     new_york: 'New York',
     friday_late: 'Friday late',
     weekend: 'Weekend',
-    off_hours: 'Early Asia (PH 2AM–7AM)',
-    outside_asia_desk: 'Outside Asia desk',
+    off_hours: 'Early Asia',
+    outside_asia_desk: 'Desk closed (PH 8AM–3PM only)',
     asia_off: 'Asia / off',
   }
   return map[key] || (raw ? String(raw).replace(/_/g, ' ') : '—')
+}
+
+function regimeLabel(slot, regime) {
+  if (slot === 'outside_asia_desk' || slot === 'weekend') return 'closed'
+  return regime || '—'
+}
+
+function nextWindowLabel(rec) {
+  const nxt = rec?.next_session
+  if (!nxt?.session) return null
+  const phHour = ((Number(nxt.hour_utc) || 0) + 8) % 24
+  const ampm = phHour >= 12 ? 'PM' : 'AM'
+  const h12 = phHour % 12 || 12
+  const child = (nxt.reason || '').split('/').pop() || 'EMA_RSI'
+  return `Next: ${sessionLabel(nxt.session)} @ ${h12}:00 ${ampm} PH → ${child}`
 }
 
 export default function App() {
@@ -798,8 +813,9 @@ export default function App() {
             {strategyDirty ? ` · selected ${strategy} (not applied)` : ''}
           </span>
           <span>
-            Slot: {autoInfo?.decision?.slot || desk?.session?.label || '—'} ·{' '}
-            {autoInfo?.decision?.regime || sessionTier}
+            Slot: {sessionLabel(autoInfo?.decision?.slot || desk?.session?.label)} ·{' '}
+            {regimeLabel(autoInfo?.decision?.slot, autoInfo?.decision?.regime) ||
+              sessionTier}
           </span>
           <span>News: {newsBlocked ? 'BLACKOUT' : 'clear'}</span>
           <span>
@@ -836,8 +852,20 @@ export default function App() {
         </div>
         {autoInfo?.decision ? (
           <div className="meta" style={{ marginTop: '0.55rem' }}>
-            Auto: {autoInfo.decision.allow_trading ? 'TRADING' : 'STAND ASIDE'} —{' '}
-            {autoInfo.decision.reason}
+            Auto:{' '}
+            {autoInfo.decision.allow_trading
+              ? 'TRADING'
+              : autoInfo.decision.slot === 'outside_asia_desk'
+                ? 'DESK CLOSED'
+                : 'STAND ASIDE'}{' '}
+            — {autoInfo.decision.reason}
+            {!autoInfo.decision.allow_trading &&
+            nextWindowLabel(desk?.recommended_now || autoInfo?.recommended) ? (
+              <span>
+                {' '}
+                · {nextWindowLabel(desk?.recommended_now || autoInfo?.recommended)}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {(desk?.recommended_now || autoInfo?.recommended) && (() => {
@@ -848,27 +876,34 @@ export default function App() {
             rec.session ||
             desk?.session?.label
           const activeStrat =
-            (status?.active_strategy || '').includes('→')
-              ? status.active_strategy.split('→')[1]
+            autoInfo?.display ||
+            ((status?.active_strategy || '').includes('→')
+              ? status.active_strategy
               : status?.active_strategy ||
                 rec.transfer_to ||
                 rec.strategy ||
                 autoInfo?.active_strategy ||
-                '—'
+                '—')
+          const deskClosed = activeSession === 'outside_asia_desk'
           return (
           <div className="recommend-box">
-            <strong>Active session</strong>
+            <strong>{deskClosed ? 'Desk status' : 'Active session'}</strong>
             <span>
               {sessionLabel(activeSession)} ·{' '}
-              <code>{activeStrat}</code>
+              <code>{deskClosed ? 'Stand aside until 8AM PH' : activeStrat}</code>
             </span>
             <span className="meta">
-              Strategies: AI_ML · EMA_RSI · SMC · VWAP · manual
+              {deskClosed
+                ? 'Aug 19 schedule — AI_ML → EMA_RSI_Scalp · PH 8:00AM–3:00PM Mon–Fri'
+                : 'Strategy: AI_ML → EMA_RSI_Scalp · EMA200/20/50 + RSI + pattern'}
             </span>
             <span className="meta">
               {(desk?.recommended_now || autoInfo?.recommended)?.reason ||
                 'Pick a strategy and Apply'}
             </span>
+            {nextWindowLabel(rec) ? (
+              <span className="meta">{nextWindowLabel(rec)}</span>
+            ) : null}
             {autoInfo?.last_transfer ? (
               <span className="meta">Note: {autoInfo.last_transfer}</span>
             ) : null}
