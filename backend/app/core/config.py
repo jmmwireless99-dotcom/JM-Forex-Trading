@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = PH desk 7AM–8PM · 8PM–2AM SMC · 2AM–7AM EMA_RSI
+    # true = Aug 19 Asia desk only — PH 8AM–3PM EMA_RSI; flat outside
     # JM_ASIA_DESK_ONLY=true
     asia_desk_only: bool = True
 
@@ -110,9 +110,11 @@ class Settings(BaseSettings):
     # Remote bridge: PC agent POSTs MT5 CSV files → server bridge dir (no Syncthing)
     mt_remote_bridge: bool = False
     mt_bridge_token: str = ""
-    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 60s remote)
+    # Bridge heartbeat / order ack (0 = auto: 5s local, 45s remote / 45s local, 30s remote)
     mt_bridge_online_max_age: float = 0.0
     mt_bridge_order_timeout: float = 0.0
+    mt_bridge_ack_poll_seconds: float = 0.02
+    mt_bridge_journal_sync_seconds: float = 1.0
 
     # Investment dashboard (30% / 30 days default yield model)
     invest_secret: str = "jm-fx-invest-dev-secret-change-me"

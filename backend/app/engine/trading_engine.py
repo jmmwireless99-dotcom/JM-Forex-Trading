@@ -439,7 +439,9 @@ class TradingEngine:
             "mt4_real": "_last_mt4_real_journal_sync_at",
         }.get(platform, "_last_mt_journal_sync_at")
         now = time.time()
-        if not force and (now - getattr(self, throttle_key)) < 2.0:
+        if not force and (now - getattr(self, throttle_key)) < float(
+            getattr(self.settings, "mt_bridge_journal_sync_seconds", 1.0) or 1.0
+        ):
             return {"skipped": True, "reason": "throttled"}
         setattr(self, throttle_key, now)
         symbol = self.settings.symbols[0]
@@ -1435,8 +1437,140 @@ class TradingEngine:
     async def manual_order(
         self, request: OrderRequest, account: PaperAccount | None = None
     ) -> Order:
+        acct = account or self._desk
+        via_mt = self.using_mt() or self._account_executes_via_mt(acct)
+        # MT manual fills must not queue behind the tick loop (_tick_once holds _lock).
+        if via_mt:
+            return await self._execute_mt_manual(request, account=acct)
         async with self._lock:
             return await self._execute(request, account=account)
+
+    async def _execute_mt_manual(
+        self, request: OrderRequest, *, account: PaperAccount
+    ) -> Order:
+        """Fast path: validate under lock, wait for bridge ack outside lock."""
+        bridge = None
+        platform = "mt5"
+        tick: Tick | None = None
+        async with self._lock:
+            tick = self._recent_ticks.get(request.symbol)
+            decision = account.risk.evaluate(
+                request,
+                balance=self._balance(account),
+                open_positions=self.open_positions(account),
+                tick=tick,
+            )
+            if not decision.approved:
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=decision.reason,
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(rejected, account=account)
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": account.id},
+                )
+                return rejected
+            if tick is not None and request.attach_stops:
+                sl, tp = account.risk.apply_default_stops(request, tick)
+                request.stop_loss = request.stop_loss or sl
+                request.take_profit = request.take_profit or tp
+            request.lots = decision.adjusted_lots or request.lots
+            bridge = self._bridge_for_account(account)
+            platform = self._demo_platform(account) or self._mt_platform
+            symbol = self.settings.mt_symbol if platform == "mt5" else self.settings.mt4_symbol
+            label = platform.upper().replace("_", " ")
+            if not self._mt_bridge_live(bridge):
+                rejected = Order(
+                    symbol=request.symbol,
+                    side=request.side,
+                    lots=request.lots,
+                    strategy=request.strategy,
+                    comment=request.comment,
+                    status=OrderStatus.REJECTED,
+                    reject_reason=f"{label} bridge offline — attach JM_Forex_Bridge on {symbol}",
+                    stop_loss=request.stop_loss,
+                    take_profit=request.take_profit,
+                )
+                await self._journal_fill(rejected, account=account)
+                await self._emit(
+                    "order",
+                    {**rejected.model_dump(mode="json"), "account_id": account.id},
+                )
+                return rejected
+
+        order = await asyncio.to_thread(bridge.place_order, request)
+        async with self._lock:
+            return await self._finalize_mt_order(
+                order,
+                request=request,
+                account=account,
+                bridge=bridge,
+                platform=platform,
+                tick=tick,
+            )
+
+    async def _finalize_mt_order(
+        self,
+        order: Order,
+        *,
+        request: OrderRequest,
+        account: PaperAccount,
+        bridge,
+        platform: str,
+        tick: Tick | None,
+        signal_db_id: str | None = None,
+    ) -> Order:
+        row = None
+        if order.status == OrderStatus.FILLED:
+            mt_pos = None
+            ticket = parse_mt5_ticket(order)
+            if ticket:
+                mt_pos = wait_mt_position(bridge, ticket, timeout=2.0, poll=0.04)
+            if mt_pos is None:
+                mt_pos = self._latest_open(request.symbol, request.side, account)
+            if mt_pos is not None:
+                mt_pos = mt_pos.model_copy(update={"strategy": request.strategy})
+                order.fill_price = mt_pos.entry_price
+                row = account.journal.record_mt5_open(order, mt_pos, mode=platform)
+                self._arm_entry_cooldown()
+                await self._persist_trade_open(order, mt_pos, signal_db_id=signal_db_id)
+                if self.advisor.enabled:
+                    try:
+                        self.advisor.record_open_from_trade(
+                            row, account_id=account.id, mode=platform
+                        )
+                    except Exception:
+                        pass
+            else:
+                row = account.journal.record_order(order, mode=platform)
+        else:
+            row = account.journal.record_order(order, mode=platform)
+        if row is not None:
+            await self._emit(
+                "trade", {**row.model_dump(mode="json"), "account_id": account.id}
+            )
+            await self._emit("trades", self._trades_payload(account))
+        await self._sync_mt_demo_journal(account, tick=tick, force=True)
+        await self._emit("order", {**order.model_dump(mode="json"), "account_id": account.id})
+        await self._emit("account", self.account_payload(account))
+        await self._emit(
+            "positions",
+            {
+                "account_id": account.id,
+                "positions": [
+                    p.model_dump(mode="json") for p in self.open_positions(account)
+                ],
+            },
+        )
+        return order
 
     async def set_position_stops(
         self,
@@ -1703,7 +1837,8 @@ class TradingEngine:
         def _append_mt(pool: list[PaperAccount]) -> list[PaperAccount]:
             if mt_acct is None or mt_acct.id in {a.id for a in pool}:
                 return pool
-            return [*pool, mt_acct]
+            # MT5 demo (DDDC3D) first — don't wait for 50+ paper fills
+            return [mt_acct, *pool]
 
         if not self.settings.auto_fill_single_book:
             return _append_mt(followers)
@@ -1903,17 +2038,61 @@ class TradingEngine:
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
     ) -> None:
-        # Desk book never receives client auto fills (unless MT mode).
         targets = self._auto_fill_targets()
         if not targets:
             return
-        for acct in targets:
+
+        entry_px = None
+        if tick is not None:
+            entry_px = tick.ask if signal.side == Side.BUY else tick.bid
+        if signal.limit_price is not None:
+            entry_px = signal.limit_price
+
+        cached_advice = None
+        if self.advisor.enabled:
+            try:
+                cached_advice = self.advisor.advise_signal(signal, entry=entry_px)
+                self._last_advice = cached_advice.as_dict()
+                await self._emit("ai_advice", self._last_advice)
+            except Exception:
+                cached_advice = None
+
+        if cached_advice is not None and self.advisor.should_block(cached_advice):
+            for acct in targets:
+                rejected = Order(
+                    symbol=signal.symbol,
+                    side=signal.side,
+                    lots=0.01,
+                    strategy=signal.strategy,
+                    comment=(signal.reason or "")[:60],
+                    status=OrderStatus.REJECTED,
+                    reject_reason=(
+                        f"AI_ML_SKIP p={cached_advice.win_probability:.0%} · "
+                        + (
+                            cached_advice.reasons[0]
+                            if cached_advice.reasons
+                            else "low ML win probability"
+                        )
+                    ),
+                    stop_loss=signal.stop_loss,
+                    take_profit=signal.take_profit,
+                )
+                await self._journal_fill(
+                    rejected, signal_db_id=signal_db_id, account=acct
+                )
+            return
+
+        # Linked MT demo/real accounts before paper fan-out
+        mt_targets = [a for a in targets if self._account_executes_via_mt(a)]
+        paper_targets = [a for a in targets if not self._account_executes_via_mt(a)]
+        for acct in mt_targets + paper_targets:
             await self._handle_signal_for_account(
                 signal,
                 tick,
                 account=acct,
                 signal_db_id=signal_db_id,
                 london_signal_id=london_signal_id,
+                cached_advice=cached_advice,
             )
 
     async def _handle_signal_for_account(
@@ -1924,6 +2103,7 @@ class TradingEngine:
         account: PaperAccount,
         signal_db_id: str | None = None,
         london_signal_id: str | None = None,
+        cached_advice: Any | None = None,
     ) -> None:
         if self._is_scale_in_account(account):
             await self._handle_scale_in_signal_for_account(
@@ -1955,8 +2135,8 @@ class TradingEngine:
             entry_px = tick.ask if signal.side == Side.BUY else tick.bid
         if signal.limit_price is not None:
             entry_px = signal.limit_price
-        advice = None
-        if self.advisor.enabled:
+        advice = cached_advice
+        if advice is None and self.advisor.enabled:
             try:
                 advice = self.advisor.advise_signal(signal, entry=entry_px)
                 self._last_advice = advice.as_dict()
@@ -2113,7 +2293,7 @@ class TradingEngine:
                     {**rejected.model_dump(mode="json"), "account_id": acct.id},
                 )
                 return rejected
-            order = bridge.place_order(request)
+            order = await asyncio.to_thread(bridge.place_order, request)
             row = None
             if order.status == OrderStatus.FILLED:
                 mt_pos = None

@@ -56,7 +56,7 @@ def _swing_low(bars: list[Candle], i: int, left: int = 2, right: int = 2) -> boo
 
 
 def _asia_window_bars(bars: list[Candle], now: datetime) -> list[Candle]:
-    """Candles in today's Asia box PH 7:00AM–8:00PM (UTC 23:00–12:59)."""
+    """Candles in today's Asia box PH 8:00AM–3:00PM (UTC 00:00–06:59)."""
     from app.strategies.session import ASIA_PH_END, ASIA_PH_START
 
     utc = now.astimezone(timezone.utc)

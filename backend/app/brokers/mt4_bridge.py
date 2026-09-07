@@ -105,6 +105,7 @@ class MT4FileBridge:
         remote_mode: bool = False,
         online_max_age: float | None = None,
         order_timeout: float | None = None,
+        ack_poll_seconds: float | None = None,
     ) -> None:
         self.bridge_dir = Path(bridge_dir)
         self.mt_symbol = symbol
@@ -119,8 +120,9 @@ class MT4FileBridge:
         self.order_timeout = (
             order_timeout
             if order_timeout is not None
-            else (60.0 if remote_mode else 45.0)
+            else (30.0 if remote_mode else 45.0)
         )
+        self.ack_poll_seconds = ack_poll_seconds if ack_poll_seconds is not None else 0.02
         self.command_file = self.bridge_dir / "jm_command.csv"
         self.status_file = self.bridge_dir / "jm_status.csv"
         self.positions_file = self.bridge_dir / "jm_positions.csv"
@@ -319,11 +321,17 @@ class MT4FileBridge:
         tmp.replace(self.command_file)
 
         deadline = time.time() + timeout
+        poll = max(0.01, float(getattr(self, "ack_poll_seconds", 0.02)))
         while time.time() < deadline:
             ack = self._read_ack()
             if ack and ack.command_id == cmd_id:
+                try:
+                    if self.command_file.exists():
+                        self.command_file.unlink()
+                except OSError:
+                    pass
                 return ack
-            time.sleep(0.05)
+            time.sleep(poll)
         return BridgeAck(cmd_id, "ERR", "timeout_waiting_mt5_ack")
 
     def _read_ack(self) -> BridgeAck | None:
@@ -342,13 +350,14 @@ class MT4FileBridge:
         )
 
 
-def _bridge_timeouts(settings) -> tuple[bool, float | None, float | None]:
+def _bridge_timeouts(settings) -> tuple[bool, float | None, float | None, float]:
     remote = bool(getattr(settings, "mt_remote_bridge", False))
     raw_online = float(getattr(settings, "mt_bridge_online_max_age", 0.0) or 0.0)
     raw_order = float(getattr(settings, "mt_bridge_order_timeout", 0.0) or 0.0)
     online = raw_online if raw_online > 0 else None
     order = raw_order if raw_order > 0 else None
-    return remote, online, order
+    ack_poll = float(getattr(settings, "mt_bridge_ack_poll_seconds", 0.02) or 0.02)
+    return remote, online, order, ack_poll
 
 
 def resolve_bridge(settings) -> MT4FileBridge | None:
@@ -357,7 +366,7 @@ def resolve_bridge(settings) -> MT4FileBridge | None:
         return None
     mt_symbol = getattr(settings, "mt_symbol", None) or getattr(settings, "mt4_symbol", "GOLD#")
     desk = settings.symbols[0] if settings.symbols else "XAUUSD"
-    remote, online, order = _bridge_timeouts(settings)
+    remote, online, order, ack_poll = _bridge_timeouts(settings)
     return MT4FileBridge(
         path,
         symbol=mt_symbol,
@@ -365,4 +374,5 @@ def resolve_bridge(settings) -> MT4FileBridge | None:
         remote_mode=remote,
         online_max_age=online,
         order_timeout=order,
+        ack_poll_seconds=ack_poll,
     )

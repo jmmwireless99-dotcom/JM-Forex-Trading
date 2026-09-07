@@ -11,104 +11,76 @@ from app.strategies.session import (
 )
 
 
-def test_asia_ph_daytime():
-    # 02:00 UTC = 10:00AM PH — Asia EMA window
+def test_asia_ph_morning():
+    # 02:00 UTC = 10:00AM PH — inside Aug 19 Asia window
     ts = datetime(2026, 7, 20, 2, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ASIA
+    assert window.label == "asia"
     assert session_allows_asia_scalp(ts) is True
     assert session_allows_entry(ts) is False
 
 
-def test_afternoon_ph_still_asia():
-    # 08:00 UTC = 4:00PM PH — still Asia until 8:00PM
-    ts = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+def test_asia_ph_8am_start():
+    # 00:00 UTC = 8:00AM PH — first bar of Asia window
+    ts = datetime(2026, 7, 20, 0, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ASIA
     assert window.label == "asia"
 
 
-def test_evening_ph_still_asia():
-    # 11:30 UTC = 7:30PM PH — Asia through 8:00PM
-    ts = datetime(2026, 7, 20, 11, 30, tzinfo=timezone.utc)
+def test_asia_ph_before_8am_stand_aside():
+    # 23:30 UTC = 7:30AM PH — before Aug 19 Asia open
+    ts = datetime(2026, 7, 19, 23, 30, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "outside_asia_desk"
+
+
+def test_asia_ph_3pm_end():
+    # 06:30 UTC = 2:30PM PH — still inside Asia window
+    ts = datetime(2026, 7, 20, 6, 30, tzinfo=timezone.utc)
     window = classify_session(ts)
     assert window.tier == SessionTier.ASIA
     assert window.label == "asia"
 
 
-def test_8pm_ph_starts_smc():
-    # 12:00 UTC = 8:00PM PH — SMC window
+def test_after_3pm_ph_stand_aside():
+    # 07:00 UTC = 3:00PM PH — Asia window closed
+    ts = datetime(2026, 7, 20, 7, 0, tzinfo=timezone.utc)
+    window = classify_session(ts)
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "outside_asia_desk"
+
+
+def test_evening_ph_stand_aside():
+    # 12:00 UTC = 8:00PM PH — flat outside Asia desk
     ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
     window = classify_session(ts)
-    assert window.tier == SessionTier.PRIME
-    assert window.label == "london_ny_overlap"
-    assert session_allows_entry(ts, prime_only=True) is True
+    assert window.tier == SessionTier.AVOID
+    assert window.label == "outside_asia_desk"
 
 
-def test_midnight_ph_still_smc():
-    ts = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)  # 12:00AM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.PRIME
-    assert window.label == "london_ny_overlap"
-
-
-def test_130am_ph_still_smc():
-    ts = datetime(2026, 7, 20, 17, 30, tzinfo=timezone.utc)  # 1:30AM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.PRIME
-    assert window.label == "london_ny_overlap"
-
-
-def test_2am_ph_starts_early_ema():
-    ts = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)  # 2:00AM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.ASIA
-    assert window.label == "off_hours"
-
-
-def test_5am_ph_early_ema():
-    ts = datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc)  # 5:00AM PH
-    window = classify_session(ts)
-    assert window.tier == SessionTier.ASIA
-    assert window.label == "off_hours"
-
-
-def test_asia_desk_smc_through_2am():
-    ts = datetime(2026, 7, 20, 17, 0, tzinfo=timezone.utc)  # 1:00AM PH
-    assert classify_asia_desk(ts).label == "london_ny_overlap"
-
-
-def test_next_session_after_asia_is_smc():
-    ts = datetime(2026, 7, 20, 11, 0, tzinfo=timezone.utc)  # 7PM PH Asia
-    nxt = next_session_hint(ts)
-    assert nxt["session"] == "london_ny_overlap"
-    assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 12
-
-
-def test_next_session_after_smc_is_early_ema():
-    ts = datetime(2026, 7, 20, 17, 30, tzinfo=timezone.utc)  # 1:30AM PH SMC
-    nxt = next_session_hint(ts)
-    assert nxt["session"] == "off_hours"
-    assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 18
-
-
-def test_next_session_after_early_ema_is_asia():
-    ts = datetime(2026, 7, 20, 21, 0, tzinfo=timezone.utc)  # 5AM PH early EMA
+def test_next_session_after_asia_is_next_day_asia():
+    ts = datetime(2026, 7, 20, 6, 0, tzinfo=timezone.utc)  # 2PM PH Asia
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 23
+    assert nxt["hour_utc"] == 0
 
 
-def test_friday_pre_dawn_next_is_asia():
-    # Fri 22:00 UTC = 6:00AM PH early EMA; next Asia at UTC 23
-    ts = datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc)
+def test_next_session_from_outside_waits_for_asia():
+    ts = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)  # 8PM PH outside desk
     nxt = next_session_hint(ts)
     assert nxt["session"] == "asia"
     assert nxt["strategy"] == "AI_ML"
-    assert nxt["hour_utc"] == 23
+    assert nxt["hour_utc"] == 0
+
+
+def test_asia_desk_matches_classify_session():
+    ts = datetime(2026, 7, 20, 3, 0, tzinfo=timezone.utc)  # 11AM PH
+    assert classify_asia_desk(ts).label == "asia"
+    assert classify_session(ts).label == "asia"
 
 
 def test_weekend_avoided():

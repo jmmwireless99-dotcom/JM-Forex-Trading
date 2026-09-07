@@ -23,7 +23,7 @@ def resolve_platform_bridge(
     platform = (platform or "mt5").lower()
     desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
     remote = bool(getattr(settings, "mt_remote_bridge", False))
-    remote_cfg, online_max_age, order_timeout = _bridge_timeouts(settings)
+    remote_cfg, online_max_age, order_timeout, ack_poll = _bridge_timeouts(settings)
 
     if platform == "mt4":
         path = getattr(settings, "mt4_bridge_dir", "") or ""
@@ -48,6 +48,7 @@ def resolve_platform_bridge(
         remote_mode=remote_cfg,
         online_max_age=online_max_age,
         order_timeout=order_timeout,
+        ack_poll_seconds=ack_poll,
     )
     return bridge, platform
 
@@ -59,7 +60,7 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
     desk_symbol = settings.symbols[0] if settings.symbols else "XAUUSD"
     remote = bool(getattr(settings, "mt_remote_bridge", False))
 
-    remote_cfg, online_max_age, order_timeout = _bridge_timeouts(settings)
+    remote_cfg, online_max_age, order_timeout, ack_poll = _bridge_timeouts(settings)
 
     def _bridge(path: str) -> MetaTraderBridge:
         return MetaTraderBridge(
@@ -69,6 +70,7 @@ def resolve_mt_bridge(settings) -> tuple[MetaTraderBridge | None, str]:
             remote_mode=remote_cfg,
             online_max_age=online_max_age,
             order_timeout=order_timeout,
+            ack_poll_seconds=ack_poll,
         )
 
     if mode == "mt5":
