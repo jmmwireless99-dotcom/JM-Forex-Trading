@@ -66,6 +66,30 @@ SEED_STRATEGIES: list[dict] = [
         },
     },
     {
+        "name": "Gold_Micro_Scalp",
+        "timeframe": "M5",
+        "description": (
+            "GOLD#/XAUUSD short-term micro-scalp: EMA 8/21 bias + RSI 7 "
+            "+ impulse/cross · tight ATR SL · 1.5R TP"
+        ),
+        "parameters": {
+            "symbol": "XAUUSD",
+            "broker_symbol": "GOLD#",
+            "ema_fast": 8,
+            "ema_slow": 21,
+            "rsi_period": 7,
+            "rsi_buy_zone": [48, 88],
+            "rsi_sell_zone": [12, 52],
+            "impulse_atr": 0.40,
+            "reward_r": 1.5,
+            "min_stop_atr": 0.85,
+            "min_tp_atr": 1.25,
+            "min_bars_between_signals": 2,
+            "chart_tf": "M1",
+            "signal_tf": "M5",
+        },
+    },
+    {
         "name": "Liquidity_Sweep_SMC",
         "timeframe": "M5",
         "description": "Asia/PDH-PDL sweep + MSS/ChoCH + FVG/OB retest entry",

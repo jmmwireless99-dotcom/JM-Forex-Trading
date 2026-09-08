@@ -46,6 +46,7 @@ async def test_strategies_and_status(client):
     assert "AI_ML" in names
     assert "EMA_RSI_Scalp" in names
     assert "EMA_VWAP_Scalp" in names
+    assert "Gold_Micro_Scalp" in names
     assert "Liquidity_Sweep_SMC" in names
     assert "London_Judas_Sweep" not in names
 
@@ -70,7 +71,7 @@ async def test_desk_endpoint(client):
     assert "session" in data and "news" in data
     assert data["auto"]["enabled"] is False
     assert len(data["indicators"]) >= 1
-    assert len(data["strategy_details"]) == 5
+    assert len(data["strategy_details"]) == 6
     aiml = next(s for s in data["strategy_details"] if s["id"] == "AI_ML")
     assert "Machine Learning" in aiml["name"]
 
@@ -273,6 +274,7 @@ async def test_auto_transfer_session_follow(client):
         "AI_ML",
         "EMA_RSI_Scalp",
         "EMA_VWAP_Scalp",
+        "Gold_Micro_Scalp",
         "Liquidity_Sweep_SMC",
     }
     assert body["active_strategy"] == body["to"]
