@@ -1,0 +1,9 @@
+JM-GOLD-EMA200-STOCH-Pack
+Built: 2026-09-10T12:57:25Z
+EA: JM_GOLD_EMA200_STOCH_SCALPER.mq5
+EA version: 1.00
+Build tag: EMA200-STOCH-SCALEOUT-v1
+Symbol: GOLD#
+Lots: 0.03 (three 0.01 scale-out legs)
+SL/TP: gold price $ 3.50 / 5 / 10 / 15
+NOT V6.1 — do not attach with V6.1 on the same chart

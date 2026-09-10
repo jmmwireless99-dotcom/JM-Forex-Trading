@@ -11,6 +11,19 @@ Contents: `JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5` + `JM_V61_LiveAnalyzer.mq
 
 ---
 
+## GOLD EMA200 + Stochastic Scalper (clean 2-indicator chart)
+
+Hindi ito ang V6.1. A/B sa demo — huwag i-attach kasama ng V6.1 sa iisang chart.
+
+| File | Link |
+|------|------|
+| **EMA200+STOCH ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-ema200-stoch.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-EMA200-STOCH-Pack.zip |
+
+Contents: `JM_GOLD_EMA200_STOCH_SCALPER.mq5` (single file, F7) + setup. Lots 0.03, scale-out gold $5/$10/$15, SL $3.50. Rebuild: `./scripts/build-gold-ema200-stoch-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |
