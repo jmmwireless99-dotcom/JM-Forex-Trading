@@ -1,40 +1,50 @@
-JM Gold Flow Analyzer — MT5 EA
-================================
+JM GOLD V6.1 + live entry analyzer
+==================================
 
-Bago ito. Hindi pinalitan ang V6.2. May on-chart analyzer:
-  OK   = pwede pumasok
-  WEAK = caution
-  MALI = huwag i-enter (makikita kung bakit: counter-trend, chop, walang small candle, against hour, etc.)
+Ito ang BEST strategy mo (V6.1-FINAL-H16-H17-BLOCK) + OK/MALI panel.
+Hindi binago ang entry, TP, SL, lots, o hour routers.
+
+FILES
+-----
+  mt5/Experts/JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5
+  mt5/Include/JM_V61_LiveAnalyzer.mqh
 
 INSTALL
 -------
-1. MT5 → File → Open Data Folder → MQL5\Experts\
-2. Copy JM_Gold_Flow_Analyzer.mq5
-3. MetaEditor → Compile (F7) — 0 errors
-4. I-detach muna ang V6.2 sa GOLD# chart (huwag dalawang EA)
-5. Drag JM_Gold_Flow_Analyzer sa GOLD# **M5**
-6. Inputs:
-     InpLots        = 0.01
-     InpTradeMode   = MODE_BLOCK_MALI   (o MODE_ANALYZER_ONLY kung observation muna)
-     InpSLPrice     = 4.0
-     InpTPPrice     = 5.0
-     InpAllowBuy    = true
-     InpAllowSell   = true
-7. Algo Trading ON (green)
-8. Demo lang. Huwag real hangga't hindi tumugma ang panel sa gusto mong entries.
+1. MT5 → File → Open Data Folder
+2. Copy the .mq5 → MQL5\Experts\
+3. Copy the .mqh → MQL5\Include\
+4. MetaEditor → Compile the .mq5 (F7) — 0 errors
+5. I-detach ang ibang gold EA sa GOLD# chart
+6. Attach V4_2 / V6.1 sa GOLD#  (M1 data kailangan — “Every tick” tester)
+7. Inputs: same as your winning backtest (lots 0.01, all routers ON)
+8. InpShowPanel = true
+9. Demo + Algo Trading ON
 
-PANEL (kaliwang taas ng chart)
-------------------------------
-VERDICT  OK / WEAK / MALI
-BUY  line  — score at reasons kung MALI
-SELL line  — score at reasons kung MALI
-Hour bias  — bakit short-only madalas (00–13 UTC = SELL-pref)
+PANEL (Comment sa chart)
+------------------------
+BUY  OK / WAIT / MALI + reason
+SELL OK / WAIT / MALI + reason
 
-Kapag MALI ang SELL at MALI ang BUY, walang order.
-Comment sa order: "OK SELL sc5/2" para makita sa History.
+Typical MALI reasons (from YOUR gates, not a new filter):
+  V6.1 H16/H17 hard block
+  strict-hour (BUY only H23)
+  hour router reject
+  SAFE-AB (Asia/Europe SELL only)
+  no M5 flow / M1 disagrees
+  no small candle
+  score < need
+  RSI outside zone
+  no breakout yet
+
+BACKTEST (your report)
+----------------------
+  +830 on 10k · PF 1.20 · 1455 trades
+  SELL 1348 (45.5%) · BUY 107 (45.8%)
+  BUY is rare because strict hours allow BUY only at H23
 
 HUWAG
 -----
-- I-attach kasama ang V6.2 (mag-double trade)
-- Palitan lots / SL / TP sa unang 2 weeks
+- Dalawang EA sa iisang chart
+- Optimize / palitan TP-SL sa unang demo weeks
 - Real account

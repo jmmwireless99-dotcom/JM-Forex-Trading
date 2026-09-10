@@ -1,7 +1,7 @@
 """Gold small-candle flow analyzer — OK / WEAK / MALI at entry.
 
-Mirrors mt5/Experts/JM_Gold_Flow_Analyzer.mq5 so the lab desk and the EA
-show the same checklist. Lab uses M5 only (M1 flow is proxied by M5 EMA 9/21).
+Hour gates match V6.1 (H16/H17 block, BUY only H23, SELL whitelist, SAFE-AB).
+Lab uses M5 only (M1 flow is proxied by M5 EMA 9/21).
 """
 
 from __future__ import annotations
@@ -10,15 +10,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from app.gold_v61_hours import hour_route_label, side_hour_mali
 from app.indicators import ema, rsi
 
 Verdict = Literal["OK", "WEAK", "MALI", "WAIT"]
 Side = Literal["BUY", "SELL"]
-
-# Server/UTC hour bias for gold — SELL-heavy, matches the V6.2 short-only tests.
-GOLD_SELL_HOURS = frozenset(range(0, 14))  # 00–13
-GOLD_BUY_HOURS = frozenset({16, 17, 18, 19})
-GOLD_WORST_HOURS = frozenset({21, 22, 23})
 
 
 @dataclass
@@ -158,16 +154,13 @@ def adx_last(candles: list[dict[str, Any]], period: int = 14) -> float | None:
 
 
 def hour_bias(hour: int, *, symbol: str) -> str:
+    """V6.1 route: BUY (H23), SELL whitelist, or BLOCK (H16/H17 + off-map)."""
     if symbol.upper() != "XAUUSD":
         return "NEUTRAL"
-    h = hour % 24
-    if h in GOLD_WORST_HOURS:
+    label = hour_route_label(hour % 24)
+    if label == "BLOCK":
         return "WORST"
-    if h in GOLD_BUY_HOURS:
-        return "BUY"
-    if h in GOLD_SELL_HOURS:
-        return "SELL"
-    return "NEUTRAL"
+    return label
 
 
 def required_score(
@@ -214,6 +207,7 @@ def _small_candle(
 def _score_side(
     side: Side,
     *,
+    hour: int,
     bias: str,
     uptrend: bool,
     downtrend: bool,
@@ -232,6 +226,7 @@ def _score_side(
     require_flow: bool,
     base_score: int,
     use_flow_score: bool,
+    apply_v61: bool = False,
 ) -> SideScore:
     checks: list[Check] = []
     reasons: list[str] = []
@@ -299,6 +294,12 @@ def _score_side(
     )
     if not use_flow_score:
         need = 1
+
+    v61 = side_hour_mali(side, hour % 24) if apply_v61 else None
+    if v61:
+        reasons.insert(0, v61)
+        checks.insert(0, Check("V6.1 hour", "MALI", v61))
+        hard_mali = True
 
     if hard_mali:
         need = max(need, score + 1)
@@ -436,6 +437,8 @@ def analyze_entry(
 
     buy = _score_side(
         "BUY",
+        hour=hour,
+        apply_v61=(sym == "XAUUSD"),
         bias=bias,
         uptrend=uptrend,
         downtrend=downtrend,
@@ -457,6 +460,8 @@ def analyze_entry(
     )
     sell = _score_side(
         "SELL",
+        hour=hour,
+        apply_v61=(sym == "XAUUSD"),
         bias=bias,
         uptrend=uptrend,
         downtrend=downtrend,

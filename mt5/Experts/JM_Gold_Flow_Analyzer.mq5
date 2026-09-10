@@ -1,3 +1,6 @@
+// NOTE: Your best EA is JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5 (V6.1).
+// This file is a simpler reconstruction — prefer V6.1 + JM_V61_LiveAnalyzer.mqh.
+
 //+------------------------------------------------------------------+
 //| JM_Gold_Flow_Analyzer.mq5                                        |
 //| New gold scalper + on-chart analyzer (OK / WEAK / MALI)          |

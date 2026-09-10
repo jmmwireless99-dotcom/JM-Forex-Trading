@@ -57,10 +57,11 @@ def _trend_candles(
     return candles
 
 
-def test_hour_bias_gold_is_sell_heavy():
-    assert hour_bias(11, symbol="XAUUSD") == "SELL"
-    assert hour_bias(18, symbol="XAUUSD") == "BUY"
-    assert hour_bias(22, symbol="XAUUSD") == "WORST"
+def test_hour_bias_follows_v61_whitelist():
+    assert hour_bias(5, symbol="XAUUSD") == "SELL"
+    assert hour_bias(23, symbol="XAUUSD") == "BUY"
+    assert hour_bias(16, symbol="XAUUSD") == "WORST"
+    assert hour_bias(11, symbol="XAUUSD") == "WORST"
     assert hour_bias(11, symbol="EURUSD") == "NEUTRAL"
 
 
@@ -73,20 +74,19 @@ def test_against_hour_raises_required_score():
 def test_downtrend_sell_breakout_not_buy():
     candles = _trend_candles(step=-0.9, break_side="SELL")
     # Bar times land in hour 00 UTC → SELL bias
-    result = analyze_entry(candles, symbol="XAUUSD", hour=11)
+    result = analyze_entry(candles, symbol="XAUUSD", hour=5)
     buy = verdict_for_side(result, "BUY")
     sell = verdict_for_side(result, "SELL")
     assert buy.verdict == "MALI"
-    assert "counter-trend" in buy.reasons
     assert sell.score >= buy.score
 
 
 def test_uptrend_buy_stricter_in_sell_hour():
     candles = _trend_candles(step=0.9, break_side="BUY")
-    result = analyze_entry(candles, symbol="XAUUSD", hour=11)
+    result = analyze_entry(candles, symbol="XAUUSD", hour=5)
     buy = verdict_for_side(result, "BUY")
-    # Hour 11 is SELL-pref: BUY needs a higher score (against-hour penalty).
-    assert buy.required >= 5
+    assert buy.verdict == "MALI"
+    assert any("strict-hour" in r or "SAFE-AB" in r for r in buy.reasons)
     assert result.hour_bias == "SELL"
 
 
@@ -101,7 +101,7 @@ def test_fat_candle_is_mali_not_setup():
         "high": float(prev["open"]) + 0.1,
         "low": float(prev["open"]) - 2.1,
     }
-    result = analyze_entry(candles, symbol="XAUUSD", hour=11)
+    result = analyze_entry(candles, symbol="XAUUSD", hour=5)
     sell = verdict_for_side(result, "SELL")
     assert sell.verdict == "MALI"
     assert any("small candle" in r for r in sell.reasons)
@@ -117,7 +117,7 @@ def test_warmup_is_wait():
 
 def test_result_json_has_both_sides():
     candles = _trend_candles()
-    result = analyze_entry(candles, symbol="XAUUSD", hour=11)
+    result = analyze_entry(candles, symbol="XAUUSD", hour=5)
     data = result.to_dict()
     assert data["buy"]["side"] == "BUY"
     assert data["sell"]["side"] == "SELL"
