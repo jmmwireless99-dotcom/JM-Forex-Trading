@@ -1,0 +1,24 @@
+JM FX MT4 Accounts
+==================
+
+MT4 REAL (cloud bridge — InpUseCloudBridge=true)
+------------------------------------------------
+Login sa: https://jmtechsolution.cloud/fx/
+Account code: (gawin sa server — python3 scripts/create_xm_mt4_real_account.py)
+Status check: https://jmtechsolution.cloud/fx/api/mt4/real/status
+
+MT4 DEMO (local file bridge — InpUseCloudBridge=false)
+------------------------------------------------------
+Login sa: https://jmtechsolution.cloud/fx/
+Account code: (gawin sa server — python3 scripts/create_xm_mt4_demo_account.py)
+Status check: https://jmtechsolution.cloud/fx/api/mt4/status
+
+MT5 DEMO (hiwalay — DDDC3D, hindi MT4)
+--------------------------------------
+Gamitin ang MT5 Bridge Pack, hindi itong MT4 pack.
+Download: https://jmtechsolution.cloud/fx/api/downloads/mt5-bridge.zip
+
+Bridge token (MT4 Real cloud):
+  gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+
+Support: https://jmtechsolution.cloud/fx/

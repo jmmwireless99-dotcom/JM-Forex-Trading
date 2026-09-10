@@ -1,0 +1,56 @@
+JM FX MT4 Live — A76321 Bridge Setup
+=====================================
+
+Account: A76321 | Symbol: GOLD | Mode: Cloud (no PC agent)
+
+STEP 1 — Download / extract
+---------------------------
+Extract this ZIP. Main file: Experts/JM_Forex_Bridge.mq4
+
+STEP 2 — Install EA sa MT4 REAL terminal
+----------------------------------------
+1. Buksan ang XM MT4 REAL account (live terminal — hindi demo, hindi MT5)
+2. MT4 → File → Open Data Folder → MQL4\Experts\
+3. Kopyahin ang Experts\JM_Forex_Bridge.mq4
+4. MetaEditor → Compile (F7) → 0 errors, version 2.00
+
+STEP 3 — Allow WebRequest
+-------------------------
+MT4 → Tools → Options → Expert Advisors:
+  [x] Allow automated trading
+  [x] Allow WebRequest for listed URL
+  Add URL: https://jmtechsolution.cloud
+
+STEP 4 — Attach EA sa GOLD chart
+--------------------------------
+Drag JM_Forex_Bridge sa GOLD chart. Inputs:
+
+  InpSymbol          = GOLD
+  InpUseCloudBridge  = true
+  InpApiUrl          = https://jmtechsolution.cloud/fx/api
+  InpBridgeToken     = gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+  UseCommonFolder    = true
+  AutoTrading ON (green button)
+
+STEP 5 — Login sa JM FX desk
+----------------------------
+https://jmtechsolution.cloud/fx/
+  Code:  A76321
+  Token: (see A76321-ACCOUNT.txt)
+
+STEP 6 — Verify online
+----------------------
+https://jmtechsolution.cloud/fx/api/mt4/real/status
+  "online": true
+  "mt4_real_account_code": "A76321"
+
+Experts tab dapat may:
+  JM Forex MT4 Bridge v2 — CLOUD mode (no PC agent)
+
+TROUBLESHOOT
+------------
+MT4 offline   → AutoTrading ON? EA attached sa REAL MT4 (hindi demo)?
+Error 4060    → Allow WebRequest URL (Step 3)
+HTTP 403      → Check InpBridgeToken
+Wrong symbol  → InpSymbol = GOLD (XM MT4 live)
+Using MT5?    → A76321 is MT4 only — use DDDC3D for MT5

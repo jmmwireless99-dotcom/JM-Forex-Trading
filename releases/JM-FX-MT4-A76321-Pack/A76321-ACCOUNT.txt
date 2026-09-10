@@ -1,0 +1,20 @@
+JM FX — MT4 Live Account A76321
+================================
+
+Desk login:  https://jmtechsolution.cloud/fx/
+
+Account Code:  A76321
+Account Token: JjhKmI3_0M0rqYyuKVU1FS_dDARwHekg
+Label:         XM MT4 Live
+
+MT4 Platform:  MT4 REAL (live terminal — hiwalay sa MT5 DDDC3D)
+Broker symbol: GOLD  (XM MT4 — set InpSymbol = GOLD)
+
+Bridge mode:   CLOUD (InpUseCloudBridge = true — walang PC agent)
+Bridge token:  gTXmD7O-194jS9gveB1I5c9qjmNdqdUv
+API URL:       https://jmtechsolution.cloud/fx/api
+
+Status check:  https://jmtechsolution.cloud/fx/api/mt4/real/status
+               Dapat "online": true pag naka-attach ang EA
+
+NOTE: Huwag ibahagi ang token. Para sa MT4 REAL terminal mo lang.
