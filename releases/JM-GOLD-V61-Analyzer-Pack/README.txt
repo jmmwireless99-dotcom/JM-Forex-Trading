@@ -10,21 +10,20 @@ UNZIP then INSTALL
 1. MT5 → File → Open Data Folder
 2. Copy Experts\JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5
       → MQL5\Experts\
-3. Copy Include\JM_V61_LiveAnalyzer.mqh
-      → MQL5\Include\
-4. MetaEditor → open the .mq5 → Compile (F7)
+   (one file only — analyzer is already inside)
+3. MetaEditor → open that .mq5 → Compile (F7)
    Dapat 0 errors
-5. Tanggalin ang ibang gold EA sa GOLD# chart (isang EA lang)
-6. Drag JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2 sa GOLD# chart
-7. Inputs (winning backtest):
+4. Tanggalin ang ibang gold EA sa GOLD# chart (isang EA lang)
+5. Drag JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2 sa GOLD# chart
+6. Inputs (winning backtest):
      InpLots              = 0.01
      InpShowPanel         = true
      InpAllowBuy          = true
      InpAllowSell         = true
      InpUseStrictProfitHours = true
      InpBlockH16H17All    = true
-8. Algo Trading ON (green)
-9. DEMO account only
+7. Algo Trading ON (green)
+8. DEMO account only
 
 PANEL (sa chart Comment)
 ------------------------

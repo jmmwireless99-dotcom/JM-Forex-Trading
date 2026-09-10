@@ -1,8 +1,6 @@
 //+------------------------------------------------------------------+
 //| Live OK/WEAK/MALI panel for V6.1 — display only, no trade changes |
 //+------------------------------------------------------------------+
-#property strict
-
 string JM_SideAnalyzerLine(const int dir,
                            const int hour,
                            const int bias,
@@ -102,10 +100,4 @@ void LiveAnalyzerTick()
            "BUY  ",buyLine,"\n",
            "SELL ",sellLine,"\n",
            "Status: ",g_status);
-}
-
-// Recalculate BUY/SELL lines with real FlowScore (ADX + gap).
-void LiveAnalyzerTickFull()
-{
-   LiveAnalyzerTick();
 }
