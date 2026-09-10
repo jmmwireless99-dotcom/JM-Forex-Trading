@@ -1,5 +1,16 @@
 # JM FX Downloads
 
+## GOLD V6.1 Analyzer Pack (best scalper + live OK/MALI panel)
+
+| File | Link |
+|------|------|
+| **GOLD V6.1 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v61-analyzer.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V61-Analyzer-Pack.zip |
+
+Contents: `JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5` + `JM_V61_LiveAnalyzer.mqh` + setup. Rebuild: `./scripts/build-gold-v61-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |

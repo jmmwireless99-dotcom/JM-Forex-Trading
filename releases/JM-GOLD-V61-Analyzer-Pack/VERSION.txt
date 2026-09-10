@@ -1,0 +1,8 @@
+JM-GOLD-V61-Analyzer-Pack
+Built: 2026-09-10T10:54:36Z
+EA: JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5
+EA version: 6.10
+Build tag: V6.1-FINAL-H16-H17-BLOCK
+Analyzer: JM_V61_LiveAnalyzer.mqh (display only)
+Symbol: GOLD#
+Lots: 0.01
