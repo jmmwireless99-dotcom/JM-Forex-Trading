@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     session_filter: bool = False
     news_filter: bool = True
     prime_session_only: bool = False
-    # true = Aug 19 Asia desk only — PH 8AM–3PM EMA_RSI; flat outside
+    # true = PH desk 7AM–8PM EMA_RSI · 8PM–2AM SMC · 2AM–7AM EMA_RSI
     # JM_ASIA_DESK_ONLY=true
     asia_desk_only: bool = True
 

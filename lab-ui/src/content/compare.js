@@ -27,10 +27,10 @@ export const PAIR_PRESETS = {
   XAUUSD: {
     strategy: 'EMA_RSI_TREND',
     lots: 0.03,
-    sl_pips: 50,
-    tp_pips: 50,
-    label: 'Trend · EMA+RSI gold',
-    botStyle: 'Trend · EMA+RSI wider zones',
+    sl_usd: 3,
+    tp_usd: 5,
+    label: 'Trend · EMA+RSI gold · $3 SL / $5 TP',
+    botStyle: 'Trend · EMA+RSI · fixed $3 SL / $5 TP',
   },
 }
 
@@ -122,6 +122,8 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
   strategy: p.strategy,
   sl_pips: p.sl_pips,
   tp_pips: p.tp_pips,
+  sl_usd: p.sl_usd,
+  tp_usd: p.tp_usd,
   risk: id === 'AUDNZD' || id === 'EURCHF' ? 'Medium (demo)' : 'Low–medium',
   status: 'live',
   note:
@@ -131,7 +133,7 @@ export const PAIR_GUIDE = Object.entries(PAIR_PRESETS).map(([id, p]) => ({
         ? 'Mean revert at range edges — no martingale, max 1 position.'
         : id === 'EURCHF'
           ? 'Tighter Asian range mean revert preset.'
-          : 'EMA+RSI trend preset — wider RSI zones for gold.',
+          : 'EMA+RSI trend — $3 stop / $5 target per trade (0.03 lot).',
 }))
 
 export const PAIR_EXPERIMENTS = PAIR_GUIDE

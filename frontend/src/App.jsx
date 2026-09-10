@@ -43,7 +43,7 @@ function sessionLabel(raw) {
     friday_late: 'Friday late',
     weekend: 'Weekend',
     off_hours: 'Early Asia (PH 2AM–7AM)',
-    outside_asia_desk: 'Outside Asia desk',
+    outside_asia_desk: 'Outside desk (PH 7AM–8PM / 8PM–2AM / 2AM–7AM)',
     asia_off: 'Asia / off',
   }
   return map[key] || (raw ? String(raw).replace(/_/g, ' ') : '—')

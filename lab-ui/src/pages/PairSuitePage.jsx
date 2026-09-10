@@ -108,17 +108,15 @@ export default function PairSuitePage() {
       await Promise.all(
         suite.accounts.map((acc) => {
           const p = PAIR_PRESETS[acc.symbol] || PAIR_PRESETS.EURUSD
-          return labTradeApi.setAuto(
-            {
-              enabled: on,
-              symbol: acc.symbol,
-              strategy: p.strategy,
-              lots: p.lots,
-              sl_pips: p.sl_pips,
-              tp_pips: p.tp_pips,
-            },
-            sessionFromRow(acc),
-          )
+          const body = {
+            enabled: on,
+            symbol: acc.symbol,
+            strategy: p.strategy,
+            lots: p.lots,
+          }
+          if (p.sl_pips != null) body.sl_pips = p.sl_pips
+          if (p.tp_pips != null) body.tp_pips = p.tp_pips
+          return labTradeApi.setAuto(body, sessionFromRow(acc))
         }),
       )
       setNote(on ? 'All 4 pair autos started' : 'All 4 pair autos stopped')

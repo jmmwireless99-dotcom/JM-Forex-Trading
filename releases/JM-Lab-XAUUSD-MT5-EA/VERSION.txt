@@ -1,0 +1,4 @@
+JM Lab XAUUSD MT5 EA Pack
+Version: 1.00
+Built: 2026-09-09
+Strategy: EMA_RSI_TREND (Lab XAUUSD preset)

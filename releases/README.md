@@ -1,3 +1,17 @@
+# JM FX & Lab Downloads
+
+## Lab XAUUSD MT5 EA (standalone — matches /lab/XAUUSD)
+
+| File | Link |
+|------|------|
+| **ZIP pack** | https://jmtechsolution.cloud/lab/api/downloads/lab-xauusd-ea.zip |
+| EA (.mq5) | https://jmtechsolution.cloud/lab/api/downloads/JM_Lab_XAUUSD_EA.mq5 |
+| Links (JSON) | https://jmtechsolution.cloud/lab/api/downloads/lab-xauusd-ea |
+
+Build: `./scripts/build-lab-xauusd-ea-pack.sh`
+
+---
+
 # JM FX Downloads
 
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)

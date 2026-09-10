@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import logging
 
@@ -14,6 +16,52 @@ from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_i
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_RELEASES = _REPO_ROOT / "releases"
+
+
+def _lab_ea_release(name: str) -> Path:
+    mapping = {
+        "lab-xauusd-ea.zip": _RELEASES / "JM-Lab-XAUUSD-MT5-EA.zip",
+        "JM_Lab_XAUUSD_EA.mq5": _RELEASES / "JM-Lab-XAUUSD-MT5-EA/Experts/JM_Lab_XAUUSD_EA.mq5",
+        "lab-xauusd-readme.txt": _RELEASES / "JM-Lab-XAUUSD-MT5-EA/README.txt",
+    }
+    path = mapping.get(name)
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Download not found: {name}")
+    return path
+
+
+@router.get("/downloads/lab-xauusd-ea")
+async def downloads_lab_xauusd_ea_index() -> dict:
+    """Direct download links for Lab XAUUSD MT5 EA pack."""
+    base = "https://jmtechsolution.cloud/lab/api/downloads"
+    return {
+        "strategy": "EMA_RSI_TREND",
+        "lab_url": "https://jmtechsolution.cloud/lab/XAUUSD",
+        "zip": f"{base}/lab-xauusd-ea.zip",
+        "ea_mq5": f"{base}/JM_Lab_XAUUSD_EA.mq5",
+        "readme": f"{base}/lab-xauusd-readme.txt",
+    }
+
+
+@router.get("/downloads/lab-xauusd-ea.zip")
+async def download_lab_xauusd_ea_zip() -> FileResponse:
+    path = _lab_ea_release("lab-xauusd-ea.zip")
+    return FileResponse(path, filename="JM-Lab-XAUUSD-MT5-EA.zip", media_type="application/zip")
+
+
+@router.get("/downloads/JM_Lab_XAUUSD_EA.mq5")
+async def download_lab_xauusd_ea_mq5() -> FileResponse:
+    path = _lab_ea_release("JM_Lab_XAUUSD_EA.mq5")
+    return FileResponse(path, filename="JM_Lab_XAUUSD_EA.mq5", media_type="text/plain")
+
+
+@router.get("/downloads/lab-xauusd-readme.txt")
+async def download_lab_xauusd_readme() -> FileResponse:
+    path = _lab_ea_release("lab-xauusd-readme.txt")
+    return FileResponse(path, filename="README-Lab-XAUUSD-EA.txt", media_type="text/plain")
 
 
 class CreateAccountBody(BaseModel):
@@ -95,6 +143,8 @@ async def suite_status() -> dict:
             "lots": a.lots,
             "sl_pips": a.sl_pips,
             "tp_pips": a.tp_pips,
+            "sl_usd": preset.get("sl_usd"),
+            "tp_usd": preset.get("tp_usd"),
             "last_block_reason": a.last_block_reason,
             "last_signal_at": a.last_signal_at,
             "recent_signals": list(a.signals)[:5],
@@ -339,9 +389,9 @@ async def set_auto(
         a.strategy = p["strategy"]
         if body.lots is None:
             a.lots = p["lots"]
-        if body.sl_pips is None:
+        if body.sl_pips is None and "sl_pips" in p:
             a.sl_pips = p["sl_pips"]
-        if body.tp_pips is None:
+        if body.tp_pips is None and "tp_pips" in p:
             a.tp_pips = p["tp_pips"]
         a.last_bar_time = 0
     if body.lots is not None:

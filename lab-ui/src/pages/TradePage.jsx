@@ -41,6 +41,8 @@ export default function TradePage({ fixedPair = null }) {
   const [lots, setLots] = useState('0.01')
   const [slPips, setSlPips] = useState('15')
   const [tpPips, setTpPips] = useState('30')
+  const [slUsd, setSlUsd] = useState('3')
+  const [tpUsd, setTpUsd] = useState('5')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
@@ -162,7 +164,27 @@ export default function TradePage({ fixedPair = null }) {
     return sym === 'XAUUSD' ? 0.01 : 0.0001
   }
 
+  const pairPreset = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
+  const usesUsdTargets = Boolean(pairPreset.sl_usd != null && pairPreset.tp_usd != null)
+
+  function goldPriceDistance(usd, lotsVal) {
+    const l = Number(lotsVal)
+    if (!Number.isFinite(l) || l <= 0) return null
+    return Number(usd) / (l * 100)
+  }
+
   function levels(side, mid) {
+    if (usesUsdTargets) {
+      const slDist = goldPriceDistance(slUsd, lots)
+      const tpDist = goldPriceDistance(tpUsd, lots)
+      if (slDist == null || tpDist == null) return { stop_loss: null, take_profit: null }
+      const hs = pipSize(symbol) * 0.125
+      const entry = side === 'BUY' ? mid + hs : mid - hs
+      if (side === 'BUY') {
+        return { stop_loss: entry - slDist, take_profit: entry + tpDist }
+      }
+      return { stop_loss: entry + slDist, take_profit: entry - tpDist }
+    }
     const pip = pipSize(symbol)
     const sl = Number(slPips) * pip
     const tp = Number(tpPips) * pip
@@ -240,14 +262,18 @@ export default function TradePage({ fixedPair = null }) {
   const tick = ticks[symbol]
   const open = positions.filter((p) => p.status === 'OPEN')
   const pairGuide = useMemo(() => PAIR_GUIDE.find((p) => p.id === symbol), [symbol])
-  const pairPreset = PAIR_PRESETS[symbol] || PAIR_PRESETS.EURUSD
   const stratInfo = STRATEGY_INFO[auto?.strategy || pairPreset.strategy] || {}
 
   function applyPairPreset(id) {
     const p = PAIR_PRESETS[id] || PAIR_PRESETS.EURUSD
     setLots(String(p.lots))
-    setSlPips(String(p.sl_pips))
-    setTpPips(String(p.tp_pips))
+    if (p.sl_usd != null && p.tp_usd != null) {
+      setSlUsd(String(p.sl_usd))
+      setTpUsd(String(p.tp_usd))
+    } else {
+      setSlPips(String(p.sl_pips))
+      setTpPips(String(p.tp_pips))
+    }
   }
 
   useEffect(() => {
@@ -395,14 +421,29 @@ export default function TradePage({ fixedPair = null }) {
             Lots
             <input type="number" step="0.01" min="0.01" value={lots} onChange={(e) => setLots(e.target.value)} />
           </label>
-          <label>
-            SL (pips)
-            <input type="number" step="1" min="0" value={slPips} onChange={(e) => setSlPips(e.target.value)} />
-          </label>
-          <label>
-            TP (pips)
-            <input type="number" step="1" min="0" value={tpPips} onChange={(e) => setTpPips(e.target.value)} />
-          </label>
+          {usesUsdTargets ? (
+            <>
+              <label>
+                SL ($)
+                <input type="number" step="0.5" min="0.5" value={slUsd} onChange={(e) => setSlUsd(e.target.value)} />
+              </label>
+              <label>
+                TP ($)
+                <input type="number" step="0.5" min="0.5" value={tpUsd} onChange={(e) => setTpUsd(e.target.value)} />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                SL (pips)
+                <input type="number" step="1" min="0" value={slPips} onChange={(e) => setSlPips(e.target.value)} />
+              </label>
+              <label>
+                TP (pips)
+                <input type="number" step="1" min="0" value={tpPips} onChange={(e) => setTpPips(e.target.value)} />
+              </label>
+            </>
+          )}
           {!auto?.enabled ? (
             <button type="button" className="lab-btn" disabled={busy} onClick={() => toggleAuto(true)}>
               Start auto
