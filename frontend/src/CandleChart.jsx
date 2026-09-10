@@ -102,6 +102,21 @@ function sideOf(value) {
   return s === 'BUY' ? 'BUY' : s === 'SELL' ? 'SELL' : s
 }
 
+function pipSizeForSymbol(symbol) {
+  const s = String(symbol || '').toUpperCase()
+  return s.includes('XAU') || s.includes('GOLD') ? 0.1 : 0.0001
+}
+
+function pipsBetween(entry, price, symbol) {
+  if (!Number.isFinite(entry) || !Number.isFinite(price)) return null
+  return Math.round(Math.abs(entry - price) / pipSizeForSymbol(symbol))
+}
+
+function dollarsMove(pips, symbol) {
+  const pip = pipSizeForSymbol(symbol)
+  return (pips * pip).toFixed(2)
+}
+
 function snapToCandleTime(ts, candleTimes) {
   if (!candleTimes.length) return null
   const t = Math.floor(new Date(ts).getTime() / 1000)
@@ -193,6 +208,8 @@ export default function CandleChart({
   symbol = 'XAUUSD',
   positions = [],
   signals = [],
+  defaultSlPips = 90,
+  defaultTpPips = 225,
   showEma = true,
   showRsi = true,
   rsiPeriod = 14,
@@ -221,6 +238,13 @@ export default function CandleChart({
       }),
     [positions],
   )
+
+  const latestSignal = useMemo(() => {
+    for (const s of signals || []) {
+      if (s?.stop_loss != null && s?.take_profit != null) return s
+    }
+    return (signals || [])[0] || null
+  }, [signals])
 
   const liveRows = useMemo(
     () => buildCandleRows(candles, liveCandle),
@@ -496,7 +520,7 @@ export default function CandleChart({
     }
   }, [livePrice, liveCandle, candles, displayRows, histStatus, range])
 
-  // Entry / SL / TP
+  // Entry / SL / TP (+ desk preview when flat)
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
@@ -509,46 +533,106 @@ export default function CandleChart({
     }
     priceLinesRef.current = []
 
-    openPositions.forEach((p, idx) => {
-      const side = sideOf(p.side)
-      const tag = openPositions.length > 1 ? ` #${idx + 1}` : ''
-      const specs = [
-        {
-          price: Number(p.entry_price ?? p.entry),
+    const addLine = (spec) => {
+      if (!Number.isFinite(spec.price) || spec.price <= 0) return
+      const line = series.createPriceLine({
+        price: spec.price,
+        color: spec.color,
+        lineWidth: spec.lineWidth ?? 1,
+        lineStyle: spec.lineStyle ?? LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: spec.title,
+      })
+      priceLinesRef.current.push(line)
+    }
+
+    if (openPositions.length > 0) {
+      openPositions.forEach((p, idx) => {
+        const side = sideOf(p.side)
+        const tag = openPositions.length > 1 ? ` #${idx + 1}` : ''
+        const entry = Number(p.entry_price ?? p.entry)
+        const sl = Number(p.stop_loss)
+        const tp = Number(p.take_profit)
+        const slP = pipsBetween(entry, sl, symbol)
+        const tpP = pipsBetween(entry, tp, symbol)
+        addLine({
+          price: entry,
           color: side === 'BUY' ? '#7dffb3' : '#ff9f6b',
           title: `ENT${tag}`,
           lineStyle: LineStyle.Solid,
           lineWidth: 2,
-        },
-        {
-          price: Number(p.stop_loss),
-          color: '#ff6b6b',
-          title: `SL${tag}`,
-          lineStyle: LineStyle.Dashed,
-          lineWidth: 1,
-        },
-        {
-          price: Number(p.take_profit),
-          color: '#7dffb3',
-          title: `TP${tag}`,
-          lineStyle: LineStyle.Dashed,
-          lineWidth: 1,
-        },
-      ]
-      for (const spec of specs) {
-        if (!Number.isFinite(spec.price) || spec.price <= 0) continue
-        const line = series.createPriceLine({
-          price: spec.price,
-          color: spec.color,
-          lineWidth: spec.lineWidth,
-          lineStyle: spec.lineStyle,
-          axisLabelVisible: true,
-          title: spec.title,
         })
-        priceLinesRef.current.push(line)
-      }
-    })
-  }, [openPositions])
+        addLine({
+          price: sl,
+          color: '#ff6b6b',
+          title: slP != null ? `SL ${slP}p${tag}` : `SL${tag}`,
+        })
+        addLine({
+          price: tp,
+          color: '#7dffb3',
+          title: tpP != null ? `TP ${tpP}p${tag}` : `TP${tag}`,
+        })
+      })
+      return
+    }
+
+    const px = resolveLivePrice(livePrice, liveCandle, candles)
+    const sig = latestSignal
+    const side = sig ? sideOf(sig.side) : 'BUY'
+    const entry = px ?? (sig?.limit_price != null ? Number(sig.limit_price) : null)
+    const pip = pipSizeForSymbol(symbol)
+
+    if (sig?.stop_loss != null && sig?.take_profit != null && entry != null) {
+      const sl = Number(sig.stop_loss)
+      const tp = Number(sig.take_profit)
+      const slP = pipsBetween(entry, sl, symbol)
+      const tpP = pipsBetween(entry, tp, symbol)
+      addLine({
+        price: entry,
+        color: side === 'BUY' ? '#7dffb3' : '#ff9f6b',
+        title: `SIG ${side}`,
+        lineStyle: LineStyle.Solid,
+        lineWidth: 2,
+      })
+      addLine({
+        price: sl,
+        color: '#ff6b6b',
+        title: slP != null ? `SL ${slP}p` : 'SL',
+      })
+      addLine({
+        price: tp,
+        color: '#7dffb3',
+        title: tpP != null ? `TP ${tpP}p` : 'TP',
+      })
+      return
+    }
+
+    if (entry != null && Number.isFinite(entry)) {
+      const slDist = defaultSlPips * pip
+      const tpDist = defaultTpPips * pip
+      const sl = side === 'SELL' ? entry + slDist : entry - slDist
+      const tp = side === 'SELL' ? entry - tpDist : entry + tpDist
+      addLine({
+        price: entry,
+        color: '#9aa3b2',
+        title: `PRE ${side}`,
+        lineStyle: LineStyle.Dotted,
+        lineWidth: 1,
+      })
+      addLine({
+        price: sl,
+        color: '#ff6b6b',
+        title: `SL ${defaultSlPips}p`,
+        lineStyle: LineStyle.Dotted,
+      })
+      addLine({
+        price: tp,
+        color: '#7dffb3',
+        title: `TP ${defaultTpPips}p`,
+        lineStyle: LineStyle.Dotted,
+      })
+    }
+  }, [openPositions, latestSignal, livePrice, liveCandle, candles, symbol, defaultSlPips, defaultTpPips])
 
   // Day separators + signal arrows
   useEffect(() => {
@@ -623,6 +707,7 @@ export default function CandleChart({
         <span className="meta">
           {livePx != null ? `LIVE ${livePx.toFixed(2)} · ` : ''}
           {posCount ? `${posCount} open` : 'flat'} · {sigCount} signals
+          {` · SL ${defaultSlPips}p ($${dollarsMove(defaultSlPips, symbol)}) / TP ${defaultTpPips}p ($${dollarsMove(defaultTpPips, symbol)})`}
           {lastRsi != null ? ` · RSI ${lastRsi}` : ''}
           {displayRows.length ? ` · ${displayRows.length} bars` : ''}
           {dayCount ? ` · ${dayCount}d` : ''}
@@ -664,8 +749,9 @@ export default function CandleChart({
         <span className="chart-leg live">LIVE</span>
         <span className="chart-leg day">Day</span>
         <span className="chart-leg entry">Entry</span>
-        <span className="chart-leg sl">SL</span>
-        <span className="chart-leg tp">TP</span>
+        <span className="chart-leg sl">SL (pips)</span>
+        <span className="chart-leg tp">TP (pips)</span>
+        <span className="chart-leg preview">PRE · dotted = preview</span>
         <span className="chart-leg buy">▲ BUY</span>
         <span className="chart-leg sell">▼ SELL</span>
       </div>

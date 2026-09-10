@@ -1326,6 +1326,8 @@ export default function App() {
             symbol={goldLabel}
             positions={positions}
             signals={signals}
+            defaultSlPips={Number(capital?.default_stop_loss_pips) || 90}
+            defaultTpPips={Number(capital?.default_take_profit_pips) || 225}
           />
         )}
       </section>
