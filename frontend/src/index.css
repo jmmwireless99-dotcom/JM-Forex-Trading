@@ -625,7 +625,6 @@ select {
   background: var(--panel);
   backdrop-filter: blur(10px);
   padding: 0.85rem 1rem 1rem;
-  min-height: 380px;
 }
 
 .chart-head {
@@ -646,11 +645,38 @@ select {
   width: 100%;
   height: min(52vh, 460px);
   min-height: 300px;
+  max-height: 460px;
+}
+
+/* Fixed-height shell stops lightweight-charts from growing the page vertically */
+.desk-chart-shell {
+  position: relative;
+  width: 100%;
+  height: min(52vh, 460px);
+  min-height: 300px;
+  max-height: 460px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.desk-chart-shell-rsi {
+  height: min(58vh, 480px);
+  max-height: 480px;
+  min-height: 320px;
+}
+
+.desk-chart-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .chart-canvas-rsi {
-  height: min(62vh, 540px);
-  min-height: 360px;
+  /* legacy class — prefer desk-chart-shell */
+  height: min(58vh, 480px);
+  min-height: 320px;
+  max-height: 480px;
 }
 
 .chart-legend {

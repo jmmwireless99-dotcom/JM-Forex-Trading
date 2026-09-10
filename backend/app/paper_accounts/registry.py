@@ -20,6 +20,32 @@ from app.risk.manager import RiskManager
 log = logging.getLogger(__name__)
 
 DESK_LABEL = "Internal desk"
+MAX_PAPER_LOTS = 0.5
+MAX_SCALE_IN_LOTS = 1.0
+
+
+def _max_lots_for_account(*, scale_in_mode: bool = False) -> float:
+    return MAX_SCALE_IN_LOTS if scale_in_mode else MAX_PAPER_LOTS
+
+
+def _sanitize_trade_lots(row: dict, *, scale_in_mode: bool = False) -> dict:
+    """Clamp corrupt lot sizes from bad restores; rescale PnL proportionally."""
+    raw = float(row.get("lots") or 0.01)
+    cap = _max_lots_for_account(scale_in_mode=scale_in_mode)
+    if raw <= cap:
+        return row
+    ratio = cap / raw if raw > 0 else 1.0
+    log.warning(
+        "clamping corrupt lots %.4f -> %.4f (ticket=%s)",
+        raw,
+        cap,
+        row.get("ticket"),
+    )
+    out = {**row, "lots": cap}
+    for key in ("realized_pnl", "unrealized_pnl"):
+        if out.get(key) not in (None, 0, 0.0):
+            out[key] = round(float(out[key]) * ratio, 2)
+    return out
 
 
 def _short_code() -> str:
@@ -380,19 +406,23 @@ class PaperAccountRegistry:
 
                 raw_trades = row.get("trades") or []
                 settled_rows: list[dict] = []
-                restart_pnl = 0.0
+                scale_in = bool(row.get("scale_in_mode"))
                 for t in raw_trades:
                     try:
+                        t = _sanitize_trade_lots(t, scale_in_mode=scale_in)
                         status = TradeStatus(t.get("status", "CLOSED"))
                         if status == TradeStatus.OPEN:
                             t = _settle_open_trade_row(t)
-                            restart_pnl += float(t.get("realized_pnl") or 0)
                             status = TradeStatus.CLOSED
                         settled_rows.append(t)
                     except Exception:  # noqa: BLE001
                         continue
-                if restart_pnl:
-                    broker.balance = round(broker.balance + restart_pnl, 2)
+                # Balance = deposit + sum of closed trade PnL (heals corrupt lot restores).
+                healed_pnl = round(
+                    sum(float(t.get("realized_pnl") or 0) for t in settled_rows),
+                    2,
+                )
+                broker.balance = round(deposit + healed_pnl, 2)
                 for t in settled_rows:
                     try:
                         status = TradeStatus(t.get("status", "CLOSED"))

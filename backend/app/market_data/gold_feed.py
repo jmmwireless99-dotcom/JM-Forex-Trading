@@ -143,19 +143,7 @@ def _from_yahoo(symbol: str, y_interval: str, limit: int) -> dict[str, Any]:
     }
 
 
-def _from_binance(y_interval: str, limit: int) -> dict[str, Any]:
-    b_interval = BINANCE_INTERVAL.get(y_interval, "5m")
-    params = urllib.parse.urlencode(
-        {
-            "symbol": BINANCE_SYMBOL,
-            "interval": b_interval,
-            "limit": min(max(limit, 50), 1000),
-        }
-    )
-    rows = _http_json(f"{BINANCE_KLINES}?{params}")
-    if not isinstance(rows, list) or not rows:
-        raise RuntimeError("Binance PAXG returned no klines")
-
+def _parse_binance_rows(rows: list) -> list[dict[str, Any]]:
     candles: list[dict[str, Any]] = []
     for row in rows:
         # [open_time, open, high, low, close, volume, close_time, ...]
@@ -170,6 +158,36 @@ def _from_binance(y_interval: str, limit: int) -> dict[str, Any]:
                 "open_time": datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(),
             }
         )
+    return candles
+
+
+def _from_binance(y_interval: str, limit: int) -> dict[str, Any]:
+    b_interval = BINANCE_INTERVAL.get(y_interval, "5m")
+    want = min(max(limit, 50), 9000)
+    candles: list[dict[str, Any]] = []
+    end_ms: int | None = None
+    while len(candles) < want:
+        batch = min(1000, want - len(candles))
+        params: dict[str, str | int] = {
+            "symbol": BINANCE_SYMBOL,
+            "interval": b_interval,
+            "limit": batch,
+        }
+        if end_ms is not None:
+            params["endTime"] = end_ms
+        rows = _http_json(f"{BINANCE_KLINES}?{urllib.parse.urlencode(params)}")
+        if not isinstance(rows, list) or not rows:
+            break
+        batch_candles = _parse_binance_rows(rows)
+        if end_ms is None:
+            candles = batch_candles
+        else:
+            candles = batch_candles + candles
+        if len(rows) < batch:
+            break
+        end_ms = int(rows[0][0]) - 1
+    if not candles:
+        raise RuntimeError("Binance PAXG returned no klines")
     last = candles[-1]
     return {
         "ok": True,
@@ -185,14 +203,22 @@ def _from_binance(y_interval: str, limit: int) -> dict[str, Any]:
     }
 
 
+def _m5_bars_for_days(days: int) -> int:
+    """Approximate closed 5m bars for N calendar days."""
+    return min(max(int(days) * 288, 50), 9000)
+
+
 def fetch_gold_candles(
     *,
     interval: str = "5m",
     symbol: str = DEFAULT_SYMBOL,
     limit: int = 300,
+    days: int | None = None,
 ) -> dict[str, Any]:
     y_interval = INTERVAL_MAP.get(str(interval), "5m")
-    cache_key = f"{symbol}:{y_interval}:{limit}"
+    if days is not None and y_interval == "5m":
+        limit = max(limit, _m5_bars_for_days(days))
+    cache_key = f"{symbol}:{y_interval}:{limit}:{days or 0}"
     now = time.time()
     hit = _CACHE.get(cache_key)
     if hit and now - hit[0] < _CACHE_TTL_SEC:
@@ -200,11 +226,14 @@ def fetch_gold_candles(
 
     errors: list[str] = []
     out: dict[str, Any] | None = None
-    try:
-        out = _from_yahoo(symbol, y_interval, limit)
-    except Exception as e:
-        errors.append(f"yahoo: {e}")
-        logger.warning("yahoo gold feed failed, trying Binance PAXG: %s", e)
+    # Yahoo caps 5m at ~5 days — use Binance pagination for longer M5 history.
+    use_binance_first = y_interval == "5m" and (days or 0) > 5
+    if not use_binance_first:
+        try:
+            out = _from_yahoo(symbol, y_interval, limit)
+        except Exception as e:
+            errors.append(f"yahoo: {e}")
+            logger.warning("yahoo gold feed failed, trying Binance PAXG: %s", e)
 
     if out is None or not out.get("candles"):
         try:
@@ -212,6 +241,10 @@ def fetch_gold_candles(
         except Exception as e:
             errors.append(f"binance: {e}")
             raise RuntimeError("Gold market feed unavailable: " + " | ".join(errors)) from e
+
+    if days is not None and out.get("candles"):
+        cutoff = int(now) - int(days) * 86400
+        out["candles"] = [c for c in out["candles"] if c["time"] >= cutoff]
 
     _CACHE[cache_key] = (now, out)
     return out
