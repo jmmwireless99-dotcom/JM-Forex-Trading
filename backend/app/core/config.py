@@ -39,7 +39,9 @@ class Settings(BaseSettings):
     entry_cooldown_seconds: int = 120
     # Scale-in demo accounts only (scale_in_mode on paper account — not global)
     scale_in_max_legs: int = 3
-    scale_in_step_pips: float = 18.0
+    scale_in_step_pips: float = 75.0  # fallback when session unknown
+    scale_in_step_pips_asia: float = 75.0  # PH Asia desk (7AM–8PM) + early EMA (2AM–7AM)
+    scale_in_step_pips_night: float = 125.0  # SMC night desk (PH 8PM–2AM)
     scale_in_base_lot_per_1k: float = 0.01
     scale_in_leg_cooldown_seconds: int = 60
     # Chart candles (M1) vs signal timeframe for entries (M5)

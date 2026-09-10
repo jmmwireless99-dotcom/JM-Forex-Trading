@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from app.models.domain import OrderRequest, Position, PositionStatus, Side, Tick
@@ -15,6 +16,22 @@ if TYPE_CHECKING:
 
 def pip_size(symbol: str) -> float:
     return 0.1 if (symbol or "").upper() == "XAUUSD" else 0.0001
+
+
+def scale_in_step_pips_for_session(
+    settings: Settings,
+    ts: datetime | None = None,
+) -> float:
+    """Leg spacing for SCALE3 — wider at night (SMC) than Asia EMA desk."""
+    from app.strategies.session import classify_session
+
+    when = ts or datetime.now(timezone.utc)
+    label = classify_session(when).label
+    if label == "london_ny_overlap":
+        return float(getattr(settings, "scale_in_step_pips_night", 125.0))
+    if label in ("asia", "off_hours"):
+        return float(getattr(settings, "scale_in_step_pips_asia", 75.0))
+    return float(getattr(settings, "scale_in_step_pips", 75.0))
 
 
 def scale_in_lots(balance: float, leg: int, settings: Settings) -> float:
@@ -82,9 +99,15 @@ def plan_scale_in_entry(
     tick: Tick | None,
     settings: Settings,
     require_depth: bool,
+    step_pips: float | None = None,
+    at: datetime | None = None,
 ) -> ScaleInPlan:
     max_legs = int(getattr(settings, "scale_in_max_legs", 3))
-    step_pips = float(getattr(settings, "scale_in_step_pips", 18.0))
+    step = (
+        float(step_pips)
+        if step_pips is not None
+        else scale_in_step_pips_for_session(settings, at)
+    )
     legs = open_legs(open_positions, symbol=symbol, side=side)
 
     other_side = [
@@ -112,12 +135,12 @@ def plan_scale_in_entry(
             side=side,
             last_entry=last_entry,
             current=current,
-            step_pips=step_pips,
+            step_pips=step,
             symbol=symbol,
         ):
             return ScaleInPlan(
                 False,
-                reason=f"Need {step_pips:g}p deeper pullback for leg {leg}",
+                reason=f"Need {step:g}p deeper pullback for leg {leg}",
             )
 
     lots = scale_in_lots(balance, leg, settings)
