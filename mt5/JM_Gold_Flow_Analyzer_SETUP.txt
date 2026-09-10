@@ -13,11 +13,11 @@ INSTALL
 1. MT5 → File → Open Data Folder
 2. Copy the .mq5 → MQL5\Experts\   (one file — analyzer is inside, F7 should be 0 errors)
 3. MetaEditor → Compile the .mq5 (F7)
-5. I-detach ang ibang gold EA sa GOLD# chart
-6. Attach V4_2 / V6.1 sa GOLD#  (M1 data kailangan — “Every tick” tester)
-7. Inputs: same as your winning backtest (lots 0.01, all routers ON)
-8. InpShowPanel = true
-9. Demo + Algo Trading ON
+4. I-detach ang ibang gold EA sa GOLD# chart
+5. Attach V4_2 / V6.1 sa GOLD#  (M1 data kailangan — “Every tick” tester)
+6. Inputs: lots 0.01, routers ON, InpMaxRiskUsd=4.00
+7. InpShowPanel = true
+8. I-retest SAME dates first, then demo
 
 PANEL (Comment sa chart)
 ------------------------

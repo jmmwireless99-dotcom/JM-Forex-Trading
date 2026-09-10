@@ -60,6 +60,7 @@ input double InpStrongTargetUsd     = 10.0;
 input double InpM1AtrQuiet          = 1.20;
 input double InpM1AtrStrong         = 3.00;
 input double InpRewardRisk          = 1.35;
+input double InpMaxRiskUsd          = 4.00;      // 0=off; cap SL $ (clips strong-ATR ~$7.40)
 
 input int    InpMinSecondsBetween   = 20;
 input int    InpMaxSpreadPoints     = 0;
@@ -296,11 +297,25 @@ bool OpenTrade(int dir,double atr,string reason)
    if(!SymbolInfoTick(g_symbol,q)) return false;
    double target=InpUseUsdTargets ? TargetUsd(atr) : InpNormalTargetUsd;
    double risk=(InpRewardRisk>0 ? target/InpRewardRisk : target);
+   if(InpMaxRiskUsd>0.0 && risk>InpMaxRiskUsd)
+      risk=InpMaxRiskUsd;
+
    double tpDist=MoneyToPriceDistance(target,InpLots);
    double slDist=MoneyToPriceDistance(risk,InpLots);
    if(tpDist<=0 || slDist<=0) return false;
+
    tpDist=RespectStops(tpDist);
    slDist=RespectStops(slDist);
+
+   // If broker stop-level widened SL past the cap, clip back when legal.
+   if(InpMaxRiskUsd>0.0)
+   {
+      double capDist=MoneyToPriceDistance(InpMaxRiskUsd,InpLots);
+      long lvl=(long)SymbolInfoInteger(g_symbol,SYMBOL_TRADE_STOPS_LEVEL);
+      double minD=lvl*SymbolInfoDouble(g_symbol,SYMBOL_POINT);
+      if(capDist>=minD && slDist>capDist)
+         slDist=capDist;
+   }
    int dg=(int)SymbolInfoInteger(g_symbol,SYMBOL_DIGITS);
    double sl,tp;
    bool ok=false;

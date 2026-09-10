@@ -3,7 +3,7 @@ JM GOLD V6.1 Analyzer Pack
 Version: 6.10 · Tag: V6.1-FINAL-H16-H17-BLOCK
 
 Ito ang BEST gold scalper mo + live OK/WAIT/MALI panel.
-Hindi binago ang entry, TP, SL, lots, o hour routers.
+Entry/hours unchanged. SL cap: InpMaxRiskUsd=4.00 (strong ATR only).
 
 UNZIP then INSTALL
 ------------------
@@ -22,6 +22,7 @@ UNZIP then INSTALL
      InpAllowSell         = true
      InpUseStrictProfitHours = true
      InpBlockH16H17All    = true
+     InpMaxRiskUsd        = 4.00   (caps strong-ATR SL; retest before demo)
 7. Algo Trading ON (green)
 8. DEMO account only
 
