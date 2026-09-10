@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart } from 'lightweight-charts'
 import { api } from './api'
+import ClaudeChartPanel from './ClaudeChartPanel'
 
 /** Private saved layout — opens only when YOU are logged into TradingView. */
 const USER_CHART_URL = 'https://www.tradingview.com/chart/Bhih3eRv/'
@@ -167,9 +168,10 @@ export default function TradingViewGoldChart({ interval = '5' }) {
         <div ref={hostRef} className="tv-chart-host" />
       </div>
       <p className="tv-chart-footnote">
-        Live gold via COMEX futures (GC=F). Strategies still use paper/MT feed — not this chart.
-        TradingView widget removed (spinner / blank embed).
+        Live gold via COMEX futures (GC=F). Claude AI reads this same OHLC + desk context.
+        TradingView widget removed (spinner / blank embed) — use links above for full TV layout.
       </p>
+      <ClaudeChartPanel interval={tf} symbol="XAUUSD" />
     </div>
   )
 }

@@ -739,6 +739,63 @@ select {
   color: var(--muted, #8fa39b);
   line-height: 1.35;
 }
+
+.claude-panel {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.claude-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.claude-head h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
+.claude-analyze-btn {
+  border: 1px solid var(--line);
+  background: rgba(125, 255, 179, 0.12);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+}
+
+.claude-analyze-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.claude-hint code {
+  font-size: 0.68rem;
+  word-break: break-all;
+}
+
+.claude-error {
+  color: #ffb4b4;
+}
+
+.claude-box {
+  margin-top: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.claude-risks li {
+  color: #ffb4b4;
+}
 .chart-leg.sl {
   color: #ff6b6b;
 }

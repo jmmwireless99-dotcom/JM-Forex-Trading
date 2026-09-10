@@ -93,6 +93,13 @@ class Settings(BaseSettings):
     ai_smc_sell_overlap_min_wr: float = 0.35
     ai_smc_sell_overlap_min_n: int = 5
 
+    # Claude reads TradingView-style chart OHLC + optional TV webhooks
+    # JM_ANTHROPIC_API_KEY=sk-ant-...
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-20250514"
+    claude_chart_enabled: bool = True
+    tradingview_webhook_secret: str = ""
+
     # Auto signal routing — false = one desk signal fills every follow_auto account
     auto_fill_single_book: bool = False
     # Optional: pin fills to this account code; else earliest auto-follower
