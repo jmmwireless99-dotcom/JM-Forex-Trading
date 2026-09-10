@@ -16,6 +16,7 @@ def test_seed_specs_match_prompt():
         "AI_ML",
         "EMA_RSI_Scalp",
         "EMA_VWAP_Scalp",
+        "Gold_Micro_Scalp",
         "Liquidity_Sweep_SMC",
     }
     aiml = next(s for s in SEED_STRATEGIES if s["name"] == "AI_ML")

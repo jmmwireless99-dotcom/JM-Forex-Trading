@@ -57,6 +57,7 @@ _AUTO_POOL = (
     "EMA_RSI_Scalp",
     "Liquidity_Sweep_SMC",
     "EMA_VWAP_Scalp",
+    "Gold_Micro_Scalp",
 )
 
 

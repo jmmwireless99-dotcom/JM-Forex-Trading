@@ -2,6 +2,7 @@ from app.ai.aiml_strategy import AIMLStrategy
 from app.strategies.base import Strategy
 from app.strategies.ema_rsi_scalp import EmaRsiScalpStrategy
 from app.strategies.ema_vwap_scalp import EmaVwapScalpStrategy
+from app.strategies.gold_micro_scalp import GoldMicroScalpStrategy
 from app.strategies.liquidity_sweep_smc import LiquiditySweepSmcStrategy
 from app.strategies.manual_only import ManualOnlyStrategy
 
@@ -10,6 +11,7 @@ STRATEGY_REGISTRY: dict[str, type[Strategy]] = {
     ManualOnlyStrategy.name: ManualOnlyStrategy,
     EmaRsiScalpStrategy.name: EmaRsiScalpStrategy,
     EmaVwapScalpStrategy.name: EmaVwapScalpStrategy,
+    GoldMicroScalpStrategy.name: GoldMicroScalpStrategy,
     LiquiditySweepSmcStrategy.name: LiquiditySweepSmcStrategy,
 }
 
@@ -25,6 +27,11 @@ _ALIASES = {
     "ema_vwap_scalp": EmaVwapScalpStrategy.name,
     "ema_vwap": EmaVwapScalpStrategy.name,
     "vwap_scalp": EmaVwapScalpStrategy.name,
+    "gold_micro_scalp": GoldMicroScalpStrategy.name,
+    "gold_micro": GoldMicroScalpStrategy.name,
+    "gold#": GoldMicroScalpStrategy.name,
+    "gold": GoldMicroScalpStrategy.name,
+    "xauusd_micro": GoldMicroScalpStrategy.name,
     "smc": LiquiditySweepSmcStrategy.name,
     "liquidity_sweep_smc": LiquiditySweepSmcStrategy.name,
 }
@@ -59,6 +66,7 @@ __all__ = [
     "ManualOnlyStrategy",
     "EmaRsiScalpStrategy",
     "EmaVwapScalpStrategy",
+    "GoldMicroScalpStrategy",
     "LiquiditySweepSmcStrategy",
     "Strategy",
     "create_strategy",

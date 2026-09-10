@@ -147,6 +147,40 @@ def strategy_catalog() -> list[dict]:
             "reward_r": 2.5,
         },
         {
+            "id": "Gold_Micro_Scalp",
+            "name": "Gold Micro Scalp",
+            "sessions": ["Asia", "New York", "London/NY overlap"],
+            "session_slots": ["asia", "new_york", "london_ny_overlap"],
+            "timeframe": "M5",
+            "signal_tf": "M5",
+            "chart_tf": "M1",
+            "summary": (
+                "Short-term GOLD# / XAUUSD micro-scalp: fast EMA 8/21 bias, "
+                "RSI 7 momentum, impulse or EMA cross — tight stops, quick TP."
+            ),
+            "entry_rules": [
+                "Bias: EMA8 above EMA21 and price ≥ EMA21 for BUY (reverse for SELL).",
+                "RSI 7 in 48–88 (BUY) or 12–52 (SELL) and tilting with the trade.",
+                "Trigger: impulse candle (≥0.4×ATR body) or fresh EMA 8/21 cross.",
+                "Cooldown ≥2 M5 bars; flip blocked until setup matures.",
+                "SL ~0.85×ATR · TP ~1.5R (micro hold — not a swing).",
+            ],
+            "entry_flow": [
+                "Watch GOLD# / XAUUSD M5 close for EMA8/21 alignment.",
+                "Confirm RSI7 band + impulse or cross → MARKET.",
+                "Hold to tight SL/TP — no auto reverse.",
+            ],
+            "parameters": _seed_params("Gold_Micro_Scalp"),
+            "safety": [
+                "Built for short holds on gold tape (desk XAUUSD ↔ broker GOLD#).",
+                "News blackout when desk news filter is on.",
+                "Needs ~31+ M5 bars for EMA21/RSI7 warmup.",
+                "Use tiny lots — gold moves fast; micro SL still bites.",
+            ],
+            "order_type": "MARKET",
+            "reward_r": 1.5,
+        },
+        {
             "id": "Liquidity_Sweep_SMC",
             "name": "Liquidity Sweep SMC",
             "sessions": ["London/NY overlap"],
@@ -190,6 +224,7 @@ def entry_rules_short() -> list[str]:
         "PH desk — 7AM–8PM EMA_RSI · 8PM–2AM SMC · 2AM–7AM EMA_RSI",
         "EMA_RSI_Scalp — EMA200 trend · EMA20/50 retest · RSI 38-52/48-62 · spaced entries · hold SL/TP",
         "EMA_VWAP_Scalp — EMA9/21 crossover · session VWAP filter · swing SL · 2R TP",
+        "Gold_Micro_Scalp — EMA8/21 · RSI7 · impulse/cross · tight ATR · 1.5R (GOLD#)",
         "Liquidity_Sweep_SMC — Asia/PDH sweep · immediate/retest/FVG entry · 18-bar sweep memory",
         "Manual BUY/SELL with auto SL/TP always available",
     ]
