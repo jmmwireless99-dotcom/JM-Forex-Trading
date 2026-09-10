@@ -40,11 +40,11 @@ def test_stoch_sell_cross_from_overbought():
 
 
 def test_buy_pullback_needs_small_red_bars():
-    trig = {"open": 10, "high": 11, "low": 9.5, "close": 10.4}
-    red1 = {"open": 10.4, "high": 10.5, "low": 10.1, "close": 10.15}
-    red2 = {"open": 10.5, "high": 10.55, "low": 10.2, "close": 10.25}
+    trig = {"open": 10.0, "high": 10.8, "low": 9.9, "close": 10.3}
+    red1 = {"open": 10.40, "high": 10.50, "low": 10.00, "close": 10.22}
+    red2 = {"open": 10.50, "high": 10.55, "low": 10.05, "close": 10.28}
     assert pullback_ok(1, [trig, red1, red2]) is True
-    green = {"open": 10.2, "high": 10.6, "low": 10.15, "close": 10.5}
+    green = {"open": 10.20, "high": 10.80, "low": 10.10, "close": 10.55}
     assert pullback_ok(1, [trig, green, red2]) is False
 
 
