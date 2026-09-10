@@ -1,0 +1,28 @@
+# Caddy config for Windows VM — jmtechsolution.cloud/fx/
+# Copy to C:\Caddy\Caddyfile and run: caddy run --config C:\Caddy\Caddyfile
+#
+# Requires DNS A record → this VM's public IP
+# Ports 80 and 443 open on firewall
+
+jmtechsolution.cloud, www.jmtechsolution.cloud {
+    encode gzip
+
+    # WebSocket live feed
+    @ws path /fx/api/ws*
+    handle @ws {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Redirect /fx → /fx/
+    redir /fx /fx/ 301
+
+    # JM FX desk + API (strip /fx prefix → backend root)
+    handle_path /fx/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Optional: main portal root (customize or remove)
+    handle / {
+        respond "JM TECH SOLUTION — Forex desk at /fx/" 200
+    }
+}
