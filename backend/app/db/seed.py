@@ -49,6 +49,8 @@ SEED_STRATEGIES: list[dict] = [
             "reward_r": 2.0,
             "min_stop_atr": 1.15,
             "min_tp_atr": 2.3,
+            "asia_stop_loss_pips": 120,
+            "asia_take_profit_pips": 225,
             "chart_tf": "M1",
             "signal_tf": "M5",
         },
