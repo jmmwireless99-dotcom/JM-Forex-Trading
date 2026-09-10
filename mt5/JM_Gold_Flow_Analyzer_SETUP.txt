@@ -1,0 +1,40 @@
+JM Gold Flow Analyzer — MT5 EA
+================================
+
+Bago ito. Hindi pinalitan ang V6.2. May on-chart analyzer:
+  OK   = pwede pumasok
+  WEAK = caution
+  MALI = huwag i-enter (makikita kung bakit: counter-trend, chop, walang small candle, against hour, etc.)
+
+INSTALL
+-------
+1. MT5 → File → Open Data Folder → MQL5\Experts\
+2. Copy JM_Gold_Flow_Analyzer.mq5
+3. MetaEditor → Compile (F7) — 0 errors
+4. I-detach muna ang V6.2 sa GOLD# chart (huwag dalawang EA)
+5. Drag JM_Gold_Flow_Analyzer sa GOLD# **M5**
+6. Inputs:
+     InpLots        = 0.01
+     InpTradeMode   = MODE_BLOCK_MALI   (o MODE_ANALYZER_ONLY kung observation muna)
+     InpSLPrice     = 4.0
+     InpTPPrice     = 5.0
+     InpAllowBuy    = true
+     InpAllowSell   = true
+7. Algo Trading ON (green)
+8. Demo lang. Huwag real hangga't hindi tumugma ang panel sa gusto mong entries.
+
+PANEL (kaliwang taas ng chart)
+------------------------------
+VERDICT  OK / WEAK / MALI
+BUY  line  — score at reasons kung MALI
+SELL line  — score at reasons kung MALI
+Hour bias  — bakit short-only madalas (00–13 UTC = SELL-pref)
+
+Kapag MALI ang SELL at MALI ang BUY, walang order.
+Comment sa order: "OK SELL sc5/2" para makita sa History.
+
+HUWAG
+-----
+- I-attach kasama ang V6.2 (mag-double trade)
+- Palitan lots / SL / TP sa unang 2 weeks
+- Real account

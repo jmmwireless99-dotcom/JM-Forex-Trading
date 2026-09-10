@@ -30,6 +30,11 @@ def get_ticks() -> dict[str, dict]:
     return dict(_ticks)
 
 
+def get_cached_candles(symbol: str) -> list:
+    row = _candle_cache.get(symbol.upper())
+    return list(row[1]) if row else []
+
+
 def is_engine_running() -> bool:
     return _running
 
