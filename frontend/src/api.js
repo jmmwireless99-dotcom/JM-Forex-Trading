@@ -65,6 +65,7 @@ export const api = {
   health: () => request('/health'),
   status: () => request('/status'),
   desk: () => request('/desk'),
+  nightAnalytics: () => request('/analytics/night'),
   auto: () => request('/auto'),
   mtStatus: () => request('/mt/status'),
   mt4Status: () => request('/mt4/real/status'),
