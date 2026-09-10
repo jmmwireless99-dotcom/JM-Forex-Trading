@@ -95,7 +95,17 @@ def next_scale_action(
     tp3: float = 15.0,
     did_tp1: bool = False,
     did_tp2: bool = False,
+    remaining_is_min_lot: bool = False,
 ) -> str:
+    """Scale-out stage. Min-lot remainder cannot partial — close at the *next* target only."""
+    if remaining_is_min_lot:
+        if not did_tp1 and move >= tp1:
+            return "CLOSE"
+        if did_tp1 and not did_tp2 and move >= tp2:
+            return "CLOSE"
+        if did_tp2 and move >= tp3:
+            return "CLOSE"
+        return "HOLD"
     if not did_tp1 and move >= tp1:
         return "TP1"
     if did_tp1 and not did_tp2 and move >= tp2:

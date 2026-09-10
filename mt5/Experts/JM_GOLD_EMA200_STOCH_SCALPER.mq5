@@ -246,13 +246,16 @@ void ManageScaleOut()
 
    int dg=(int)SymbolInfoInteger(g_symbol,SYMBOL_DIGITS);
 
-   // Tiny lot: cannot partial — close all at TP1 gold-$
+   // Tiny remaining lot: cannot partial — close at the next scale target
    if(vol<=vmin+1e-8)
    {
-      if(move>=InpTP1Usd)
+      double need=InpTP1Usd;
+      if(g_tp2) need=InpTP3Usd;
+      else if(g_tp1) need=InpTP2Usd;
+      if(move>=need)
       {
          trade.PositionClose(ticket);
-         g_status="CLOSE tiny-lot at TP1 (gold $)";
+         g_status=StringFormat("CLOSE remaining 0.01 at gold $%.0f",need);
       }
       return;
    }

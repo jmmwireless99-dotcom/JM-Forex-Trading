@@ -73,3 +73,9 @@ def test_scale_out_uses_gold_price_not_account_pnl():
 
 def test_sell_favorable_move_uses_ask():
     assert favorable_price_move("SELL", 2650.0, 2644.90, 2645.0) == 5.0
+
+
+def test_min_lot_runner_waits_for_next_tp_not_tp1():
+    # After TP2, leftover 0.01 must NOT close just because move is already past $5.
+    assert next_scale_action(10.5, did_tp1=True, did_tp2=True, remaining_is_min_lot=True) == "HOLD"
+    assert next_scale_action(15.0, did_tp1=True, did_tp2=True, remaining_is_min_lot=True) == "CLOSE"
