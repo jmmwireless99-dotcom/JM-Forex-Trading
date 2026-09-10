@@ -295,13 +295,16 @@ def _score_side(
     need = required_score(side, bias, base=base_score)
     hard_mali = any(
         r in reasons
-        for r in ("counter-trend", "flow against", "chop + weak ADX", "not a small candle")
+        for r in ("counter-trend", "flow against", "chop + weak ADX", "not a small candle", "no breakout")
     )
     if not use_flow_score:
         need = 1
 
-    if hard_mali or score < need:
+    if hard_mali:
+        need = max(need, score + 1)
         verdict: Verdict = "MALI"
+    elif score < need:
+        verdict = "MALI"
     elif score == need:
         verdict = "WEAK"
     else:

@@ -212,6 +212,12 @@ a {
   text-decoration: none;
 }
 
+.lab-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+
 .lab-btn-ghost {
   background: transparent;
   color: var(--lab-accent);

@@ -105,6 +105,7 @@ def test_fat_candle_is_mali_not_setup():
     sell = verdict_for_side(result, "SELL")
     assert sell.verdict == "MALI"
     assert any("small candle" in r for r in sell.reasons)
+    assert sell.score < sell.required
 
 
 def test_warmup_is_wait():

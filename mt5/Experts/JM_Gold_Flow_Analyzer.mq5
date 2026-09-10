@@ -211,7 +211,7 @@ void ScoreSide(const string side,
    else { out.reasons += "not small candle; "; hard=true; }
 
    if(broke) out.score++;
-   else out.reasons += "no breakout; ";
+   else { out.reasons += "no breakout; "; hard=true; }
 
    bool rsiOk = (side=="BUY" && scan.rsi<=62.0) || (side=="SELL" && scan.rsi>=38.0);
    if(rsiOk) out.score++;
@@ -219,7 +219,13 @@ void ScoreSide(const string side,
 
    if(!InpUseFlowScore) out.required = 1;
 
-   if(hard || out.score < out.required)
+   if(hard)
+     {
+      if(out.required <= out.score)
+         out.required = out.score + 1;
+      out.verdict = V_MALI;
+     }
+   else if(out.score < out.required)
       out.verdict = V_MALI;
    else if(out.score == out.required)
       out.verdict = V_WEAK;
