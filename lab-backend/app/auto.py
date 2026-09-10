@@ -33,6 +33,28 @@ def _levels_from_entry(
     return entry + sl, entry - tp
 
 
+def _levels_for_auto(
+    side: str,
+    entry: float,
+    symbol: str,
+    lots: float,
+    preset: dict,
+    sl_pips: float,
+    tp_pips: float,
+) -> tuple[float, float]:
+    sl_usd = preset.get("sl_usd")
+    tp_usd = preset.get("tp_usd")
+    if sl_usd is not None and tp_usd is not None:
+        from app.broker import LabBroker
+
+        sl_dist = LabBroker.price_distance_for_usd(symbol, float(sl_usd), lots)
+        tp_dist = LabBroker.price_distance_for_usd(symbol, float(tp_usd), lots)
+        if side == "BUY":
+            return entry - sl_dist, entry + tp_dist
+        return entry + sl_dist, entry - tp_dist
+    return _levels_from_entry(side, entry, symbol, sl_pips, tp_pips)
+
+
 def _bar_seconds(candles: list[dict[str, Any]]) -> int:
     if len(candles) >= 2:
         dt = int(candles[-1]["time"]) - int(candles[-2]["time"])
@@ -101,7 +123,9 @@ def try_auto_fill(
 
     side = signal.side
     entry = acc.broker.entry_price(sym, side, mid)
-    sl, tp = _levels_from_entry(side, entry, sym, auto.sl_pips, auto.tp_pips)
+    sl, tp = _levels_for_auto(
+        side, entry, sym, auto.lots, preset, auto.sl_pips, auto.tp_pips
+    )
     auto.last_block_reason = None
 
     try:

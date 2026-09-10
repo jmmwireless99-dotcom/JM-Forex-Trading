@@ -143,6 +143,8 @@ async def suite_status() -> dict:
             "lots": a.lots,
             "sl_pips": a.sl_pips,
             "tp_pips": a.tp_pips,
+            "sl_usd": preset.get("sl_usd"),
+            "tp_usd": preset.get("tp_usd"),
             "last_block_reason": a.last_block_reason,
             "last_signal_at": a.last_signal_at,
             "recent_signals": list(a.signals)[:5],
@@ -387,9 +389,9 @@ async def set_auto(
         a.strategy = p["strategy"]
         if body.lots is None:
             a.lots = p["lots"]
-        if body.sl_pips is None:
+        if body.sl_pips is None and "sl_pips" in p:
             a.sl_pips = p["sl_pips"]
-        if body.tp_pips is None:
+        if body.tp_pips is None and "tp_pips" in p:
             a.tp_pips = p["tp_pips"]
         a.last_bar_time = 0
     if body.lots is not None:

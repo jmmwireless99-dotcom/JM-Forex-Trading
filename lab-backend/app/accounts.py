@@ -120,8 +120,10 @@ class LabAccountStore:
             acc.auto.symbol = sym
             acc.auto.strategy = preset["strategy"]
             acc.auto.lots = float(preset["lots"])
-            acc.auto.sl_pips = float(preset["sl_pips"])
-            acc.auto.tp_pips = float(preset["tp_pips"])
+            if "sl_pips" in preset:
+                acc.auto.sl_pips = float(preset["sl_pips"])
+            if "tp_pips" in preset:
+                acc.auto.tp_pips = float(preset["tp_pips"])
             if start_auto:
                 acc.auto.enabled = True
                 acc.auto.last_bar_time = 0

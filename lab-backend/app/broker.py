@@ -75,6 +75,20 @@ class LabBroker:
     def _pip(self, symbol: str) -> float:
         return 0.01 if symbol == "XAUUSD" else 0.0001
 
+    @staticmethod
+    def pnl_multiplier(symbol: str) -> float:
+        return 100.0 if symbol == "XAUUSD" else float(LabBroker.CONTRACT)
+
+    @classmethod
+    def price_distance_for_usd(cls, symbol: str, usd: float, lots: float) -> float:
+        """How far price must move (in quote units) to realize ``usd`` P&L at ``lots``."""
+        if lots <= 0:
+            raise ValueError("Lots must be positive")
+        scale = lots * cls.pnl_multiplier(symbol)
+        if scale <= 0:
+            raise ValueError("Invalid lot scale")
+        return float(usd) / scale
+
     def _half_spread(self, symbol: str) -> float:
         return self._pip(symbol) * self.SPREAD_PIPS.get(symbol, 1.0) / 2
 
