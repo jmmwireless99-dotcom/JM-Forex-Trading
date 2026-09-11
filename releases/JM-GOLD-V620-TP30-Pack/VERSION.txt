@@ -1,0 +1,7 @@
+JM-GOLD-V620-TP30-Pack
+Built: 2026-09-11T03:09:44Z
+EA: JM_GOLD_V6_20_TP30_SL15.mq5
+EA version: 6.20
+Build tag: V6.20-TP30-SL15-H21BLOCK-STRONGTREND
+Adds: H21 SELL block + strong-trend score boost
+NOT V6.1 and NOT EMA200-STOCH

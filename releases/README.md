@@ -24,6 +24,19 @@ Contents: `JM_GOLD_EMA200_STOCH_SCALPER.mq5` (single file, F7) + setup. Lots 0.0
 
 ---
 
+## GOLD V6.20 TP30/SL15 (H21 SELL block + strong-trend boost)
+
+Same V6.1 entries as your +$1,366 run. Two result-based adds only. Not V6.1 and not EMA200.
+
+| File | Link |
+|------|------|
+| **V6.20 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v620-tp30.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V620-TP30-Pack.zip |
+
+Rebuild: `./scripts/build-gold-v620-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |

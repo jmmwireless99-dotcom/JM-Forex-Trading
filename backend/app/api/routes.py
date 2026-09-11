@@ -42,6 +42,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
         "gold_v61_zip": f"{base}/gold-v61-analyzer.zip",
         "gold_ema200_stoch_zip": f"{base}/gold-ema200-stoch.zip",
+        "gold_v620_zip": f"{base}/gold-v620-tp30.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
         "agent_py": f"{base}/jm_mt5_pc_agent.py",
@@ -55,6 +56,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "github_ea_v2_zip": f"{gh}/JM-FX-MT5-EA-v2.zip",
         "github_gold_v61_zip": f"{gh}/JM-GOLD-V61-Analyzer-Pack.zip",
         "github_gold_ema200_stoch_zip": f"{gh}/JM-GOLD-EMA200-STOCH-Pack.zip",
+        "github_gold_v620_zip": f"{gh}/JM-GOLD-V620-TP30-Pack.zip",
         "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
     }
 
@@ -69,6 +71,7 @@ def _release_file(name: str) -> Path:
         "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
         "gold-v61-analyzer.zip": _RELEASES / "JM-GOLD-V61-Analyzer-Pack.zip",
         "gold-ema200-stoch.zip": _RELEASES / "JM-GOLD-EMA200-STOCH-Pack.zip",
+        "gold-v620-tp30.zip": _RELEASES / "JM-GOLD-V620-TP30-Pack.zip",
         "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
@@ -120,6 +123,12 @@ async def download_gold_v61_analyzer_zip() -> FileResponse:
 async def download_gold_ema200_stoch_zip() -> FileResponse:
     path = _release_file("gold-ema200-stoch.zip")
     return FileResponse(path, filename="JM-GOLD-EMA200-STOCH-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/gold-v620-tp30.zip")
+async def download_gold_v620_tp30_zip() -> FileResponse:
+    path = _release_file("gold-v620-tp30.zip")
+    return FileResponse(path, filename="JM-GOLD-V620-TP30-Pack.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt5-bridge.zip")
