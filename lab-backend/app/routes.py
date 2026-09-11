@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.accounts import PAIR_SUITE_SYMBOLS
-from app.engine import get_ticks, is_engine_running, store
+from app.engine import get_cached_candles, get_ticks, is_engine_running, store
+from app.entry_analyzer import analyze_entry, verdict_for_side
 from app.feed import SUPPORTED, fetch_candles, fetch_quote, fetch_quote_live
 from app.pair_strategies import PAIR_PRESETS, STRATEGIES, preset_for, strategy_info
 
@@ -232,6 +233,29 @@ async def candles(symbol: str = "EURUSD", interval: str = "5", limit: int = 120)
         raise HTTPException(503, "Chart data temporarily unavailable — retry in a minute") from e
 
 
+def _load_analyzer_candles(symbol: str) -> list:
+    cached = get_cached_candles(symbol)
+    if len(cached) >= 55:
+        return cached
+    payload = fetch_candles(symbol, interval="5", limit=120)
+    return payload.get("candles") or []
+
+
+@router.get("/analyzer")
+async def entry_analyzer(symbol: str = "XAUUSD") -> dict:
+    """Live OK / WEAK / MALI checklist for the next entry."""
+    sym = symbol.upper()
+    if sym not in SUPPORTED:
+        raise HTTPException(400, f"Unsupported symbol: {sym}")
+    try:
+        candles = _load_analyzer_candles(sym)
+    except Exception as e:
+        log.warning("analyzer candles %s: %s", sym, e)
+        raise HTTPException(503, "Analyzer needs candle history — retry in a minute") from e
+    result = analyze_entry(candles, symbol=sym)
+    return {"ok": True, "analyzer": result.to_dict()}
+
+
 @router.post("/accounts")
 async def create_account(body: CreateAccountBody) -> dict:
     acc = store.create(deposit=body.deposit, label=body.label)
@@ -315,6 +339,24 @@ async def market_order(
             raise HTTPException(502, str(e)) from e
     else:
         acc.broker.update_tick(sym, ticks[sym]["mid"])
+
+    analyzer_payload = None
+    if sym == "XAUUSD":
+        try:
+            result = analyze_entry(_load_analyzer_candles(sym), symbol=sym)
+            analyzer_payload = result.to_dict()
+            scored = verdict_for_side(result, side)
+            if scored.verdict == "MALI":
+                why = ", ".join(scored.reasons[:4]) or result.summary
+                raise HTTPException(
+                    400,
+                    f"MALI — huwag i-{side}: {why}. Score {scored.score}/{scored.required}.",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.warning("analyzer gate skipped: %s", e)
+
     try:
         pos = acc.broker.open_market(
             symbol=sym,
@@ -326,7 +368,12 @@ async def market_order(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     store.persist()
-    return {"ok": True, "position": pos.to_dict(), "account": acc.snapshot()}
+    return {
+        "ok": True,
+        "position": pos.to_dict(),
+        "account": acc.snapshot(),
+        "analyzer": analyzer_payload,
+    }
 
 
 @router.post("/positions/{position_id}/close")

@@ -212,6 +212,12 @@ a {
   text-decoration: none;
 }
 
+.lab-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+
 .lab-btn-ghost {
   background: transparent;
   color: var(--lab-accent);
@@ -776,5 +782,122 @@ a {
 
   .lab-table {
     font-size: 0.78rem;
+  }
+}
+
+.lab-az-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.lab-az-head h2 {
+  margin: 0;
+}
+
+.lab-az-summary {
+  margin: 0.25rem 0 0.45rem;
+  font-weight: 600;
+}
+
+.lab-az-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.lab-az-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.lab-az-side {
+  border: 1px solid var(--lab-line);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(12, 8, 24, 0.45);
+}
+
+.lab-az-side-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+}
+
+.lab-az-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--lab-line);
+}
+
+.lab-az-pill-lg {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.65rem;
+}
+
+.lab-az-ok,
+.lab-az-ok .lab-az-pill {
+  color: var(--lab-ok);
+  border-color: rgba(110, 231, 183, 0.45);
+}
+
+.lab-az-weak,
+.lab-az-weak .lab-az-pill {
+  color: var(--lab-warn);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.lab-az-mali,
+.lab-az-mali .lab-az-pill {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.lab-az-wait,
+.lab-az-wait .lab-az-pill {
+  color: var(--lab-muted);
+}
+
+.lab-az-panel-mali {
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
+.lab-az-panel-ok {
+  box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.2);
+}
+
+.lab-az-why {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: inherit;
+}
+
+.lab-az-checks {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  font-size: 0.82rem;
+  color: var(--lab-muted);
+}
+
+.lab-az-checks li {
+  margin: 0.2rem 0;
+}
+
+.lab-az-checks li span {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .lab-az-sides {
+    grid-template-columns: 1fr;
   }
 }
