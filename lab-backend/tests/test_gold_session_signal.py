@@ -12,7 +12,16 @@ from app.gold_session_signal import (
 )
 
 
-def test_ph_clock_from_utc():
+def test_ph_hour_label_on_candle():
+    from app.gold_session_signal import format_ph_hour_label, session_band
+
+    assert format_ph_hour_label(13) == "1PM"
+    assert format_ph_hour_label(1) == "1AM"
+    assert format_ph_hour_label(0) == "12AM"
+    assert format_ph_hour_label(12) == "12PM"
+    assert session_band(13) == "asia"       # 1PM PH
+    assert session_band(21) == "overlap"    # 9PM PH
+    assert session_band(2) == "ny"
     utc = datetime(2026, 9, 16, 13, 17, tzinfo=timezone.utc)  # 9:17 PM PH
     ph = ph_from_utc(utc)
     assert ph.hour == 21 and ph.minute == 17

@@ -6,12 +6,13 @@ Hindi EA. Walang OrderSend. Visual validation muna sa GOLD# chart.
 DALAWANG TRABAHO
 ----------------
 1) PH sessions (UTC+8)
-   Daily 00:00–23:59
-   Asian/Tokyo  08:00–16:00 PH
-   London       15:00–00:00 PH
-   New York     20:00–05:00 PH
-   London–NY overlap 20:00–00:00 PH
-   Colored transparent zones + session-open lines + live PH clock panel
+   Daily 00:00–23:59 (white midnight line)
+   Asian/Tokyo  08:00–16:00 PH  GOLD
+   London       15:00–00:00 PH  BLUE
+   New York     20:00–05:00 PH  GREEN
+   London–NY overlap 20:00–00:00 PH  PURPLE
+   PH hour labels ON the candles: 12AM, 1AM, ... 1PM, 2PM, ... 11PM
+   (kulay ng text = kulay ng session)
 
 2) Signal arrows (closed bar, hindi nagre-repaint)
    Chart TF = entry (M5 recommended, M1 OK)

@@ -31,10 +31,28 @@ def ph_from_utc(utc: datetime) -> datetime:
     return utc.astimezone(PH)
 
 
+def format_ph_hour_label(hour: int) -> str:
+    h = hour % 24
+    h12 = h % 12 or 12
+    return f"{h12}{'PM' if h >= 12 else 'AM'}"
+
+
 def format_ph_clock(ph: datetime) -> str:
     h12 = ph.hour % 12 or 12
     ampm = "PM" if ph.hour >= 12 else "AM"
     return f"{h12}:{ph.minute:02d} {ampm}"
+
+
+def session_band(hour: int) -> str:
+    """Color band key for the hour label on the candle."""
+    name = classify_ph_session(hour)
+    return {
+        "LONDON-NY OVERLAP": "overlap",
+        "NEW YORK": "ny",
+        "LONDON": "london",
+        "ASIAN/TOKYO": "asia",
+        "OFF-HOURS": "daily",
+    }[name]
 
 
 def classify_ph_session(

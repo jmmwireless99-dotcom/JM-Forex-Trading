@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.00"
-#property description "GOLD# PH sessions + EMA/RSI/BB signals. Indicator only — walang auto trade."
+#property version   "1.10"
+#property description "GOLD# PH daily/session colors + hour labels on candles + BUY/SELL arrows. Walang auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -29,6 +29,10 @@ input int    InpDaysBack            = 7;
 input bool   InpDrawDaily           = true;
 input bool   InpDrawSessions        = true;
 input bool   InpDrawOpenLines       = true;
+input bool   InpDrawPhHours         = true;   // "1PM" on the hour candle
+input bool   InpDrawHourLines       = true;
+input int    InpHourFontSize        = 8;
+input double InpHourLabelPadUsd     = 0.35;
 input int    InpAsiaStart           = 8;
 input int    InpAsiaEnd             = 16;
 input int    InpLondonStart         = 15;
@@ -42,7 +46,7 @@ input color  InpClrAsia             = C'210,160,50';
 input color  InpClrLondon           = C'50,110,210';
 input color  InpClrNy               = C'30,150,80';
 input color  InpClrOverlap          = C'170,70,190';
-input int    InpZoneAlpha           = 38;
+input int    InpZoneAlpha           = 62;
 
 input group "=== Chart signal (M1/M5 entry) ==="
 input int    InpEmaPeriod           = 50;
@@ -85,6 +89,7 @@ int hH1F=INVALID_HANDLE,hH1S=INVALID_HANDLE;
 int hH4F=INVALID_HANDLE,hH4S=INVALID_HANDLE;
 int hM15F=INVALID_HANDLE,hM15S=INVALID_HANDLE;
 int g_lastPhYmd=-1;
+int g_lastPhHour=-1;
 int g_gmtOff=0;
 string g_lastReason="";
 
@@ -118,6 +123,22 @@ string FormatPhClock(const datetime ph)
    return StringFormat("%d:%02d %s",h12,t.min,(t.hour>=12?"PM":"AM"));
 }
 
+string FormatPhHour(const int hour)
+{
+   int h=((hour%24)+24)%24;
+   int h12=h%12; if(h12==0) h12=12;
+   return StringFormat("%d%s",h12,(h>=12?"PM":"AM"));
+}
+
+color SessionColor(const int hour)
+{
+   if(InHourRange(hour,InpOverlapStart,InpOverlapEnd)) return InpClrOverlap;
+   if(InHourRange(hour,InpNyStart,InpNyEnd))           return InpClrNy;
+   if(InHourRange(hour,InpLondonStart,InpLondonEnd))   return InpClrLondon;
+   if(InHourRange(hour,InpAsiaStart,InpAsiaEnd))       return InpClrAsia;
+   return InpClrDaily;
+}
+
 string SideTxt(const int d)
 {
    if(d>0) return "BUY";
@@ -145,6 +166,17 @@ void WipePrefix()
    {
       string n=ObjectName(0,i,0,-1);
       if(StringFind(n,PREFIX)==0) ObjectDelete(0,n);
+   }
+}
+
+void WipeKind(const string kind)
+{
+   string p=PREFIX+kind;
+   int total=ObjectsTotal(0,0,-1);
+   for(int i=total-1;i>=0;i--)
+   {
+      string n=ObjectName(0,i,0,-1);
+      if(StringFind(n,p)==0) ObjectDelete(0,n);
    }
 }
 
@@ -208,6 +240,22 @@ void StyleVLine(const string name,const datetime t,const color clr,const ENUM_LI
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
 
+void StyleHourOnCandle(const string name,const datetime t,const double price,
+                       const string text,const color clr)
+{
+   if(ObjectFind(0,name)<0)
+      ObjectCreate(0,name,OBJ_TEXT,0,t,price);
+   ObjectMove(0,name,0,t,price);
+   ObjectSetString(0,name,OBJPROP_TEXT,text);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,InpHourFontSize);
+   ObjectSetString(0,name,OBJPROP_FONT,"Arial Bold");
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LOWER);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+   ObjectSetInteger(0,name,OBJPROP_BACK,false);
+}
+
 void StyleTag(const string name,const datetime t,const double price,
               const string text,const color clr)
 {
@@ -216,8 +264,8 @@ void StyleTag(const string name,const datetime t,const double price,
    ObjectMove(0,name,0,t,price);
    ObjectSetString(0,name,OBJPROP_TEXT,text);
    ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
-   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,8);
-   ObjectSetString(0,name,OBJPROP_FONT,"Consolas");
+   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,9);
+   ObjectSetString(0,name,OBJPROP_FONT,"Arial Bold");
    ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
@@ -261,11 +309,14 @@ void RedrawSessions(const double lo,const double hi)
       {
          datetime t1=PhToBroker(day0);
          datetime t2=PhToBroker(day0+24*3600-1);
-         StyleBox(PREFIX+"Z_DAY_"+ymd,t1,t2,lo,hi,InpClrDaily,18);
+         StyleBox(PREFIX+"Z_DAY_"+ymd,t1,t2,lo,hi,InpClrDaily,28);
          if(InpDrawOpenLines)
-            StyleVLine(PREFIX+"L_DAY_"+ymd,t1,clrSilver,STYLE_DOT);
+         {
+            StyleVLine(PREFIX+"L_DAY_"+ymd,t1,clrWhite,STYLE_SOLID);
+            ObjectSetInteger(0,PREFIX+"L_DAY_"+ymd,OBJPROP_WIDTH,2);
+         }
          StyleTag(PREFIX+"T_DAY_"+ymd,t1,hi+InpArrowOffsetUsd*2,
-                  StringFormat("PH DAY 00:00-23:59  %04d-%02d-%02d",dt.year,dt.mon,dt.day),clrSilver);
+                  StringFormat("DAILY PH 00:00-23:59  %04d-%02d-%02d",dt.year,dt.mon,dt.day),clrWhite);
       }
 
       if(!InpDrawSessions) continue;
@@ -279,6 +330,45 @@ void RedrawSessions(const double lo,const double hi)
       DrawSessionSpan(ymd+"_OVLP",day0,InpOverlapStart,InpOverlapEnd,
                       lo+(hi-lo)*0.04,hi-(hi-lo)*0.04,InpClrOverlap,
                       "LONDON-NY OVERLAP PH",true);
+   }
+}
+
+void DrawPhHourLabels(const datetime &time[],const double &high[],const double &low[],const int rates_total)
+{
+   WipeKind("HR_");
+   WipeKind("HL_");
+   if(!InpDrawPhHours || rates_total<10) return;
+
+   datetime phNow=BrokerToPh(TimeCurrent());
+   datetime startPh=PhMidnight(phNow)-(datetime)InpDaysBack*86400;
+   datetime startBr=PhToBroker(startPh);
+
+   int i0=0;
+   for(int i=0;i<rates_total;i++)
+   {
+      if(time[i]>=startBr) { i0=i; break; }
+   }
+
+   int lastH=-1;
+   int lastYmd=-1;
+   for(int i=i0;i<rates_total;i++)
+   {
+      datetime ph=BrokerToPh(time[i]);
+      MqlDateTime t; TimeToStruct(ph,t);
+      int ymd=t.year*10000+t.mon*100+t.day;
+      if(t.hour==lastH && ymd==lastYmd) continue;
+      lastH=t.hour;
+      lastYmd=ymd;
+
+      string key=StringFormat("%d_%02d",ymd,t.hour);
+      color clr=SessionColor(t.hour);
+      double px=high[i]+InpHourLabelPadUsd;
+      StyleHourOnCandle(PREFIX+"HR_"+key,time[i],px,FormatPhHour(t.hour),clr);
+      if(InpDrawHourLines)
+      {
+         StyleVLine(PREFIX+"HL_"+key,time[i],clr,STYLE_DOT);
+         ObjectSetInteger(0,PREFIX+"HL_"+key,OBJPROP_WIDTH,1);
+      }
    }
 }
 
@@ -411,9 +501,8 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Daily 00:00-23:59 PH | Asia ",IntegerToString(InpAsiaStart),":00-",IntegerToString(InpAsiaEnd),":00",
-           " | Lon ",IntegerToString(InpLondonStart),":00 | NY ",IntegerToString(InpNyStart),":00",
-           " | Overlap ",IntegerToString(InpOverlapStart),":00\n",
+           "Daily PH 00:00-23:59 | Asia gold | London blue | NY green | Overlap purple\n",
+           "Hour labels on candles: 12AM 1AM ... 1PM 2PM ... 11PM\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
            "  EMA",IntegerToString(InpEmaPeriod)," ",emaS,
@@ -624,10 +713,13 @@ int OnCalculate(const int rates_total,
    double pad=MathMax(8.0,(hi-lo)*0.04);
    datetime phNow=BrokerToPh(TimeCurrent());
    int ymd=PhYmd(phNow);
-   if(ymd!=g_lastPhYmd || prev_calculated==0)
+   MqlDateTime phTm; TimeToStruct(phNow,phTm);
+   if(ymd!=g_lastPhYmd || phTm.hour!=g_lastPhHour || prev_calculated==0)
    {
       RedrawSessions(lo-pad,hi+pad);
+      DrawPhHourLabels(time,high,low,rates_total);
       g_lastPhYmd=ymd;
+      g_lastPhHour=phTm.hour;
    }
    DrawH4Sr();
    RefreshCards(time,high,low,BufBuy,BufSell,rates_total);
