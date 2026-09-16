@@ -100,10 +100,36 @@ def bb_bounce(
     bb_upper: float,
     bb_lower: float,
 ) -> bool:
+    """True bounce: one band only, close back inside on the bounce side of midline.
+
+    A dump/rally bar that spans both bands is not a bounce (sold the lows / bought the highs).
+    """
+    if bb_upper <= bb_lower:
+        return False
+    hit_low = low <= bb_lower
+    hit_up = high >= bb_upper
+    if hit_low and hit_up:
+        return False
+    rng = high - low
+    if rng <= 0:
+        return False
+    mid = 0.5 * (bb_upper + bb_lower)
     if side == "BUY":
-        return low <= bb_lower and close > bb_lower and close > open_
+        if not hit_low:
+            return False
+        if close <= bb_lower or close <= open_:
+            return False
+        if close > mid:
+            return False
+        return (high - close) / rng >= 0.28
     if side == "SELL":
-        return high >= bb_upper and close < bb_upper and close < open_
+        if not hit_up:
+            return False
+        if close >= bb_upper or close >= open_:
+            return False
+        if close < mid:
+            return False
+        return (close - low) / rng >= 0.28
     return False
 
 

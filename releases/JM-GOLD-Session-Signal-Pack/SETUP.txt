@@ -19,7 +19,7 @@ SIGNAL FLOW (closed M5 candle)
 1. EMA 50 side     close vs gold bias line
 2. Candle confirm  bull = BUY, bear = SELL
 3. RSI 14          BUY 45-70 rising / SELL 30-55 falling
-4. BB bounce       wick to band, close back inside
+4. BB bounce       wick ONE band only, close back inside (hindi dump bar)
 5. H1 trend        same side
 
 Gamitin ang CANDLE chart (hindi line chart) para makita ang BB wick.

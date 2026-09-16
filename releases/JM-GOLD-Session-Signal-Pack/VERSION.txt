@@ -1,7 +1,7 @@
 JM-GOLD-Session-Signal-Pack
-Built: 2026-09-16T11:14:24Z
+Built: 2026-09-16T11:17:30Z
 Indicator: JM_GOLD_Session_Signal_v1.mq5
-Version: 1.27
+Version: 1.28
 Templates: JM_GOLD_Session_M5.tpl, JM_GOLD_Session_M1.tpl
 NO ORDERS — visual + CSV reason log only
 Copy mq5 → MQL5\\Indicators\\

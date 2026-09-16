@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.27"
-#property description "EMA50 bias line. Lime BUY / red SELL text on confirmed dots. No auto trade."
+#property version   "1.28"
+#property description "Stricter BB bounce so dump bars are not SELL. Lime BUY / red SELL. No auto trade."
 #property indicator_chart_window
 #property indicator_buffers 3
 #property indicator_plots   3
@@ -244,6 +244,35 @@ int HtfSide(const double fast,const double slow)
    if(fast>slow) return 1;
    if(fast<slow) return -1;
    return 0;
+}
+
+bool BbBounce(const int side,const double hi,const double lo,const double cl,const double op,
+              const double bbU,const double bbL)
+{
+   if(bbU<=bbL) return false;
+   bool hitLow=(lo<=bbL);
+   bool hitUp=(hi>=bbU);
+   if(hitLow && hitUp) return false;
+   double rng=hi-lo;
+   if(rng<=0.0) return false;
+   double mid=0.5*(bbU+bbL);
+   if(side>0)
+   {
+      if(!hitLow) return false;
+      if(cl<=bbL || cl<=op) return false;
+      if(cl>mid) return false;
+      if((hi-cl)/rng<0.28) return false;
+      return true;
+   }
+   if(side<0)
+   {
+      if(!hitUp) return false;
+      if(cl>=bbU || cl>=op) return false;
+      if(cl<mid) return false;
+      if((cl-lo)/rng<0.28) return false;
+      return true;
+   }
+   return false;
 }
 
 void StyleBox(const string name,const datetime t1,const datetime t2,
@@ -762,8 +791,8 @@ bool EvalBar(const int i,const datetime &time[],
    bool bear=close[i]<open[i];
    candleTag=bull?"BULL":(bear?"BEAR":"DOJI");
 
-   bool bbBuy=(low[i]<=bbL && close[i]>bbL && bull);
-   bool bbSell=(high[i]>=bbU && close[i]<bbU && bear);
+   bool bbBuy=BbBounce(1,high[i],low[i],close[i],open[i],bbU,bbL);
+   bool bbSell=BbBounce(-1,high[i],low[i],close[i],open[i],bbU,bbL);
    bbTag=bbBuy?"LOWER_BOUNCE":(bbSell?"UPPER_BOUNCE":"NONE");
 
    bool rsiBuy=(rsi>=InpRsiBuyMin && rsi<=InpRsiBuyMax && rsi>rsiPrev);

@@ -48,7 +48,8 @@ def test_m1_template_exists():
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.27"' in mq5
+    assert '#property version   "1.28"' in mq5
+    assert "BbBounce" in mq5
     assert "BufBias" in mq5
     assert "DrawBiasLabel" in mq5
     assert "MarkSignal" in mq5
@@ -150,6 +151,19 @@ def test_h4_and_m15_optional_so_entries_are_not_starved():
 def test_bb_buy_bounce():
     assert bb_bounce("BUY", 10.4, 9.9, 10.2, 10.05, bb_upper=10.5, bb_lower=10.0) is True
     assert bb_bounce("BUY", 10.4, 10.1, 10.2, 10.05, bb_upper=10.5, bb_lower=10.0) is False
+
+
+def test_bb_rejects_dump_bar_that_spans_both_bands():
+    # Wide bear candle tags upper AND lower — sold the lows, not a rejection.
+    assert bb_bounce("SELL", 10.55, 9.95, 10.05, 10.40, bb_upper=10.50, bb_lower=10.00) is False
+    assert bb_bounce("BUY", 10.55, 9.95, 10.45, 10.10, bb_upper=10.50, bb_lower=10.00) is False
+
+
+def test_bb_sell_true_upper_rejection():
+    # Wick upper band, bear close still in the upper half, did not tag lower.
+    assert bb_bounce("SELL", 10.52, 10.28, 10.35, 10.42, bb_upper=10.50, bb_lower=10.00) is True
+    # Close at the floor of the bar = dump, reject.
+    assert bb_bounce("SELL", 10.52, 10.20, 10.22, 10.45, bb_upper=10.50, bb_lower=10.00) is False
 
 
 def test_reason_and_card_saved_for_later_ea():
