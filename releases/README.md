@@ -46,7 +46,7 @@ PH session zones + EMA/RSI/BB arrows on GOLD#. Validate visually before any EA.
 | **Session Signal ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-session-signal.zip |
 | GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-Session-Signal-Pack.zip |
 
-Copy `JM_GOLD_Session_Signal_v1.mq5` → `MQL5\Indicators\` (not Experts). Rebuild: `./scripts/build-gold-session-signal-pack.sh`
+Copy `JM_GOLD_Session_Signal_v1.mq5` → `MQL5\Indicators\`, F7, then copy `Templates\*.tpl` → `MQL5\Profiles\Templates\` and load **JM_GOLD_Session_M5**. Rebuild: `./scripts/build-gold-session-signal-pack.sh`
 
 ---
 

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.gold_session_signal import (
     bb_bounce,
@@ -10,6 +11,30 @@ from app.gold_session_signal import (
     signal_card,
     signal_passes,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+TPL = ROOT / "mt5" / "Templates"
+
+
+def test_m5_template_is_gold_session_view():
+    text = (TPL / "JM_GOLD_Session_M5.tpl").read_text(encoding="utf-8")
+    assert "symbol=GOLD#" in text
+    assert "period=5" in text
+    assert "path=JM_GOLD_Session_Signal_v1" in text
+    assert "InpDrawPhHours=true" in text
+    assert "InpDrawDaily=true" in text
+    assert "InpDrawSessions=true" in text
+    assert "arrow=233" in text  # BUY
+    assert "arrow=234" in text  # SELL
+    assert "days=1" in text  # MT5 daily period separators
+
+
+def test_m1_template_exists():
+    text = (TPL / "JM_GOLD_Session_M1.tpl").read_text(encoding="utf-8")
+    assert "symbol=GOLD#" in text
+    assert "period=1" in text
+    assert "path=JM_GOLD_Session_Signal_v1" in text
+    assert "InpShowSignalCards=false" in text
 
 
 def test_ph_hour_label_on_candle():

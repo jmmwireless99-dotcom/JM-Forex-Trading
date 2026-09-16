@@ -23,10 +23,20 @@ DALAWANG TRABAHO
 INSTALL
 -------
 1. Copy JM_GOLD_Session_Signal_v1.mq5 → MQL5\Indicators\
-2. MetaEditor → F7 (0 errors)
-3. GOLD# chart, M5 (or M1)
-4. Navigator → Indicators → i-drag sa chart (HINDI Experts)
-5. Allow DLL: hindi kailangan. CSV isusulat sa MQL5\Files\
+2. MetaEditor → F7 (0 errors) — kailangan muna .ex5 bago template
+3. Copy Templates\*.tpl → MQL5\Profiles\Templates\
+4. GOLD# chart → right-click → Templates → JM_GOLD_Session_M5
+   (M1 template: JM_GOLD_Session_M1)
+5. CSV: MQL5\Files\JM_GOLD_Session_Signal_v1.csv
+
+TEMPLATE FILES
+--------------
+  Templates/JM_GOLD_Session_M5.tpl
+  Templates/JM_GOLD_Session_M1.tpl
+  Templates/APPLY-TEMPLATE.txt
+
+I-load ang template para hindi mo buuin palagi ang view
+(daily band, session colors, PH 1PM/2PM sa kandila, arrows).
 
 SIGNAL CARD
 -----------
