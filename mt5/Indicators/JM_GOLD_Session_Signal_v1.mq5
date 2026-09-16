@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.24"
-#property description "PH hour on top of each hour candle + BUY/SELL arrows. Indicator only, no auto trade."
+#property version   "1.25"
+#property description "Small BUY/SELL dots on confirmed signal only. Indicator, no auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -13,15 +13,16 @@
 #property indicator_label1  "BUY"
 #property indicator_type1   DRAW_ARROW
 #property indicator_color1  clrAqua
-#property indicator_width1  3
+#property indicator_width1  1
 
 #property indicator_label2  "SELL"
 #property indicator_type2   DRAW_ARROW
 #property indicator_color2  clrMagenta
-#property indicator_width2  3
+#property indicator_width2  1
 
 #define PREFIX "JMSS_"
 #define CSV_NAME "JM_GOLD_Session_Signal_v1.csv"
+#define DOT_CODE 159
 
 input group "=== PH sessions (UTC+8) ==="
 input int    InpPhUtcOffset         = 8;
@@ -57,8 +58,8 @@ input double InpRsiSellMin          = 30.0;
 input double InpRsiSellMax          = 55.0;
 input int    InpBbPeriod            = 20;
 input double InpBbDev               = 2.0;
-input double InpArrowOffsetUsd      = 0.45;
-input int    InpMinBarsBetween      = 2;
+input double InpArrowOffsetUsd      = 0.40;
+input int    InpMinBarsBetween      = 6;
 input int    InpMaxLabels           = 25;
 
 input group "=== MTF filters (off = display only) ==="
@@ -69,13 +70,13 @@ input int    InpH1Slow              = 50;
 input int    InpM15Fast             = 9;
 input int    InpM15Slow             = 21;
 input bool   InpRequireEma          = true;
-input bool   InpRequireRsi          = false;
-input bool   InpRequireBb           = false;
+input bool   InpRequireRsi          = true;
+input bool   InpRequireBb           = true;
 input bool   InpRequireCandle       = true;
-input bool   InpRequireH1           = false;
+input bool   InpRequireH1           = true;
 input bool   InpRequireM15          = false;
 input bool   InpRequireH4           = false;
-input bool   InpEasyArrows          = true;   // EMA + candle only so arrows are visible while validating
+input bool   InpEasyArrows          = false;  // true = EMA+candle flood; false = confirmed signal only
 
 input group "=== Display / log ==="
 input bool   InpShowPanel           = true;
@@ -465,30 +466,6 @@ void RefreshHourLabels()
    DrawPhHourLabels(t,n);
 }
 
-void DrawObjArrow(const datetime t,const double price,const int dir)
-{
-   string n=PREFIX+"AR_"+TimeToString(t,TIME_DATE|TIME_MINUTES);
-   if(ObjectFind(0,n)<0)
-      ObjectCreate(0,n,OBJ_ARROW,0,t,price);
-   ObjectMove(0,n,0,t,price);
-   ObjectSetInteger(0,n,OBJPROP_WIDTH,3);
-   ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
-   ObjectSetInteger(0,n,OBJPROP_BACK,false);
-   ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
-   if(dir>0)
-   {
-      ObjectSetInteger(0,n,OBJPROP_ARROWCODE,233);
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
-      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_TOP);
-   }
-   else
-   {
-      ObjectSetInteger(0,n,OBJPROP_ARROWCODE,234);
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
-      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_BOTTOM);
-   }
-}
-
 void DrawH4Sr()
 {
    if(!InpDrawH4Sr) return;
@@ -618,8 +595,9 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Yellow PH hour sa TAAS ng candle  |  BUY aqua  SELL magenta  |  Easy arrows=",
+           "Dot = confirmed signal only (closed bar). Easy flood=",
            (InpEasyArrows?"ON":"off"),"\n",
+           "Flow: 1 EMA50 side  2 candle  3 RSI zone+slope  4 BB bounce  5 H1 trend\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
            "  EMA",IntegerToString(InpEmaPeriod)," ",emaS,
@@ -641,14 +619,14 @@ int OnInit()
 {
    SetIndexBuffer(0,BufBuy,INDICATOR_DATA);
    SetIndexBuffer(1,BufSell,INDICATOR_DATA);
-   PlotIndexSetInteger(0,PLOT_ARROW,233);
-   PlotIndexSetInteger(1,PLOT_ARROW,234);
+   PlotIndexSetInteger(0,PLOT_ARROW,DOT_CODE);
+   PlotIndexSetInteger(1,PLOT_ARROW,DOT_CODE);
    PlotIndexSetDouble(0,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    PlotIndexSetDouble(1,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    ArraySetAsSeries(BufBuy,false);
    ArraySetAsSeries(BufSell,false);
-   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,3);
-   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,3);
+   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,1);
+   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,1);
    ChartSetInteger(0,CHART_FOREGROUND,false);
    ChartRedraw(0);
 
@@ -825,7 +803,6 @@ int OnCalculate(const int rates_total,
 
       if(dir>0) BufBuy[i]=low[i]-InpArrowOffsetUsd;
       else      BufSell[i]=high[i]+InpArrowOffsetUsd;
-      DrawObjArrow(time[i],(dir>0?low[i]:high[i]),dir);
 
       if(InpLogCsv)
          CsvAppend(time[i],ph,clock,sess,side,close[i],h4s,h1s,m15s,emaS,rsiV,bbTag,candleTag,reason);

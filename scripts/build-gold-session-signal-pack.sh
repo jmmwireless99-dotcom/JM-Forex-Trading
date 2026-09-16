@@ -15,7 +15,7 @@ cat > "$SRC/VERSION.txt" <<EOF
 JM-GOLD-Session-Signal-Pack
 Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Indicator: JM_GOLD_Session_Signal_v1.mq5
-Version: 1.24
+Version: 1.25
 Templates: JM_GOLD_Session_M5.tpl, JM_GOLD_Session_M1.tpl
 NO ORDERS — visual + CSV reason log only
 Copy mq5 → MQL5\\\\Indicators\\\\

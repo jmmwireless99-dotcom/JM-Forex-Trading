@@ -1,23 +1,13 @@
-JM GOLD SESSION VIEW — MT5 templates (v1.22)
-============================================
+JM GOLD SESSION VIEW v1.25
+==========================
 
-Gaya ng sample: yellow PH oras sa taas ng candle + cyan BUY / magenta SELL arrows.
+Maliit na DOT lang (hindi malaking arrow).
+Dot = confirmed signal: EMA + candle + RSI + BB bounce + H1.
 
-  JM_GOLD_Session_M5.tpl   ← gamitin ito
+  JM_GOLD_Session_M5.tpl   <- gamitin
   JM_GOLD_Session_M1.tpl
 
-INSTALL
--------
-1. Copy JM_GOLD_Session_Signal_v1.mq5 → MQL5\Indicators\
-2. MetaEditor → F7
-3. Copy both .tpl → MQL5\Profiles\Templates\
-4. GOLD# chart → Indicators List → DELETE old indicator
-5. Right-click → Templates → JM_GOLD_Session_M5
-
-ANO ANG NASA VIEW
------------------
-Black chart, white bull / red bear candles
-Yellow PH hours sa TAAS ng bawat hour candle (8AM … 1PM … 11PM)
-BUY ▲ cyan    SELL ▼ magenta
-ASIAN / LONDON / NEW YORK / OVERLAP names
-Walang EA, walang order
+1. mq5 → MQL5\Indicators\  (F7)
+2. tpl → MQL5\Profiles\Templates\
+3. Delete old indicator
+4. Templates → JM_GOLD_Session_M5

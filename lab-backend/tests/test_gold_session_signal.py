@@ -24,13 +24,12 @@ def test_m5_template_is_gold_session_view():
     assert "InpDrawPhHours=true" in text
     assert "InpDrawDaily=true" in text
     assert "InpDrawSessions=true" in text
-    assert "arrow=233" in text  # BUY
-    assert "arrow=234" in text  # SELL
+    assert "arrow=159" in text  # small dot, BUY and SELL
     assert "days=1" in text  # MT5 daily period separators
-    assert "InpEasyArrows=true" in text
-    assert "InpRequireRsi=false" in text
-    assert "InpRequireBb=false" in text
-    assert "InpRequireH1=false" in text
+    assert "InpEasyArrows=false" in text
+    assert "InpRequireRsi=true" in text
+    assert "InpRequireBb=true" in text
+    assert "InpRequireH1=true" in text
     assert "background_color=0" in text
     assert "color=16776960" in text  # aqua BUY
     assert "color=16711935" in text  # magenta SELL
@@ -43,13 +42,16 @@ def test_m1_template_exists():
     assert "period=1" in text
     assert "path=JM_GOLD_Session_Signal_v1" in text
     assert "InpShowSignalCards=false" in text
-    assert "InpEasyArrows=true" in text
+    assert "InpEasyArrows=false" in text
 
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.24"' in mq5
-    assert 'InpEasyArrows          = true' in mq5
+    assert '#property version   "1.25"' in mq5
+    assert 'InpEasyArrows          = false' in mq5
+    assert 'InpRequireRsi          = true' in mq5
+    assert 'InpRequireBb           = true' in mq5
+    assert 'InpRequireH1           = true' in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
     assert '"NEW YORK"' in mq5
@@ -57,9 +59,7 @@ def test_indicator_draws_names_hours_and_easy_arrows():
     assert "StyleHourOnCandle" in mq5
     assert "HourRowY" in mq5
     assert "clrYellow" in mq5
-    assert "clrAqua" in mq5
-    assert "clrMagenta" in mq5
-    assert "DrawObjArrow" in mq5
+    assert "DOT_CODE 159" in mq5
     assert "VisTop()" in mq5
 
 
