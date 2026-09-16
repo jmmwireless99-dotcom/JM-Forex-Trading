@@ -27,6 +27,10 @@ def test_m5_template_is_gold_session_view():
     assert "arrow=233" in text  # BUY
     assert "arrow=234" in text  # SELL
     assert "days=1" in text  # MT5 daily period separators
+    assert "InpEasyArrows=true" in text
+    assert "InpRequireRsi=false" in text
+    assert "InpRequireBb=false" in text
+    assert "InpRequireH1=false" in text
 
 
 def test_m1_template_exists():
@@ -35,6 +39,35 @@ def test_m1_template_exists():
     assert "period=1" in text
     assert "path=JM_GOLD_Session_Signal_v1" in text
     assert "InpShowSignalCards=false" in text
+    assert "InpEasyArrows=true" in text
+
+
+def test_indicator_draws_names_hours_and_easy_arrows():
+    mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
+    assert '#property version   "1.20"' in mq5
+    assert 'InpEasyArrows          = true' in mq5
+    assert '"ASIAN"' in mq5
+    assert '"LONDON"' in mq5
+    assert '"NEW YORK"' in mq5
+    assert '"OVERLAP"' in mq5
+    assert "StyleHourOnCandle" in mq5
+    assert "DrawObjArrow" in mq5
+    assert "VisTop()" in mq5
+
+
+def test_easy_arrows_ignore_rsi_bb_h1():
+    ok = signal_passes(
+        "BUY",
+        ema_side="BUY",
+        rsi_ok=False,
+        bb_ok=False,
+        candle=True,
+        h4="SELL",
+        h1="SELL",
+        m15="SELL",
+        easy_arrows=True,
+    )
+    assert ok is True
 
 
 def test_ph_hour_label_on_candle():

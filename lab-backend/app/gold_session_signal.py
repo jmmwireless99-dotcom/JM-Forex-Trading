@@ -140,7 +140,14 @@ def signal_passes(
     require_h4=False,
     require_h1=True,
     require_m15=False,
+    easy_arrows=False,
 ) -> bool:
+    if easy_arrows:
+        require_rsi = False
+        require_bb = False
+        require_h1 = False
+        require_m15 = False
+        require_h4 = False
     checks = []
     if require_ema:
         checks.append(ema_side == side)

@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.10"
-#property description "GOLD# PH daily/session colors + hour labels on candles + BUY/SELL arrows. Walang auto trade."
+#property version   "1.20"
+#property description "PH session names on each band, hour labels on candle wicks, BUY/SELL arrows. Walang auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -31,8 +31,8 @@ input bool   InpDrawSessions        = true;
 input bool   InpDrawOpenLines       = true;
 input bool   InpDrawPhHours         = true;   // "1PM" on the hour candle
 input bool   InpDrawHourLines       = true;
-input int    InpHourFontSize        = 8;
-input double InpHourLabelPadUsd     = 0.35;
+input int    InpHourFontSize        = 10;
+input double InpHourLabelPadUsd     = 1.50;
 input int    InpAsiaStart           = 8;
 input int    InpAsiaEnd             = 16;
 input int    InpLondonStart         = 15;
@@ -69,16 +69,17 @@ input int    InpH1Slow              = 50;
 input int    InpM15Fast             = 9;
 input int    InpM15Slow             = 21;
 input bool   InpRequireEma          = true;
-input bool   InpRequireRsi          = true;
-input bool   InpRequireBb           = true;
+input bool   InpRequireRsi          = false;
+input bool   InpRequireBb           = false;
 input bool   InpRequireCandle       = true;
-input bool   InpRequireH1           = true;
+input bool   InpRequireH1           = false;
 input bool   InpRequireM15          = false;
 input bool   InpRequireH4           = false;
+input bool   InpEasyArrows          = true;   // EMA + candle only so arrows are visible while validating
 
 input group "=== Display / log ==="
 input bool   InpShowPanel           = true;
-input bool   InpShowSignalCards     = true;
+input bool   InpShowSignalCards     = false;
 input bool   InpLogCsv              = true;
 input bool   InpDrawH4Sr            = true;
 
@@ -137,6 +138,30 @@ color SessionColor(const int hour)
    if(InHourRange(hour,InpLondonStart,InpLondonEnd))   return InpClrLondon;
    if(InHourRange(hour,InpAsiaStart,InpAsiaEnd))       return InpClrAsia;
    return InpClrDaily;
+}
+
+double VisTop()
+{
+   double mx=ChartGetDouble(0,CHART_PRICE_MAX);
+   double mn=ChartGetDouble(0,CHART_PRICE_MIN);
+   if(mx<=mn || mx<=0)
+      return SymbolInfoDouble(_Symbol,SYMBOL_BID)+8.0;
+   return mx-(mx-mn)*0.05;
+}
+
+void VisibleBand(double &lo,double &hi)
+{
+   double mn=ChartGetDouble(0,CHART_PRICE_MIN);
+   double mx=ChartGetDouble(0,CHART_PRICE_MAX);
+   if(mx<=mn || mx<=0)
+   {
+      double bid=SymbolInfoDouble(_Symbol,SYMBOL_BID);
+      lo=bid-40.0; hi=bid+40.0;
+      return;
+   }
+   double pad=MathMax(3.0,(mx-mn)*0.20);
+   lo=mn-pad;
+   hi=mx+pad;
 }
 
 string SideTxt(const int d)
@@ -240,35 +265,50 @@ void StyleVLine(const string name,const datetime t,const color clr,const ENUM_LI
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
 
+void StyleSessionName(const string name,const datetime t,const string text,const color bandClr)
+{
+   double y=VisTop();
+   if(ObjectFind(0,name)<0)
+      ObjectCreate(0,name,OBJ_TEXT,0,t,y);
+   ObjectMove(0,name,0,t,y);
+   ObjectSetString(0,name,OBJPROP_TEXT,text);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clrWhite);
+   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,13);
+   ObjectSetString(0,name,OBJPROP_FONT,"Arial");
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(0,name,OBJPROP_BACK,false);
+   ObjectSetInteger(0,name,OBJPROP_BGCOLOR,(long)ColorToARGB(bandClr,180));
+}
+
+double HourPad()
+{
+   double mx=ChartGetDouble(0,CHART_PRICE_MAX);
+   double mn=ChartGetDouble(0,CHART_PRICE_MIN);
+   double vis=(mx>mn && mx>0)?(mx-mn)*0.018:InpHourLabelPadUsd;
+   return MathMax(InpHourLabelPadUsd,vis);
+}
+
 void StyleHourOnCandle(const string name,const datetime t,const double price,
-                       const string text,const color clr)
+                       const string text)
 {
    if(ObjectFind(0,name)<0)
       ObjectCreate(0,name,OBJ_TEXT,0,t,price);
    ObjectMove(0,name,0,t,price);
    ObjectSetString(0,name,OBJPROP_TEXT,text);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clrWhite);
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,InpHourFontSize);
-   ObjectSetString(0,name,OBJPROP_FONT,"Arial Bold");
+   ObjectSetString(0,name,OBJPROP_FONT,"Arial");
    ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LOWER);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
 }
 
-void StyleTag(const string name,const datetime t,const double price,
-              const string text,const color clr)
+void StyleTag(const string name,const datetime t,const string text,const color clr)
 {
-   if(ObjectFind(0,name)<0)
-      ObjectCreate(0,name,OBJ_TEXT,0,t,price);
-   ObjectMove(0,name,0,t,price);
-   ObjectSetString(0,name,OBJPROP_TEXT,text);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
-   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,9);
-   ObjectSetString(0,name,OBJPROP_FONT,"Arial Bold");
-   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
-   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
-   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+   StyleSessionName(name,t,text,clr);
 }
 
 void DrawSessionSpan(const string key,const datetime ph0,const int startH,const int endH,
@@ -287,7 +327,9 @@ void DrawSessionSpan(const string key,const datetime ph0,const int startH,const 
    datetime t2=PhToBroker(b);
    if(t2<=t1) t2=t1+60;
    StyleBox(PREFIX+"Z_"+key,t1,t2,lo,hi,clr,InpZoneAlpha);
-   StyleTag(PREFIX+"T_"+key,t1,hi,label,clr);
+   int nameShift=(int)((t2-t1)/10);
+   if(nameShift<180) nameShift=180;
+   StyleSessionName(PREFIX+"T_"+key,t1+(datetime)nameShift,label,clr);
    if(vline && InpDrawOpenLines)
       StyleVLine(PREFIX+"L_"+key,t1,clr,STYLE_DASH);
 }
@@ -302,7 +344,6 @@ void RedrawSessions(const double lo,const double hi)
    {
       datetime day0=today0-(datetime)d*86400;
       MqlDateTime dt; TimeToStruct(day0,dt);
-      if(dt.day_of_week==0 || dt.day_of_week==6) continue;
       string ymd=StringFormat("%04d%02d%02d",dt.year,dt.mon,dt.day);
 
       if(InpDrawDaily)
@@ -315,21 +356,17 @@ void RedrawSessions(const double lo,const double hi)
             StyleVLine(PREFIX+"L_DAY_"+ymd,t1,clrWhite,STYLE_SOLID);
             ObjectSetInteger(0,PREFIX+"L_DAY_"+ymd,OBJPROP_WIDTH,2);
          }
-         StyleTag(PREFIX+"T_DAY_"+ymd,t1,hi+InpArrowOffsetUsd*2,
-                  StringFormat("DAILY PH 00:00-23:59  %04d-%02d-%02d",dt.year,dt.mon,dt.day),clrWhite);
+         StyleTag(PREFIX+"T_DAY_"+ymd,t1+900,
+                  StringFormat("%04d-%02d-%02d",dt.year,dt.mon,dt.day),clrWhite);
       }
 
       if(!InpDrawSessions) continue;
 
-      DrawSessionSpan(ymd+"_ASIA",day0,InpAsiaStart,InpAsiaEnd,lo,hi,InpClrAsia,
-                      StringFormat("ASIAN/TOKYO  %02d:00-%02d:00 PH",InpAsiaStart,(InpAsiaEnd==0?24:InpAsiaEnd)),true);
-      DrawSessionSpan(ymd+"_LON",day0,InpLondonStart,InpLondonEnd,lo,hi,InpClrLondon,
-                      StringFormat("LONDON  %02d:00-%02d:00 PH",InpLondonStart,(InpLondonEnd==0?24:InpLondonEnd)),true);
-      DrawSessionSpan(ymd+"_NY",day0,InpNyStart,InpNyEnd,lo,hi,InpClrNy,
-                      StringFormat("NEW YORK  %02d:00-%02d:00 PH",InpNyStart,(InpNyEnd==0?24:InpNyEnd)),true);
+      DrawSessionSpan(ymd+"_ASIA",day0,InpAsiaStart,InpAsiaEnd,lo,hi,InpClrAsia,"ASIAN",true);
+      DrawSessionSpan(ymd+"_LON",day0,InpLondonStart,InpLondonEnd,lo,hi,InpClrLondon,"LONDON",true);
+      DrawSessionSpan(ymd+"_NY",day0,InpNyStart,InpNyEnd,lo,hi,InpClrNy,"NEW YORK",true);
       DrawSessionSpan(ymd+"_OVLP",day0,InpOverlapStart,InpOverlapEnd,
-                      lo+(hi-lo)*0.04,hi-(hi-lo)*0.04,InpClrOverlap,
-                      "LONDON-NY OVERLAP PH",true);
+                      lo+(hi-lo)*0.02,hi-(hi-lo)*0.02,InpClrOverlap,"OVERLAP",true);
    }
 }
 
@@ -362,14 +399,42 @@ void DrawPhHourLabels(const datetime &time[],const double &high[],const double &
 
       string key=StringFormat("%d_%02d",ymd,t.hour);
       color clr=SessionColor(t.hour);
-      double px=high[i]+InpHourLabelPadUsd;
-      StyleHourOnCandle(PREFIX+"HR_"+key,time[i],px,FormatPhHour(t.hour),clr);
+      double px=high[i]+HourPad();
+      StyleHourOnCandle(PREFIX+"HR_"+key,time[i],px,FormatPhHour(t.hour));
       if(InpDrawHourLines)
       {
          StyleVLine(PREFIX+"HL_"+key,time[i],clr,STYLE_DOT);
          ObjectSetInteger(0,PREFIX+"HL_"+key,OBJPROP_WIDTH,1);
       }
    }
+}
+
+void RelayoutNames()
+{
+   double y=VisTop();
+   int total=ObjectsTotal(0,0,-1);
+   for(int i=total-1;i>=0;i--)
+   {
+      string n=ObjectName(0,i,0,-1);
+      if(StringFind(n,PREFIX+"T_")!=0) continue;
+      datetime t=(datetime)ObjectGetInteger(0,n,OBJPROP_TIME);
+      ObjectMove(0,n,0,t,y);
+   }
+}
+
+void DrawObjArrow(const datetime t,const double price,const int dir)
+{
+   string n=PREFIX+"AR_"+TimeToString(t,TIME_DATE|TIME_MINUTES);
+   if(ObjectFind(0,n)<0)
+      ObjectCreate(0,n,OBJ_ARROW,0,t,price);
+   ObjectMove(0,n,0,t,price);
+   ObjectSetInteger(0,n,OBJPROP_ARROWCODE,(dir>0?233:234));
+   ObjectSetInteger(0,n,OBJPROP_COLOR,(dir>0?clrLime:clrTomato));
+   ObjectSetInteger(0,n,OBJPROP_WIDTH,4);
+   ObjectSetInteger(0,n,OBJPROP_ANCHOR,(dir>0?ANCHOR_TOP:ANCHOR_BOTTOM));
+   ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(0,n,OBJPROP_BACK,false);
+   ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
 }
 
 void DrawH4Sr()
@@ -501,8 +566,8 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Daily PH 00:00-23:59 | Asia gold | London blue | NY green | Overlap purple\n",
-           "Hour labels on candles: 12AM 1AM ... 1PM 2PM ... 11PM\n",
+           "Names: ASIAN / LONDON / NEW YORK / OVERLAP  |  Hours on candle wick  |  Easy arrows=",
+           (InpEasyArrows?"ON":"off"),"\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
            "  EMA",IntegerToString(InpEmaPeriod)," ",emaS,
@@ -530,7 +595,10 @@ int OnInit()
    PlotIndexSetDouble(1,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    ArraySetAsSeries(BufBuy,false);
    ArraySetAsSeries(BufSell,false);
-   IndicatorSetString(INDICATOR_SHORTNAME,"JM GOLD Session Signal v1");
+   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,4);
+   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,4);
+   ChartSetInteger(0,CHART_FOREGROUND,false);
+   ChartRedraw(0);
 
    hEma=iMA(_Symbol,_Period,InpEmaPeriod,0,MODE_EMA,PRICE_CLOSE);
    hRsi=iRSI(_Symbol,_Period,InpRsiPeriod,PRICE_CLOSE);
@@ -613,13 +681,21 @@ bool EvalBar(const int i,const datetime &time[],
    {
       int side=attempt;
       string sTxt=SideTxt(side);
-      if(InpRequireEma && emaS!=sTxt) continue;
-      if(InpRequireCandle && ((side>0 && !bull) || (side<0 && !bear))) continue;
-      if(InpRequireRsi && ((side>0 && !rsiBuy) || (side<0 && !rsiSell))) continue;
-      if(InpRequireBb && ((side>0 && !bbBuy) || (side<0 && !bbSell))) continue;
-      if(InpRequireH1 && h1s!=sTxt) continue;
-      if(InpRequireM15 && m15s!=sTxt) continue;
-      if(InpRequireH4 && h4s!=sTxt) continue;
+      if(InpEasyArrows)
+      {
+         if(InpRequireEma && emaS!=sTxt) continue;
+         if(InpRequireCandle && ((side>0 && !bull) || (side<0 && !bear))) continue;
+      }
+      else
+      {
+         if(InpRequireEma && emaS!=sTxt) continue;
+         if(InpRequireCandle && ((side>0 && !bull) || (side<0 && !bear))) continue;
+         if(InpRequireRsi && ((side>0 && !rsiBuy) || (side<0 && !rsiSell))) continue;
+         if(InpRequireBb && ((side>0 && !bbBuy) || (side<0 && !bbSell))) continue;
+         if(InpRequireH1 && h1s!=sTxt) continue;
+         if(InpRequireM15 && m15s!=sTxt) continue;
+         if(InpRequireH4 && h4s!=sTxt) continue;
+      }
 
       datetime ph=BrokerToPh(time[i]);
       MqlDateTime tm; TimeToStruct(ph,tm);
@@ -652,6 +728,7 @@ int OnCalculate(const int rates_total,
    {
       ArrayInitialize(BufBuy,EMPTY_VALUE);
       ArrayInitialize(BufSell,EMPTY_VALUE);
+      WipeKind("AR_");
       CsvEnsureHeader(true);
    }
 
@@ -696,6 +773,7 @@ int OnCalculate(const int rates_total,
 
       if(dir>0) BufBuy[i]=low[i]-InpArrowOffsetUsd;
       else      BufSell[i]=high[i]+InpArrowOffsetUsd;
+      DrawObjArrow(time[i],(dir>0?low[i]:high[i]),dir);
 
       if(InpLogCsv)
          CsvAppend(time[i],ph,clock,sess,side,close[i],h4s,h1s,m15s,emaS,rsiV,bbTag,candleTag,reason);
@@ -707,20 +785,19 @@ int OnCalculate(const int rates_total,
    BufBuy[rates_total-1]=EMPTY_VALUE;
    BufSell[rates_total-1]=EMPTY_VALUE;
 
-   int n=MathMin(rates_total,2000);
-   double lo=low[ArrayMinimum(low,rates_total-n,n)];
-   double hi=high[ArrayMaximum(high,rates_total-n,n)];
-   double pad=MathMax(8.0,(hi-lo)*0.04);
+   double lo=0,hi=0;
+   VisibleBand(lo,hi);
    datetime phNow=BrokerToPh(TimeCurrent());
    int ymd=PhYmd(phNow);
    MqlDateTime phTm; TimeToStruct(phNow,phTm);
    if(ymd!=g_lastPhYmd || phTm.hour!=g_lastPhHour || prev_calculated==0)
    {
-      RedrawSessions(lo-pad,hi+pad);
+      RedrawSessions(lo,hi);
       DrawPhHourLabels(time,high,low,rates_total);
       g_lastPhYmd=ymd;
       g_lastPhHour=phTm.hour;
    }
+   RelayoutNames();
    DrawH4Sr();
    RefreshCards(time,high,low,BufBuy,BufSell,rates_total);
 
@@ -739,5 +816,15 @@ int OnCalculate(const int rates_total,
    Panel(close[i],emaS,rsiV,h4s,h1s,m15s);
 
    return rates_total;
+}
+
+void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
+{
+   if(id!=CHARTEVENT_CHART_CHANGE) return;
+   double lo=0,hi=0;
+   VisibleBand(lo,hi);
+   RedrawSessions(lo,hi);
+   RelayoutNames();
+   ChartRedraw(0);
 }
 //+------------------------------------------------------------------+

@@ -1,7 +1,7 @@
-JM GOLD SESSION VIEW — MT5 templates
-====================================
+JM GOLD SESSION VIEW — MT5 templates (v1.20)
+============================================
 
-Dalawang template para sa view: daily + session colors + PH oras sa kandila + BUY/SELL arrows.
+View: session names sa bawat column + PH oras sa candle wick + BUY/SELL arrows.
 
   JM_GOLD_Session_M5.tpl   ← gamitin ito (scalp)
   JM_GOLD_Session_M1.tpl   ← mas sikip, mas kaunting araw
@@ -13,17 +13,17 @@ INSTALL (sunod-sunod)
 3. Copy both .tpl → MQL5\Profiles\Templates\
    (File → Open Data Folder → MQL5\Profiles\Templates)
 4. Buksan ang GOLD# chart
-5. Right-click chart → Templates → JM_GOLD_Session_M5
+5. Indicators List → DELETE old JM_GOLD_Session_Signal kung naka-attach
+6. Right-click chart → Templates → JM_GOLD_Session_M5
    (o Charts → Template → Load Template)
 
 Kung wala sa list: restart MT5 pagkatapos i-copy ang .tpl.
 
 ANO ANG NASA VIEW
 -----------------
-Daily PH 00:00–23:59     puting midnight line
-Asia gold / London asul / NY berde / Overlap lila
-Hour labels sa kandila: 12AM … 1PM … 11PM
-BUY ▲  SELL ▼
+ASIAN / LONDON / NEW YORK / OVERLAP names sa taas ng bawat kulay
+Hour labels sa candle wick: 12AM … 1PM … 11PM (puti)
+BUY ▲  SELL ▼  (Easy arrows = EMA + candle)
 Dark chart, period separators ON, ask line ON
 Walang EA, walang order
 

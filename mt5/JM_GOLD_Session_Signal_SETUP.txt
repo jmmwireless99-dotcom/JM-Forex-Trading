@@ -1,42 +1,49 @@
-JM GOLD SESSION SIGNAL v1 — indicator only
-==========================================
+JM GOLD SESSION SIGNAL v1.20 — indicator only
+=============================================
 
 Hindi EA. Walang OrderSend. Visual validation muna sa GOLD# chart.
 
-DALAWANG TRABAHO
-----------------
-1) PH sessions (UTC+8)
-   Daily 00:00–23:59 (white midnight line)
-   Asian/Tokyo  08:00–16:00 PH  GOLD
-   London       15:00–00:00 PH  BLUE
-   New York     20:00–05:00 PH  GREEN
-   London–NY overlap 20:00–00:00 PH  PURPLE
-   PH hour labels ON the candles: 12AM, 1AM, ... 1PM, 2PM, ... 11PM
-   (kulay ng text = kulay ng session)
+ANO ANG DAPAT MO MAKITA
+-----------------------
+1) Name sa bawat kulay na column
+   ASIAN    gold
+   LONDON   asul
+   NEW YORK berde
+   OVERLAP  lila
+2) PH oras sa dulo ng candle wick (puti): 12AM, 1AM, ... 1PM, 2PM
+3) BUY ▲ (lime) / SELL ▼ (pula) arrows — Easy arrows ON (EMA + candle)
 
-2) Signal arrows (closed bar, hindi nagre-repaint)
-   Chart TF = entry (M5 recommended, M1 OK)
-   EMA 50 trend + RSI momentum + Bollinger bounce + candle confirm
-   H1 trend filter ON by default
-   H4 + M15 = display / optional filter (OFF by default para hindi gutom)
+Kung wala pa ring name / oras / arrow: lumang .ex5 ang naka-attach.
+Tanggalin ang indicator sa chart, F7 ulit, tapos i-load ang M5 template.
+
+PH SESSIONS (UTC+8)
+-------------------
+Daily 00:00–23:59 (white midnight line)
+Asian/Tokyo  08:00–16:00 PH
+London       15:00–00:00 PH
+New York     20:00–05:00 PH
+London–NY overlap 20:00–00:00 PH
+
+SIGNAL (closed bar, hindi nagre-repaint)
+----------------------------------------
+Default Easy arrows = EMA 50 + candle confirm lang para may makita kang arrow.
+I-off InpEasyArrows pag gusto mo na ng RSI + BB + H1 filter.
 
 INSTALL
 -------
 1. Copy JM_GOLD_Session_Signal_v1.mq5 → MQL5\Indicators\
 2. MetaEditor → F7 (0 errors) — kailangan muna .ex5 bago template
 3. Copy Templates\*.tpl → MQL5\Profiles\Templates\
-4. GOLD# chart → right-click → Templates → JM_GOLD_Session_M5
+4. GOLD# chart → right-click chart → Indicators List → DELETE old session signal
+5. Right-click → Templates → JM_GOLD_Session_M5
    (M1 template: JM_GOLD_Session_M1)
-5. CSV: MQL5\Files\JM_GOLD_Session_Signal_v1.csv
+6. CSV: MQL5\Files\JM_GOLD_Session_Signal_v1.csv
 
 TEMPLATE FILES
 --------------
   Templates/JM_GOLD_Session_M5.tpl
   Templates/JM_GOLD_Session_M1.tpl
   Templates/APPLY-TEMPLATE.txt
-
-I-load ang template para hindi mo buuin palagi ang view
-(daily band, session colors, PH 1PM/2PM sa kandila, arrows).
 
 SIGNAL CARD
 -----------
@@ -54,11 +61,10 @@ Columns: time, session, side, entry, h4, h1, m15, ema, rsi, bb, candle, reason
 
 PAANO I-VALIDATE
 ----------------
-1. Scroll history — arrows ba tumatama sa pullback/bounce?
-2. I-on InpRequireM15 o InpRequireH4 kung sobrang dami
-3. I-off InpRequireH1 kung sobrang konti
-4. Strategy Tester → Visual mode sa indicator (hindi Expert)
-5. Pag OK na ang arrows, saka natin i-convert sa EA (huwag muna)
+1. Scroll history — names ba nakasulat sa column? hours ba nasa wick? arrows ba may BUY/SELL?
+2. I-off InpEasyArrows, i-on InpRequireH1 kung gusto mas filter
+3. Strategy Tester → Visual mode sa indicator (hindi Expert)
+4. Pag OK na ang arrows, saka natin i-convert sa EA (huwag muna)
 
 HUWAG
 -----
