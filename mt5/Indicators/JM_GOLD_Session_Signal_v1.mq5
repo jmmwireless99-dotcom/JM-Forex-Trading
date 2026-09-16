@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.22"
-#property description "Yellow PH hour on top of each hour candle + cyan BUY / magenta SELL arrows. Walang auto trade."
+#property version   "1.23"
+#property description "PH hour on top of each hour candle + BUY/SELL arrows. Indicator only, no auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -249,7 +249,10 @@ void StyleBox(const string name,const datetime t1,const datetime t2,
    ObjectSetInteger(0,name,OBJPROP_BACK,true);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
-   ObjectSetInteger(0,name,OBJPROP_BGCOLOR,(long)ColorToARGB(clr,(uchar)MathMax(10,MathMin(alpha,120))));
+   uchar a=(uchar)alpha;
+   if(a<10) a=10;
+   if(a>120) a=120;
+   ObjectSetInteger(0,name,OBJPROP_BGCOLOR,(long)ColorToARGB(clr,a));
 }
 
 void StyleVLine(const string name,const datetime t,const color clr,const ENUM_LINE_STYLE st)
@@ -279,7 +282,8 @@ void StyleSessionName(const string name,const datetime t,const string text,const
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
-   ObjectSetInteger(0,name,OBJPROP_BGCOLOR,(long)ColorToARGB(bandClr,180));
+   if(bandClr==clrNONE)
+      ObjectSetInteger(0,name,OBJPROP_COLOR,clrYellow);
 }
 
 double HourRowY()
@@ -301,8 +305,7 @@ void StyleHourOnCandle(const string name,const datetime t,const double price,
    ObjectSetInteger(0,name,OBJPROP_COLOR,clrYellow);
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,InpHourFontSize);
    ObjectSetString(0,name,OBJPROP_FONT,"Arial");
-   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
-   ObjectSetDouble(0,name,OBJPROP_ANGLE,90.0);
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_UPPER);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
@@ -358,7 +361,7 @@ void RedrawSessions(const double lo,const double hi)
             StyleVLine(PREFIX+"L_DAY_"+ymd,t1,clrWhite,STYLE_SOLID);
             ObjectSetInteger(0,PREFIX+"L_DAY_"+ymd,OBJPROP_WIDTH,2);
          }
-         StyleTag(PREFIX+"T_DAY_"+ymd,t1+900,
+         StyleTag(PREFIX+"T_DAY_"+ymd,t1+(datetime)900,
                   StringFormat("%04d-%02d-%02d",dt.year,dt.mon,dt.day),clrWhite);
       }
 

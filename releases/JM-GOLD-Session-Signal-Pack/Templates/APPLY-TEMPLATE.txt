@@ -1,4 +1,4 @@
-JM GOLD SESSION VIEW — MT5 templates (v1.21)
+JM GOLD SESSION VIEW — MT5 templates (v1.22)
 ============================================
 
 Gaya ng sample: yellow PH oras sa taas ng candle + cyan BUY / magenta SELL arrows.
