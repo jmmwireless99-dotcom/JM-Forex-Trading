@@ -1,4 +1,4 @@
-JM GOLD SESSION SIGNAL v1.22 — indicator only
+JM GOLD SESSION SIGNAL v1.23 — indicator only
 =============================================
 
 Hindi EA. Walang OrderSend. Visual validation muna sa GOLD# chart.
@@ -32,7 +32,7 @@ I-off InpEasyArrows pag gusto mo na ng RSI + BB + H1 filter.
 INSTALL
 -------
 1. Copy JM_GOLD_Session_Signal_v1.mq5 → MQL5\Indicators\
-2. MetaEditor → F7 (0 errors)
+2. MetaEditor: buksan mula sa MQL5\Indicators\ (HUWAG Experts) → F7 (0 errors)
 3. Copy Templates\*.tpl → MQL5\Profiles\Templates\
 4. GOLD# chart → Indicators List → DELETE old session signal
 5. Right-click → Templates → JM_GOLD_Session_M5

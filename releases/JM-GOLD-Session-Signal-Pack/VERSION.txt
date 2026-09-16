@@ -1,5 +1,5 @@
 JM-GOLD-Session-Signal-Pack
-Built: 2026-09-16T10:47:44Z
+Built: 2026-09-16T10:48:00Z
 Indicator: JM_GOLD_Session_Signal_v1.mq5
 Version: 1.23
 Templates: JM_GOLD_Session_M5.tpl, JM_GOLD_Session_M1.tpl
