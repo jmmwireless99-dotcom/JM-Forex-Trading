@@ -4,20 +4,20 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.26"
-#property description "EMA50 bias line + small BUY/SELL dots on confirmed signal. No auto trade."
+#property version   "1.27"
+#property description "EMA50 bias line. Lime BUY / red SELL text on confirmed dots. No auto trade."
 #property indicator_chart_window
 #property indicator_buffers 3
 #property indicator_plots   3
 
 #property indicator_label1  "BUY"
 #property indicator_type1   DRAW_ARROW
-#property indicator_color1  clrAqua
+#property indicator_color1  clrLime
 #property indicator_width1  2
 
 #property indicator_label2  "SELL"
 #property indicator_type2   DRAW_ARROW
-#property indicator_color2  clrMagenta
+#property indicator_color2  clrRed
 #property indicator_width2  2
 
 #property indicator_label3  "BIAS"
@@ -102,6 +102,8 @@ int g_lastPhYmd=-1;
 int g_lastPhHour=-1;
 int g_gmtOff=0;
 string g_lastReason="";
+string g_lastSide="";
+string g_lastClock="";
 
 int BrokerGmtOff() { return (int)(TimeCurrent()-TimeGMT()); }
 datetime BrokerToPh(const datetime br) { return br - g_gmtOff + InpPhUtcOffset*3600; }
@@ -483,16 +485,16 @@ void MarkSignal(const datetime t,const double price,const int dir)
    if(dir>0)
    {
       ObjectSetString(0,n,OBJPROP_TEXT," BUY");
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrLime);
       ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
    }
    else
    {
       ObjectSetString(0,n,OBJPROP_TEXT," SELL");
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrRed);
       ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
    }
-   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,8);
+   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,12);
    ObjectSetString(0,n,OBJPROP_FONT,"Arial");
    ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
@@ -514,9 +516,9 @@ void DrawBiasLabel(const datetime t,const double ema,const string side)
    ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,n,OBJPROP_BACK,false);
    if(side=="BUY")
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrLime);
    else if(side=="SELL")
-      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrRed);
    else
       ObjectSetInteger(0,n,OBJPROP_COLOR,clrGold);
 }
@@ -650,10 +652,9 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Gold BIAS line = EMA",IntegerToString(InpEmaPeriod),
-           "  |  Aqua BUY dot under price  |  Magenta SELL dot above\n",
-           "Dot = confirmed signal only (closed bar). Easy flood=",
-           (InpEasyArrows?"ON":"off"),"\n",
+           "READ SIGNAL: lime BUY under candle  |  red SELL above candle\n",
+           "Gold line = BIAS only (not entry). LAST SIGNAL: ",
+           (g_lastSide==""?"none yet":g_lastSide+" at "+g_lastClock+" PH"),"\n",
            "Flow: 1 EMA50 side  2 candle  3 RSI zone+slope  4 BB bounce  5 H1 trend\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
@@ -892,6 +893,8 @@ int OnCalculate(const int rates_total,
          CsvAppend(time[i],ph,clock,sess,side,close[i],h4s,h1s,m15s,emaS,rsiV,bbTag,candleTag,reason);
 
       g_lastReason=reason;
+      g_lastSide=side;
+      g_lastClock=clock;
       lastOk=time[i];
    }
    }

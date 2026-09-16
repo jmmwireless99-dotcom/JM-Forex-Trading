@@ -77,7 +77,7 @@ style=0
 width=2
 arrow=159
 shift=0
-color=16776960
+color=65280
 </graph>
 <graph>
 name=SELL
@@ -86,7 +86,7 @@ style=0
 width=2
 arrow=159
 shift=0
-color=16711935
+color=255
 </graph>
 <graph>
 name=BIAS

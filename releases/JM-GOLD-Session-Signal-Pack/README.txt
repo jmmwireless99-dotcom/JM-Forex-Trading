@@ -3,18 +3,16 @@ JM GOLD SESSION SIGNAL v1.26 — indicator only
 
 Hindi EA. Walang OrderSend.
 
-ANO ANG MAKIKITA
-----------------
-Gold/yellow LINE = EMA50 BIAS
-  Price above line = BUY bias
-  Price below line = SELL bias
-  Text sa dulo: BIAS BUY o BIAS SELL
+PAANO MALALAMAN BUY O SELL
+--------------------------
+BIAS BUY / BIAS SELL sa gold line = TREND lang, hindi entry.
 
-Aqua DOT + "BUY"  = confirmed BUY  (sa ILALIM ng price)
-Magenta DOT + "SELL" = confirmed SELL (sa TAAS ng price)
+Entry signal:
+  lime "BUY"  + lime dot  = sa ILALIM ng candle  -> BUY
+  red  "SELL" + red dot   = sa TAAS ng candle    -> SELL
 
-Kung Last signal: none yet — wala pang pasok sa checklist.
-Yung maliliit na arrow/X ng MT5 trade history HINDI iyon ang signal natin.
+Panel: LAST SIGNAL: BUY at 1:15 PM PH  (o SELL...)
+Kung none yet, wala pang confirmed setup.
 
 SIGNAL FLOW (closed M5 candle)
 ------------------------------

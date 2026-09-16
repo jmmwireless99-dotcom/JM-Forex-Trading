@@ -31,8 +31,8 @@ def test_m5_template_is_gold_session_view():
     assert "InpRequireBb=true" in text
     assert "InpRequireH1=true" in text
     assert "background_color=0" in text
-    assert "color=16776960" in text  # aqua BUY
-    assert "color=16711935" in text  # magenta SELL
+    assert "color=65280" in text  # lime BUY
+    assert "color=255" in text  # red SELL
     assert "name=BIAS" in text
     assert "InpShowBiasLine=true" in text
 
@@ -48,7 +48,7 @@ def test_m1_template_exists():
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.26"' in mq5
+    assert '#property version   "1.27"' in mq5
     assert "BufBias" in mq5
     assert "DrawBiasLabel" in mq5
     assert "MarkSignal" in mq5
