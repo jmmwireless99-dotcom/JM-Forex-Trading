@@ -37,6 +37,19 @@ Rebuild: `./scripts/build-gold-v620-pack.sh`
 
 ---
 
+## GOLD Session Signal v1 (indicator only — no orders)
+
+PH session zones + EMA/RSI/BB arrows on GOLD#. Validate visually before any EA.
+
+| File | Link |
+|------|------|
+| **Session Signal ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-session-signal.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-Session-Signal-Pack.zip |
+
+Copy `JM_GOLD_Session_Signal_v1.mq5` → `MQL5\Indicators\` (not Experts). Rebuild: `./scripts/build-gold-session-signal-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |
