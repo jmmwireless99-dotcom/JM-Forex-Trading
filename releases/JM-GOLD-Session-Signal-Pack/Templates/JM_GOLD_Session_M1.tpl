@@ -170,6 +170,7 @@ InpArrowOffsetUsd=2.50
 InpMinBarsBetween=1
 InpMaxLabels=25
 InpShowHourBlockedSetups=true
+InpScanAllHistory=true
 InpH4Fast=20
 InpH4Slow=50
 InpH1Fast=20

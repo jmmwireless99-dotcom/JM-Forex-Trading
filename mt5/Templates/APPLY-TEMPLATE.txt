@@ -1,13 +1,11 @@
-JM GOLD SESSION VIEW v1.31
+JM GOLD SESSION VIEW v1.32
 ==========================
 
-DOT + BUY/SELL sa TAAS ng candle = entry.
-Yellow o = setup, V640 hour OFF.
+BUY/SELL dots stay on old candles (scroll to January).
 
   JM_GOLD_Session_M5.tpl   <- gamitin
-  JM_GOLD_Session_M1.tpl
 
 1. mq5 → MQL5\Indicators\  (F7)
-2. tpl → MQL5\Profiles\Templates\
-3. Delete old indicator
-4. Templates → JM_GOLD_Session_M5
+2. Delete old indicator
+3. Templates → JM_GOLD_Session_M5
+4. Max bars in chart = Unlimited (Tools → Options → Charts)

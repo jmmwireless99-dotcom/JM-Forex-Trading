@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.31"
-#property description "V6.77 scalper dots on TOP of signal candles. Lime BUY / red SELL. No auto trade."
+#property version   "1.32"
+#property description "BUY/SELL dots stay on all loaded history. Scroll back to January and they remain. No auto trade."
 #property indicator_chart_window
 #property indicator_buffers 4
 #property indicator_plots   4
@@ -104,6 +104,7 @@ input double InpArrowOffsetUsd      = 2.50;   // pad above the wick
 input int    InpMinBarsBetween      = 1;
 input int    InpMaxLabels           = 25;
 input bool   InpShowHourBlockedSetups = true; // yellow/orange dot if strategy OK but V640 hour OFF
+input bool   InpScanAllHistory      = true;  // keep BUY/SELL on old candles (January, etc.)
 
 input group "=== HTF mix (H1+M30 required, H4 display) ==="
 input int    InpH4Fast              = 20;
@@ -142,6 +143,8 @@ string g_lastClock="";
 int    g_signalCount=0;
 int    g_waitCount=0;
 int    g_m1Bars=0;
+int    g_seenRates=0;
+datetime g_histFrom=0;
 
 int BrokerGmtOff() { return (int)(TimeCurrent()-TimeGMT()); }
 datetime BrokerToPh(const datetime br) { return br - g_gmtOff + InpPhUtcOffset*3600; }
@@ -962,6 +965,7 @@ bool EvalBar(const int i,const datetime &time[],
              const double &open[],const double &high[],
              const double &low[],const double &close[],
              const int rates_total,const MqlRates &m1[],const int nM1,
+             int &m1k,
              int &dirOut,string &reasonOut,
              string &h4s,string &h1s,string &m30s,string &biasS,
              double &rsiV,double &adxV,double &gapV,int &scoreV,int &gradeOut)
@@ -980,10 +984,12 @@ bool EvalBar(const int i,const datetime &time[],
    double waitRsi=0,waitAdx=0,waitGap=0;
    int waitScore=0;
 
-   for(int k=1;k<nM1;k++)
+   if(m1k<1) m1k=1;
+   while(m1k<nM1 && m1[m1k].time<t0) m1k++;
+   int k=m1k;
+   for(;k<nM1;k++)
    {
       if(m1[k].time>=t1) break;
-      if(m1[k].time<t0) continue;
       int g=0,d=0,sc=0;
       string rs,hh4,hh1,hm30,bs;
       double rv=0,av=0,gv=0;
@@ -993,6 +999,7 @@ bool EvalBar(const int i,const datetime &time[],
       {
          dirOut=d; reasonOut=rs; h4s=hh4; h1s=hh1; m30s=hm30; biasS=bs;
          rsiV=rv; adxV=av; gapV=gv; scoreV=sc; gradeOut=1;
+         m1k=k;
          return true;
       }
       if(g==2 && waitDir==0)
@@ -1001,6 +1008,7 @@ bool EvalBar(const int i,const datetime &time[],
          waitRsi=rv; waitAdx=av; waitGap=gv; waitScore=sc;
       }
    }
+   m1k=k;
 
    if(i>=1)
    {
@@ -1045,9 +1053,10 @@ bool FeedsReady()
    if(g_m1Bars<200)
    {
       MqlRates tmp[];
-      CopyRates(_Symbol,PERIOD_M1,0,4000,tmp);
-      CopyRates(_Symbol,PERIOD_M30,0,500,tmp);
-      CopyRates(_Symbol,PERIOD_H1,0,400,tmp);
+      CopyRates(_Symbol,PERIOD_M1,0,200000,tmp);
+      CopyRates(_Symbol,PERIOD_M5,0,100000,tmp);
+      CopyRates(_Symbol,PERIOD_M30,0,20000,tmp);
+      CopyRates(_Symbol,PERIOD_H1,0,10000,tmp);
       return false;
    }
    return true;
@@ -1094,16 +1103,18 @@ void Panel(const double close,const string biasS,const double adx,const double g
    else if(v640Sell) v640="V640 SELL ON";
    else v640="V640 both OFF";
 
-   Comment("JM GOLD SESSION SIGNAL v1.31  |  VISUAL ONLY - walang order\n",
+   Comment("JM GOLD SESSION SIGNAL v1.32  |  VISUAL ONLY - walang order\n",
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "ENTRY: maliit na DOT + BUY/SELL sa TAAS ng candle (lime BUY / red SELL)\n",
-           "Yellow/orange o = strategy OK pero V640 hour OFF. LAST: ",
+           "ENTRY: DOT + BUY/SELL sa TAAS ng candle. Scroll back (January...) - andoon pa\n",
+           "History from ",(g_histFrom>0?TimeToString(g_histFrom,TIME_DATE):"-"),
+           "  |  Yellow/orange o = V640 hour OFF. LAST: ",
            (g_lastSide==""?"none yet":g_lastSide+" at "+g_lastClock+" PH"),
            StringFormat("  |  dots=%d  hour-block=%d",g_signalCount,g_waitCount),"\n",
            "Flow: V6.77 M5 EMA+ADX+gap  +  small-candle break  +  M1 flow/RSI/score>=3\n",
-           "Mix: H1 required  |  M30 required  |  H4 display  |  ",v640,"\n",
+           "Mix: H1 required  |  M30 required  |  H4 display  |  ",v640,
+           "  |  history ",(InpScanAllHistory?"ALL loaded bars":"recent only"),"\n",
            "H4: ",h4,"   H1: ",h1,"   M30: ",m30,"   M5 BIAS: ",biasS,"\n",
            "CHART ",EnumToString(_Period),
            "  ADX ",DoubleToString(adx,1),
@@ -1168,11 +1179,13 @@ int OnInit()
       return INIT_FAILED;
 
    g_gmtOff=BrokerGmtOff();
+   g_seenRates=0;
    MqlRates wr[];
-   CopyRates(_Symbol,PERIOD_M1,0,4000,wr);
-   CopyRates(_Symbol,PERIOD_M30,0,500,wr);
-   CopyRates(_Symbol,PERIOD_H1,0,400,wr);
-   CopyRates(_Symbol,PERIOD_H4,0,200,wr);
+   CopyRates(_Symbol,PERIOD_M1,0,200000,wr);
+   CopyRates(_Symbol,PERIOD_M5,0,100000,wr);
+   CopyRates(_Symbol,PERIOD_M30,0,20000,wr);
+   CopyRates(_Symbol,PERIOD_H1,0,10000,wr);
+   CopyRates(_Symbol,PERIOD_H4,0,4000,wr);
    CsvEnsureHeader(true);
    return INIT_SUCCEEDED;
 }
@@ -1226,7 +1239,9 @@ int OnCalculate(const int rates_total,
       return 0;
    }
 
-   if(prev_calculated==0)
+   bool fullScan=(prev_calculated==0 || g_seenRates==0 ||
+                  rates_total<g_seenRates || rates_total>g_seenRates+2);
+   if(fullScan)
    {
       ArrayInitialize(BufBuy,EMPTY_VALUE);
       ArrayInitialize(BufSell,EMPTY_VALUE);
@@ -1242,9 +1257,10 @@ int OnCalculate(const int rates_total,
       g_waitCount=0;
       CsvEnsureHeader(true);
    }
+   g_seenRates=rates_total;
 
    int biasStart=InpM5SlowEMA;
-   if(prev_calculated>biasStart)
+   if(!fullScan && prev_calculated>biasStart)
       biasStart=prev_calculated-1;
    for(int b=biasStart;b<rates_total;b++)
    {
@@ -1256,24 +1272,40 @@ int OnCalculate(const int rates_total,
       if(InpShowFastEma && Read1(hM5Fast,0,sh,fast)) BufFast[b]=fast;
    }
 
-   int start=InpM5SlowEMA+8;
-   if(prev_calculated>start)
-      start=prev_calculated-1;
    int lastClosed=rates_total-2;
+   int start=InpM5SlowEMA+8;
+   if(!InpScanAllHistory && lastClosed>start)
+   {
+      datetime oldest=time[lastClosed]-(datetime)InpDaysBack*86400;
+      for(int s=start;s<=lastClosed;s++)
+      {
+         if(time[s]>=oldest) { start=s; break; }
+      }
+   }
+   if(!fullScan && prev_calculated>start)
+      start=prev_calculated-1;
+   if(start>=0 && start<rates_total)
+      g_histFrom=time[start];
    if(lastClosed>=start)
    {
 
    MqlRates m1all[];
    ArraySetAsSeries(m1all,false);
-   int want=InpDaysBack*24*60+180;
+   int want=(int)Bars(_Symbol,PERIOD_M1);
    if(want<2000) want=2000;
-   if(want>12000) want=12000;
+   if(want>400000) want=400000;
+   if(!InpScanAllHistory)
+   {
+      int cap=InpDaysBack*24*60+180;
+      if(cap<2000) cap=2000;
+      if(want>cap) want=cap;
+   }
    int nM1=CopyRates(_Symbol,PERIOD_M1,0,want,m1all);
    if(nM1<0) nM1=0;
    g_m1Bars=nM1;
 
    datetime lastOk=0;
-   if(prev_calculated>0)
+   if(!fullScan && prev_calculated>0)
    {
       for(int j=MathMin(lastClosed,start)-1;j>=1;j--)
       {
@@ -1282,6 +1314,7 @@ int OnCalculate(const int rates_total,
       }
    }
 
+   int m1k=1;
    for(int i=start;i<=lastClosed;i++)
    {
       BufBuy[i]=EMPTY_VALUE;
@@ -1290,7 +1323,7 @@ int OnCalculate(const int rates_total,
       int dir=0,scoreV=0,grade=0;
       string reason,h4s,h1s,m30s,biasS;
       double rsiV=0,adxV=0,gapV=0;
-      if(!EvalBar(i,time,open,high,low,close,rates_total,m1all,nM1,
+      if(!EvalBar(i,time,open,high,low,close,rates_total,m1all,nM1,m1k,
                   dir,reason,h4s,h1s,m30s,biasS,rsiV,adxV,gapV,scoreV,grade))
          continue;
 
