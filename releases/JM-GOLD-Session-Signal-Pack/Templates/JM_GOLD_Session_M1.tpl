@@ -74,7 +74,7 @@ fixed_height=-1
 name=BUY
 draw=3
 style=0
-width=1
+width=2
 arrow=159
 shift=0
 color=16776960
@@ -83,10 +83,18 @@ color=16776960
 name=SELL
 draw=3
 style=0
-width=1
+width=2
 arrow=159
 shift=0
 color=16711935
+</graph>
+<graph>
+name=BIAS
+draw=0
+style=0
+width=2
+shift=0
+color=55295
 </graph>
 <inputs>
 InpPhUtcOffset=8
@@ -141,6 +149,7 @@ InpShowPanel=true
 InpShowSignalCards=false
 InpLogCsv=true
 InpDrawH4Sr=true
+InpShowBiasLine=true
 </inputs>
 </indicator>
 </window>

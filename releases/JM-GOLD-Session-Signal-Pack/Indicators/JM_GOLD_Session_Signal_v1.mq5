@@ -4,21 +4,27 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.25"
-#property description "Small BUY/SELL dots on confirmed signal only. Indicator, no auto trade."
+#property version   "1.26"
+#property description "EMA50 bias line + small BUY/SELL dots on confirmed signal. No auto trade."
 #property indicator_chart_window
-#property indicator_buffers 2
-#property indicator_plots   2
+#property indicator_buffers 3
+#property indicator_plots   3
 
 #property indicator_label1  "BUY"
 #property indicator_type1   DRAW_ARROW
 #property indicator_color1  clrAqua
-#property indicator_width1  1
+#property indicator_width1  2
 
 #property indicator_label2  "SELL"
 #property indicator_type2   DRAW_ARROW
 #property indicator_color2  clrMagenta
-#property indicator_width2  1
+#property indicator_width2  2
+
+#property indicator_label3  "BIAS"
+#property indicator_type3   DRAW_LINE
+#property indicator_color3  clrGold
+#property indicator_style3  STYLE_SOLID
+#property indicator_width3  2
 
 #define PREFIX "JMSS_"
 #define CSV_NAME "JM_GOLD_Session_Signal_v1.csv"
@@ -83,9 +89,11 @@ input bool   InpShowPanel           = true;
 input bool   InpShowSignalCards     = false;
 input bool   InpLogCsv              = true;
 input bool   InpDrawH4Sr            = true;
+input bool   InpShowBiasLine        = true;
 
 double BufBuy[];
 double BufSell[];
+double BufBias[];
 int hEma=INVALID_HANDLE,hRsi=INVALID_HANDLE,hBb=INVALID_HANDLE;
 int hH1F=INVALID_HANDLE,hH1S=INVALID_HANDLE;
 int hH4F=INVALID_HANDLE,hH4S=INVALID_HANDLE;
@@ -466,6 +474,53 @@ void RefreshHourLabels()
    DrawPhHourLabels(t,n);
 }
 
+void MarkSignal(const datetime t,const double price,const int dir)
+{
+   string n=PREFIX+"SIG_"+TimeToString(t,TIME_DATE|TIME_MINUTES);
+   if(ObjectFind(0,n)<0)
+      ObjectCreate(0,n,OBJ_TEXT,0,t,price);
+   ObjectMove(0,n,0,t,price);
+   if(dir>0)
+   {
+      ObjectSetString(0,n,OBJPROP_TEXT," BUY");
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
+      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
+   }
+   else
+   {
+      ObjectSetString(0,n,OBJPROP_TEXT," SELL");
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
+      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
+   }
+   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,8);
+   ObjectSetString(0,n,OBJPROP_FONT,"Arial");
+   ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(0,n,OBJPROP_BACK,false);
+}
+
+void DrawBiasLabel(const datetime t,const double ema,const string side)
+{
+   if(!InpShowBiasLine || ema<=0) return;
+   string n=PREFIX+"BIASLBL";
+   if(ObjectFind(0,n)<0)
+      ObjectCreate(0,n,OBJ_TEXT,0,t,ema);
+   ObjectMove(0,n,0,t,ema);
+   ObjectSetString(0,n,OBJPROP_TEXT," BIAS "+side);
+   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,10);
+   ObjectSetString(0,n,OBJPROP_FONT,"Arial");
+   ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_UPPER);
+   ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(0,n,OBJPROP_BACK,false);
+   if(side=="BUY")
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
+   else if(side=="SELL")
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
+   else
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrGold);
+}
+
 void DrawH4Sr()
 {
    if(!InpDrawH4Sr) return;
@@ -595,6 +650,8 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
+           "Gold BIAS line = EMA",IntegerToString(InpEmaPeriod),
+           "  |  Aqua BUY dot under price  |  Magenta SELL dot above\n",
            "Dot = confirmed signal only (closed bar). Easy flood=",
            (InpEasyArrows?"ON":"off"),"\n",
            "Flow: 1 EMA50 side  2 candle  3 RSI zone+slope  4 BB bounce  5 H1 trend\n",
@@ -619,14 +676,18 @@ int OnInit()
 {
    SetIndexBuffer(0,BufBuy,INDICATOR_DATA);
    SetIndexBuffer(1,BufSell,INDICATOR_DATA);
+   SetIndexBuffer(2,BufBias,INDICATOR_DATA);
    PlotIndexSetInteger(0,PLOT_ARROW,DOT_CODE);
    PlotIndexSetInteger(1,PLOT_ARROW,DOT_CODE);
    PlotIndexSetDouble(0,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    PlotIndexSetDouble(1,PLOT_EMPTY_VALUE,EMPTY_VALUE);
+   PlotIndexSetDouble(2,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    ArraySetAsSeries(BufBuy,false);
    ArraySetAsSeries(BufSell,false);
-   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,1);
-   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,1);
+   ArraySetAsSeries(BufBias,false);
+   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,2);
+   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,2);
+   PlotIndexSetInteger(2,PLOT_LINE_WIDTH,2);
    ChartSetInteger(0,CHART_FOREGROUND,false);
    ChartRedraw(0);
 
@@ -758,15 +819,30 @@ int OnCalculate(const int rates_total,
    {
       ArrayInitialize(BufBuy,EMPTY_VALUE);
       ArrayInitialize(BufSell,EMPTY_VALUE);
+      ArrayInitialize(BufBias,EMPTY_VALUE);
       WipeKind("AR_");
+      WipeKind("SIG_");
       CsvEnsureHeader(true);
+   }
+
+   int biasStart=InpEmaPeriod;
+   if(prev_calculated>biasStart)
+      biasStart=prev_calculated-1;
+   for(int b=biasStart;b<rates_total;b++)
+   {
+      BufBias[b]=EMPTY_VALUE;
+      if(!InpShowBiasLine) continue;
+      double e=0;
+      int sh=iBarShift(_Symbol,_Period,time[b],false);
+      if(Read1(hEma,0,sh,e)) BufBias[b]=e;
    }
 
    int start=InpBbPeriod+InpEmaPeriod+5;
    if(prev_calculated>start)
       start=prev_calculated-1;
    int lastClosed=rates_total-2;
-   if(lastClosed<start) return rates_total;
+   if(lastClosed>=start)
+   {
 
    datetime lastOk=0;
    if(prev_calculated>0)
@@ -801,14 +877,23 @@ int OnCalculate(const int rates_total,
       string clock=FormatPhClock(ph);
       string side=SideTxt(dir);
 
-      if(dir>0) BufBuy[i]=low[i]-InpArrowOffsetUsd;
-      else      BufSell[i]=high[i]+InpArrowOffsetUsd;
+      if(dir>0)
+      {
+         BufBuy[i]=low[i]-InpArrowOffsetUsd;
+         MarkSignal(time[i],BufBuy[i],1);
+      }
+      else
+      {
+         BufSell[i]=high[i]+InpArrowOffsetUsd;
+         MarkSignal(time[i],BufSell[i],-1);
+      }
 
       if(InpLogCsv)
          CsvAppend(time[i],ph,clock,sess,side,close[i],h4s,h1s,m15s,emaS,rsiV,bbTag,candleTag,reason);
 
       g_lastReason=reason;
       lastOk=time[i];
+   }
    }
 
    BufBuy[rates_total-1]=EMPTY_VALUE;
@@ -843,6 +928,7 @@ int OnCalculate(const int rates_total,
    if(Read1(hH4F,0,shH4,h4f) && Read1(hH4S,0,shH4,h4w)) h4s=SideTxt(HtfSide(h4f,h4w));
    if(Read1(hH1F,0,shH1,h1f) && Read1(hH1S,0,shH1,h1w)) h1s=SideTxt(HtfSide(h1f,h1w));
    if(Read1(hM15F,0,shM15,m15f) && Read1(hM15S,0,shM15,m15w)) m15s=SideTxt(HtfSide(m15f,m15w));
+   DrawBiasLabel(time[i],ema,emaS);
    Panel(close[i],emaS,rsiV,h4s,h1s,m15s);
 
    return rates_total;

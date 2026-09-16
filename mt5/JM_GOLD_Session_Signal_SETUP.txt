@@ -1,36 +1,34 @@
-JM GOLD SESSION SIGNAL v1.25 — indicator only
+JM GOLD SESSION SIGNAL v1.26 — indicator only
 =============================================
 
 Hindi EA. Walang OrderSend.
 
-SIGNAL FLOW (closed M5 bar, hindi nagre-repaint)
-------------------------------------------------
-Dot lalabas LANG kung PASOK lahat:
+ANO ANG MAKIKITA
+----------------
+Gold/yellow LINE = EMA50 BIAS
+  Price above line = BUY bias
+  Price below line = SELL bias
+  Text sa dulo: BIAS BUY o BIAS SELL
 
-1. EMA 50 side     close above EMA = BUY, below = SELL
-2. Candle confirm  bull candle = BUY, bear = SELL
-3. RSI 14          BUY: 45-70 and rising    SELL: 30-55 and falling
-4. BB bounce       BUY: wick hits lower band, close back above
-                   SELL: wick hits upper band, close back below
-5. H1 trend        H1 EMA20 vs EMA50 same side as the entry
+Aqua DOT + "BUY"  = confirmed BUY  (sa ILALIM ng price)
+Magenta DOT + "SELL" = confirmed SELL (sa TAAS ng price)
 
-H4 at M15 = display lang (filter OFF).
-Sessions (ASIAN/LONDON/NY) = kulay at pangalan, hindi filter.
-PH oras = yellow sa taas ng hour candle.
+Kung Last signal: none yet — wala pang pasok sa checklist.
+Yung maliliit na arrow/X ng MT5 trade history HINDI iyon ang signal natin.
 
-Maliit na DOT: aqua BUY sa ilalim, magenta SELL sa taas.
-Hindi na yung malalaking arrow.
+SIGNAL FLOW (closed M5 candle)
+------------------------------
+1. EMA 50 side     close vs gold bias line
+2. Candle confirm  bull = BUY, bear = SELL
+3. RSI 14          BUY 45-70 rising / SELL 30-55 falling
+4. BB bounce       wick to band, close back inside
+5. H1 trend        same side
 
-Kung walang dot: walang confirmed setup. Huwag i-on InpEasyArrows
-maliban kung gusto mong i-debug (EMA+candle flood).
+Gamitin ang CANDLE chart (hindi line chart) para makita ang BB wick.
 
 INSTALL
 -------
-1. Copy mq5 → MQL5\Indicators\ (hindi Experts)
-2. MetaEditor → F7
-3. Copy tpl → MQL5\Profiles\Templates\
-4. Delete old indicator on chart
-5. Templates → JM_GOLD_Session_M5
-
-CSV: MQL5\Files\JM_GOLD_Session_Signal_v1.csv
-Demo/tester muna. Huwag i-attach kasama ng V6.1.
+1. mq5 → MQL5\Indicators\  F7
+2. Delete old indicator on chart
+3. Templates → JM_GOLD_Session_M5
+   o Charts → Candlesticks kung line chart ang naka-on
