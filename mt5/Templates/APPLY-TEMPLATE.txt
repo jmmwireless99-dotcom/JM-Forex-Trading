@@ -1,31 +1,23 @@
-JM GOLD SESSION VIEW — MT5 templates (v1.20)
+JM GOLD SESSION VIEW — MT5 templates (v1.21)
 ============================================
 
-View: session names sa bawat column + PH oras sa candle wick + BUY/SELL arrows.
+Gaya ng sample: yellow PH oras sa taas ng candle + cyan BUY / magenta SELL arrows.
 
-  JM_GOLD_Session_M5.tpl   ← gamitin ito (scalp)
-  JM_GOLD_Session_M1.tpl   ← mas sikip, mas kaunting araw
+  JM_GOLD_Session_M5.tpl   ← gamitin ito
+  JM_GOLD_Session_M1.tpl
 
-INSTALL (sunod-sunod)
----------------------
+INSTALL
+-------
 1. Copy JM_GOLD_Session_Signal_v1.mq5 → MQL5\Indicators\
-2. MetaEditor → F7 (kailangan muna maging .ex5)
+2. MetaEditor → F7
 3. Copy both .tpl → MQL5\Profiles\Templates\
-   (File → Open Data Folder → MQL5\Profiles\Templates)
-4. Buksan ang GOLD# chart
-5. Indicators List → DELETE old JM_GOLD_Session_Signal kung naka-attach
-6. Right-click chart → Templates → JM_GOLD_Session_M5
-   (o Charts → Template → Load Template)
-
-Kung wala sa list: restart MT5 pagkatapos i-copy ang .tpl.
+4. GOLD# chart → Indicators List → DELETE old indicator
+5. Right-click → Templates → JM_GOLD_Session_M5
 
 ANO ANG NASA VIEW
 -----------------
-ASIAN / LONDON / NEW YORK / OVERLAP names sa taas ng bawat kulay
-Hour labels sa candle wick: 12AM … 1PM … 11PM (puti)
-BUY ▲  SELL ▼  (Easy arrows = EMA + candle)
-Dark chart, period separators ON, ask line ON
+Black chart, white bull / red bear candles
+Yellow PH hours sa TAAS ng bawat hour candle (8AM … 1PM … 11PM)
+BUY ▲ cyan    SELL ▼ magenta
+ASIAN / LONDON / NEW YORK / OVERLAP names
 Walang EA, walang order
-
-Kung gusto mong i-save ang sarili mong tweak:
-Right-click → Template → Save Template → JM_GOLD_Session_M5

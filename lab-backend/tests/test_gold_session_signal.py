@@ -31,6 +31,10 @@ def test_m5_template_is_gold_session_view():
     assert "InpRequireRsi=false" in text
     assert "InpRequireBb=false" in text
     assert "InpRequireH1=false" in text
+    assert "background_color=0" in text
+    assert "color=16776960" in text  # aqua BUY
+    assert "color=16711935" in text  # magenta SELL
+    assert "InpDrawHourLines=false" in text
 
 
 def test_m1_template_exists():
@@ -44,13 +48,18 @@ def test_m1_template_exists():
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.20"' in mq5
+    assert '#property version   "1.21"' in mq5
     assert 'InpEasyArrows          = true' in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
     assert '"NEW YORK"' in mq5
     assert '"OVERLAP"' in mq5
     assert "StyleHourOnCandle" in mq5
+    assert "HourRowY" in mq5
+    assert "OBJPROP_ANGLE,90" in mq5
+    assert "clrYellow" in mq5
+    assert "clrAqua" in mq5
+    assert "clrMagenta" in mq5
     assert "DrawObjArrow" in mq5
     assert "VisTop()" in mq5
 

@@ -4,21 +4,21 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.20"
-#property description "PH session names on each band, hour labels on candle wicks, BUY/SELL arrows. Walang auto trade."
+#property version   "1.21"
+#property description "Yellow PH hour on top of each hour candle + cyan BUY / magenta SELL arrows. Walang auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
 
 #property indicator_label1  "BUY"
 #property indicator_type1   DRAW_ARROW
-#property indicator_color1  clrLime
-#property indicator_width1  2
+#property indicator_color1  clrAqua
+#property indicator_width1  3
 
 #property indicator_label2  "SELL"
 #property indicator_type2   DRAW_ARROW
-#property indicator_color2  clrTomato
-#property indicator_width2  2
+#property indicator_color2  clrMagenta
+#property indicator_width2  3
 
 #define PREFIX "JMSS_"
 #define CSV_NAME "JM_GOLD_Session_Signal_v1.csv"
@@ -29,9 +29,9 @@ input int    InpDaysBack            = 7;
 input bool   InpDrawDaily           = true;
 input bool   InpDrawSessions        = true;
 input bool   InpDrawOpenLines       = true;
-input bool   InpDrawPhHours         = true;   // "1PM" on the hour candle
-input bool   InpDrawHourLines       = true;
-input int    InpHourFontSize        = 10;
+input bool   InpDrawPhHours         = true;   // yellow PH hour on TOP of each hour candle
+input bool   InpDrawHourLines       = false;
+input int    InpHourFontSize        = 8;
 input double InpHourLabelPadUsd     = 1.50;
 input int    InpAsiaStart           = 8;
 input int    InpAsiaEnd             = 16;
@@ -46,7 +46,7 @@ input color  InpClrAsia             = C'210,160,50';
 input color  InpClrLondon           = C'50,110,210';
 input color  InpClrNy               = C'30,150,80';
 input color  InpClrOverlap          = C'170,70,190';
-input int    InpZoneAlpha           = 62;
+input int    InpZoneAlpha           = 28;
 
 input group "=== Chart signal (M1/M5 entry) ==="
 input int    InpEmaPeriod           = 50;
@@ -57,8 +57,8 @@ input double InpRsiSellMin          = 30.0;
 input double InpRsiSellMax          = 55.0;
 input int    InpBbPeriod            = 20;
 input double InpBbDev               = 2.0;
-input double InpArrowOffsetUsd      = 0.80;
-input int    InpMinBarsBetween      = 4;
+input double InpArrowOffsetUsd      = 0.45;
+input int    InpMinBarsBetween      = 2;
 input int    InpMaxLabels           = 25;
 
 input group "=== MTF filters (off = display only) ==="
@@ -282,12 +282,13 @@ void StyleSessionName(const string name,const datetime t,const string text,const
    ObjectSetInteger(0,name,OBJPROP_BGCOLOR,(long)ColorToARGB(bandClr,180));
 }
 
-double HourPad()
+double HourRowY()
 {
    double mx=ChartGetDouble(0,CHART_PRICE_MAX);
    double mn=ChartGetDouble(0,CHART_PRICE_MIN);
-   double vis=(mx>mn && mx>0)?(mx-mn)*0.018:InpHourLabelPadUsd;
-   return MathMax(InpHourLabelPadUsd,vis);
+   if(mx<=mn || mx<=0)
+      return SymbolInfoDouble(_Symbol,SYMBOL_BID)+6.0;
+   return mx-(mx-mn)*0.08;
 }
 
 void StyleHourOnCandle(const string name,const datetime t,const double price,
@@ -297,10 +298,11 @@ void StyleHourOnCandle(const string name,const datetime t,const double price,
       ObjectCreate(0,name,OBJ_TEXT,0,t,price);
    ObjectMove(0,name,0,t,price);
    ObjectSetString(0,name,OBJPROP_TEXT,text);
-   ObjectSetInteger(0,name,OBJPROP_COLOR,clrWhite);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clrYellow);
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,InpHourFontSize);
    ObjectSetString(0,name,OBJPROP_FONT,"Arial");
-   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LOWER);
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT);
+   ObjectSetInteger(0,name,OBJPROP_ANGLE,90);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
@@ -380,16 +382,32 @@ void DrawPhHourLabels(const datetime &time[],const double &high[],const double &
    datetime startPh=PhMidnight(phNow)-(datetime)InpDaysBack*86400;
    datetime startBr=PhToBroker(startPh);
 
+   int firstVis=(int)ChartGetInteger(0,CHART_FIRST_VISIBLE_BAR);
+   int visBars=(int)ChartGetInteger(0,CHART_VISIBLE_BARS);
+   datetime visLeft=0,visRight=0;
+   if(firstVis>=0 && visBars>0)
+   {
+      visLeft=iTime(_Symbol,_Period,firstVis);
+      int rightSh=firstVis-visBars+1;
+      if(rightSh<0) rightSh=0;
+      visRight=iTime(_Symbol,_Period,rightSh);
+   }
+
    int i0=0;
    for(int i=0;i<rates_total;i++)
    {
       if(time[i]>=startBr) { i0=i; break; }
    }
 
+   double y=HourRowY();
    int lastH=-1;
    int lastYmd=-1;
    for(int i=i0;i<rates_total;i++)
    {
+      if(visLeft>0 && visRight>0)
+      {
+         if(time[i]<visLeft-3600 || time[i]>visRight+3600) continue;
+      }
       datetime ph=BrokerToPh(time[i]);
       MqlDateTime t; TimeToStruct(ph,t);
       int ymd=t.year*10000+t.mon*100+t.day;
@@ -399,8 +417,7 @@ void DrawPhHourLabels(const datetime &time[],const double &high[],const double &
 
       string key=StringFormat("%d_%02d",ymd,t.hour);
       color clr=SessionColor(t.hour);
-      double px=high[i]+HourPad();
-      StyleHourOnCandle(PREFIX+"HR_"+key,time[i],px,FormatPhHour(t.hour));
+      StyleHourOnCandle(PREFIX+"HR_"+key,time[i],y,FormatPhHour(t.hour));
       if(InpDrawHourLines)
       {
          StyleVLine(PREFIX+"HL_"+key,time[i],clr,STYLE_DOT);
@@ -422,6 +439,37 @@ void RelayoutNames()
    }
 }
 
+void RelayoutHours()
+{
+   double y=HourRowY();
+   int total=ObjectsTotal(0,0,-1);
+   for(int i=total-1;i>=0;i--)
+   {
+      string n=ObjectName(0,i,0,-1);
+      if(StringFind(n,PREFIX+"HR_")!=0) continue;
+      datetime t=(datetime)ObjectGetInteger(0,n,OBJPROP_TIME);
+      ObjectMove(0,n,0,t,y);
+   }
+}
+
+void RefreshHourLabels()
+{
+   if(!InpDrawPhHours) return;
+   datetime t[];
+   double hi[];
+   ArraySetAsSeries(t,false);
+   ArraySetAsSeries(hi,false);
+   int n=CopyTime(_Symbol,_Period,0,2500,t);
+   if(n<=1) return;
+   if(CopyHigh(_Symbol,_Period,0,n,hi)!=n) return;
+   if(t[0]>t[n-1])
+   {
+      ArrayReverse(t);
+      ArrayReverse(hi);
+   }
+   DrawPhHourLabels(t,hi,hi,n);
+}
+
 void DrawObjArrow(const datetime t,const double price,const int dir)
 {
    string n=PREFIX+"AR_"+TimeToString(t,TIME_DATE|TIME_MINUTES);
@@ -429,8 +477,8 @@ void DrawObjArrow(const datetime t,const double price,const int dir)
       ObjectCreate(0,n,OBJ_ARROW,0,t,price);
    ObjectMove(0,n,0,t,price);
    ObjectSetInteger(0,n,OBJPROP_ARROWCODE,(dir>0?233:234));
-   ObjectSetInteger(0,n,OBJPROP_COLOR,(dir>0?clrLime:clrTomato));
-   ObjectSetInteger(0,n,OBJPROP_WIDTH,4);
+   ObjectSetInteger(0,n,OBJPROP_COLOR,(dir>0?clrAqua:clrMagenta));
+   ObjectSetInteger(0,n,OBJPROP_WIDTH,3);
    ObjectSetInteger(0,n,OBJPROP_ANCHOR,(dir>0?ANCHOR_TOP:ANCHOR_BOTTOM));
    ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,n,OBJPROP_BACK,false);
@@ -566,7 +614,7 @@ void Panel(const double close,const string emaS,const double rsi,
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Names: ASIAN / LONDON / NEW YORK / OVERLAP  |  Hours on candle wick  |  Easy arrows=",
+           "Yellow PH hour sa TAAS ng candle  |  BUY aqua ▲  SELL magenta ▼  |  Easy arrows=",
            (InpEasyArrows?"ON":"off"),"\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
@@ -595,8 +643,8 @@ int OnInit()
    PlotIndexSetDouble(1,PLOT_EMPTY_VALUE,EMPTY_VALUE);
    ArraySetAsSeries(BufBuy,false);
    ArraySetAsSeries(BufSell,false);
-   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,4);
-   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,4);
+   PlotIndexSetInteger(0,PLOT_LINE_WIDTH,3);
+   PlotIndexSetInteger(1,PLOT_LINE_WIDTH,3);
    ChartSetInteger(0,CHART_FOREGROUND,false);
    ChartRedraw(0);
 
@@ -798,6 +846,7 @@ int OnCalculate(const int rates_total,
       g_lastPhHour=phTm.hour;
    }
    RelayoutNames();
+   RelayoutHours();
    DrawH4Sr();
    RefreshCards(time,high,low,BufBuy,BufSell,rates_total);
 
@@ -825,6 +874,7 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
    VisibleBand(lo,hi);
    RedrawSessions(lo,hi);
    RelayoutNames();
+   RefreshHourLabels();
    ChartRedraw(0);
 }
 //+------------------------------------------------------------------+
