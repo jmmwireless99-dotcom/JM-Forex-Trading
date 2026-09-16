@@ -40,7 +40,8 @@ def test_m5_template_is_gold_session_view():
     assert "color=255" in text
     assert "name=BIAS" in text
     assert "name=FAST" in text
-    assert "InpShowBiasLine=true" in text
+    assert "InpShowHourBlockedSetups=true" in text
+    assert "InpArrowOffsetUsd=2.50" in text
 
 
 def test_m1_template_exists():
@@ -54,7 +55,7 @@ def test_m1_template_exists():
 
 def test_indicator_is_visual_scalper_not_ea():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.30"' in mq5
+    assert '#property version   "1.31"' in mq5
     assert "OrderSend" not in mq5
     assert "Trade.mqh" not in mq5
     assert "V640ProfitHourAllowed" in mq5
@@ -67,6 +68,11 @@ def test_indicator_is_visual_scalper_not_ea():
     assert "BufFast" in mq5
     assert "DrawBiasLabel" in mq5
     assert "MarkSignal" in mq5
+    assert "MarkWait" in mq5
+    assert "DotY" in mq5
+    assert "FeedsReady" in mq5
+    assert "TryScalperM5Fallback" in mq5
+    assert "sa TAAS ng candle" in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
     assert '"NEW YORK"' in mq5

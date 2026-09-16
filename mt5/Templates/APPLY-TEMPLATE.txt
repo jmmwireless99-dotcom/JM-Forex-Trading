@@ -1,8 +1,8 @@
-JM GOLD SESSION VIEW v1.30
+JM GOLD SESSION VIEW v1.31
 ==========================
 
-Maliit na DOT lang (hindi malaking arrow).
-Dot = V6.77 scalper analog: M5 bias + M1 small/break + score + H1 + M30.
+DOT + BUY/SELL sa TAAS ng candle = entry.
+Yellow o = setup, V640 hour OFF.
 
   JM_GOLD_Session_M5.tpl   <- gamitin
   JM_GOLD_Session_M1.tpl
