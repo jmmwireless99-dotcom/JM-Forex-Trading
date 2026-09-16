@@ -4,8 +4,8 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.32"
-#property description "BUY/SELL dots stay on all loaded history. Scroll back to January and they remain. No auto trade."
+#property version   "1.33"
+#property description "NOW badge + BUY/SELL dots on candles. Visual mode so signals are visible. No auto trade."
 #property indicator_chart_window
 #property indicator_buffers 4
 #property indicator_plots   4
@@ -101,10 +101,11 @@ input bool   InpV643BlockSellGap075To100 = true;
 input double InpV643SellGapBlockFrom     = 0.75;
 input double InpV643SellGapBlockTo       = 1.00;
 input double InpArrowOffsetUsd      = 2.50;   // pad above the wick
-input int    InpMinBarsBetween      = 1;
+input int    InpMinBarsBetween      = 3;
 input int    InpMaxLabels           = 25;
 input bool   InpShowHourBlockedSetups = true; // yellow/orange dot if strategy OK but V640 hour OFF
 input bool   InpScanAllHistory      = true;  // keep BUY/SELL on old candles (January, etc.)
+input bool   InpVisualMode          = true;  // show readable BUY/SELL (relax EA class filters)
 
 input group "=== HTF mix (H1+M30 required, H4 display) ==="
 input int    InpH4Fast              = 20;
@@ -145,6 +146,8 @@ int    g_waitCount=0;
 int    g_m1Bars=0;
 int    g_seenRates=0;
 datetime g_histFrom=0;
+string   g_nowLine="NOW: starting";
+int      g_nowDir=0;
 
 int BrokerGmtOff() { return (int)(TimeCurrent()-TimeGMT()); }
 datetime BrokerToPh(const datetime br) { return br - g_gmtOff + InpPhUtcOffset*3600; }
@@ -518,16 +521,16 @@ void MarkSignal(const datetime t,const double price,const int dir)
    ObjectMove(0,n,0,t,price);
    if(dir>0)
    {
-      ObjectSetString(0,n,OBJPROP_TEXT," BUY");
+      ObjectSetString(0,n,OBJPROP_TEXT," ^ BUY");
       ObjectSetInteger(0,n,OBJPROP_COLOR,clrLime);
    }
    else
    {
-      ObjectSetString(0,n,OBJPROP_TEXT," SELL");
+      ObjectSetString(0,n,OBJPROP_TEXT," v SELL");
       ObjectSetInteger(0,n,OBJPROP_COLOR,clrRed);
    }
    ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
-   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,11);
+   ObjectSetInteger(0,n,OBJPROP_FONTSIZE,14);
    ObjectSetString(0,n,OBJPROP_FONT,"Arial");
    ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
@@ -553,12 +556,12 @@ void MarkWait(const datetime t,const double price,const int dir)
    ObjectMove(0,n,0,t,price);
    if(dir>0)
    {
-      ObjectSetString(0,n,OBJPROP_TEXT," o");
+      ObjectSetString(0,n,OBJPROP_TEXT," ^ BUY");
       ObjectSetInteger(0,n,OBJPROP_COLOR,clrYellow);
    }
    else
    {
-      ObjectSetString(0,n,OBJPROP_TEXT," o");
+      ObjectSetString(0,n,OBJPROP_TEXT," v SELL");
       ObjectSetInteger(0,n,OBJPROP_COLOR,clrOrange);
    }
    ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
@@ -776,6 +779,7 @@ int M5BiasFrom(const double fast,const double slow,const double adx,const double
 
 bool ScalperBlocks(const int bias,const double adx,const double gapATR)
 {
+   if(InpVisualMode) return false;
    if(InpBlockMidADX && adx>=InpBlockADXFrom && adx<InpBlockADXTo) return true;
    if(InpV641BlockSellADX20To25 && bias<0 &&
       adx>=InpV641SellADXBlockFrom && adx<InpV641SellADXBlockTo) return true;
@@ -789,8 +793,16 @@ bool ScalperBlocks(const int bias,const double adx,const double gapATR)
 
 bool IsSmallCandle(const double bodyRatio,const double rangeAtr)
 {
+   if(InpVisualMode)
+      return (rangeAtr>=0.08 && rangeAtr<=1.50 && bodyRatio<=0.70);
    return (rangeAtr>=InpMinSmallRangeATR && rangeAtr<=InpMaxSmallRangeATR &&
            bodyRatio<=InpSmallBodyRatioMax);
+}
+
+int ScoreNeed()
+{
+   if(InpVisualMode) return 2;
+   return InpMinFlowScore;
 }
 
 bool ClosedM1Breakout(const int bias,const double smallHigh,const double smallLow,
@@ -843,11 +855,11 @@ bool TryScalperAtM1(const MqlRates &small,const MqlRates &brk,
    if(!IsSmallCandle(bodyRatio,rangeAtr)) return false;
 
    int flow=HtfSide(m1f,m1s);
-   if(InpRequireM1Flow && flow!=bias) return false;
+   if(InpRequireM1Flow && !InpVisualMode && flow!=bias) return false;
 
    int score=FlowScore(bias,flow,adx,gapATR,rsi,bodyRatio,rangeAtr);
    scoreV=score;
-   if(InpUseFlowScore && score<InpMinFlowScore) return false;
+   if(InpUseFlowScore && score<ScoreNeed()) return false;
 
    if(bias>0)
    {
@@ -920,18 +932,25 @@ bool TryScalperM5Fallback(const datetime smallT,const double sO,const double sH,
    if(range<=0.0) return false;
    double bodyRatio=MathAbs(sC-sO)/range;
    double rangeAtr=range/atr;
-   if(!IsSmallCandle(bodyRatio,rangeAtr)) return false;
+   bool pause=IsSmallCandle(bodyRatio,rangeAtr);
+   bool cont=(InpVisualMode && ((bias>0 && bH>sH) || (bias<0 && bL<sL)));
+   if(!pause && !cont) return false;
+   if(pause && !ClosedM1Breakout(bias,sH,sL,bH,bL,atr) && !cont) return false;
 
    int s1=ClosedHtfShift(PERIOD_M1,smallT);
-   double m1f=0,m1s=0,rsi=0;
-   if(!Read1(hM1Fast,0,s1,m1f) || !Read1(hM1Slow,0,s1,m1s) || !Read1(hM1RSI,0,s1,rsi))
-      return false;
-   int flow=HtfSide(m1f,m1s);
-   if(InpRequireM1Flow && flow!=bias) return false;
+   double m1f=0,m1s=0,rsi=50.0;
+   bool gotM1=(Read1(hM1Fast,0,s1,m1f) && Read1(hM1Slow,0,s1,m1s) && Read1(hM1RSI,0,s1,rsi));
+   int flow=bias;
+   if(gotM1) flow=HtfSide(m1f,m1s);
+   else if(!InpVisualMode) return false;
+   if(InpRequireM1Flow && !InpVisualMode && flow!=bias) return false;
    int score=FlowScore(bias,flow,adx,gapATR,rsi,bodyRatio,rangeAtr);
-   if(InpUseFlowScore && score<InpMinFlowScore) return false;
-   if(bias>0) { if(rsi<InpBuyRSIMin || rsi>InpBuyRSIMax) return false; }
-   else { if(rsi<InpSellRSIMin || rsi>InpSellRSIMax) return false; }
+   if(InpUseFlowScore && score<ScoreNeed()) return false;
+   if(gotM1 || !InpVisualMode)
+   {
+      if(bias>0) { if(rsi<InpBuyRSIMin || rsi>InpBuyRSIMax) return false; }
+      else { if(rsi<InpSellRSIMin || rsi>InpSellRSIMax) return false; }
+   }
 
    int shH4=ClosedHtfShift(PERIOD_H4,brkT);
    int shH1=ClosedHtfShift(PERIOD_H1,brkT);
@@ -944,7 +963,6 @@ bool TryScalperM5Fallback(const datetime smallT,const double sO,const double sH,
    if(InpRequireH1 && h1s!=sTxt) return false;
    if(InpRequireM30 && m30s!=sTxt) return false;
    if(InpRequireH4 && h4s!=sTxt) return false;
-   if(!ClosedM1Breakout(bias,sH,sL,bH,bL,atr)) return false;
 
    MqlDateTime tm; TimeToStruct(brkT,tm);
    bool hourOk=HourDirectionAllowed(bias,tm.hour);
@@ -952,10 +970,11 @@ bool TryScalperM5Fallback(const datetime smallT,const double sO,const double sH,
    string clock=FormatPhClock(ph);
    MqlDateTime pht; TimeToStruct(ph,pht);
    reasonOut=StringFormat(
-      "SIDE=%s|PH=%s|SESSION=%s|ENTRY=%.2f|H4=%s|H1=%s|M30=%s|M5=%s|ADX=%.1f|GAP=%.3f|RSI=%.1f|SCORE=%d|V640=%s|HOUR=%s|M5FALLBACK",
+      "SIDE=%s|PH=%s|SESSION=%s|ENTRY=%.2f|H4=%s|H1=%s|M30=%s|M5=%s|ADX=%.1f|GAP=%.3f|RSI=%.1f|SCORE=%d|V640=%s|HOUR=%s|%s",
       sTxt,clock,SessionName(pht.hour),bC,h4s,h1s,m30s,sTxt,adx,gapATR,rsi,score,
       (InpUseV640ProfitHourRouter?"ON":"off"),
-      (hourOk?"OK":"BLOCK"));
+      (hourOk?"OK":"BLOCK"),
+      (pause?"M5PAUSE+BREAK":"M5CONT"));
    dirOut=bias; biasS=sTxt; rsiV=rsi; adxV=adx; gapV=gapATR; scoreV=score;
    gradeOut=(hourOk ? 1 : 2);
    return true;
@@ -984,31 +1003,34 @@ bool EvalBar(const int i,const datetime &time[],
    double waitRsi=0,waitAdx=0,waitGap=0;
    int waitScore=0;
 
-   if(m1k<1) m1k=1;
-   while(m1k<nM1 && m1[m1k].time<t0) m1k++;
-   int k=m1k;
-   for(;k<nM1;k++)
+   if(!InpVisualMode)
    {
-      if(m1[k].time>=t1) break;
-      int g=0,d=0,sc=0;
-      string rs,hh4,hh1,hm30,bs;
-      double rv=0,av=0,gv=0;
-      if(!TryScalperAtM1(m1[k-1],m1[k],d,rs,hh4,hh1,hm30,bs,rv,av,gv,sc,g))
-         continue;
-      if(g==1)
+      if(m1k<1) m1k=1;
+      while(m1k<nM1 && m1[m1k].time<t0) m1k++;
+      int k=m1k;
+      for(;k<nM1;k++)
       {
-         dirOut=d; reasonOut=rs; h4s=hh4; h1s=hh1; m30s=hm30; biasS=bs;
-         rsiV=rv; adxV=av; gapV=gv; scoreV=sc; gradeOut=1;
-         m1k=k;
-         return true;
+         if(m1[k].time>=t1) break;
+         int g=0,d=0,sc=0;
+         string rs,hh4,hh1,hm30,bs;
+         double rv=0,av=0,gv=0;
+         if(!TryScalperAtM1(m1[k-1],m1[k],d,rs,hh4,hh1,hm30,bs,rv,av,gv,sc,g))
+            continue;
+         if(g==1)
+         {
+            dirOut=d; reasonOut=rs; h4s=hh4; h1s=hh1; m30s=hm30; biasS=bs;
+            rsiV=rv; adxV=av; gapV=gv; scoreV=sc; gradeOut=1;
+            m1k=k;
+            return true;
+         }
+         if(g==2 && waitDir==0)
+         {
+            waitDir=d; waitReason=rs; waitH4=hh4; waitH1=hh1; waitM30=hm30; waitBias=bs;
+            waitRsi=rv; waitAdx=av; waitGap=gv; waitScore=sc;
+         }
       }
-      if(g==2 && waitDir==0)
-      {
-         waitDir=d; waitReason=rs; waitH4=hh4; waitH1=hh1; waitM30=hm30; waitBias=bs;
-         waitRsi=rv; waitAdx=av; waitGap=gv; waitScore=sc;
-      }
+      m1k=k;
    }
-   m1k=k;
 
    if(i>=1)
    {
@@ -1086,6 +1108,68 @@ void ReadHtfPanel(const datetime t,string &h4s,string &h1s,string &m30s,string &
    if(Read1(hM30F,0,shM30,m30f) && Read1(hM30S,0,shM30,m30w)) m30s=SideTxt(HtfSide(m30f,m30w));
 }
 
+void DrawNowBadge(const string text,const int dir)
+{
+   string n=PREFIX+"NOW";
+   if(ObjectFind(0,n)<0)
+   {
+      if(!ObjectCreate(0,n,OBJ_LABEL,0,0,0)) return;
+      ObjectSetInteger(0,n,OBJPROP_CORNER,CORNER_RIGHT_UPPER);
+      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_RIGHT_UPPER);
+      ObjectSetInteger(0,n,OBJPROP_XDISTANCE,18);
+      ObjectSetInteger(0,n,OBJPROP_YDISTANCE,22);
+      ObjectSetString(0,n,OBJPROP_FONT,"Arial");
+      ObjectSetInteger(0,n,OBJPROP_FONTSIZE,18);
+      ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
+      ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
+      ObjectSetInteger(0,n,OBJPROP_BACK,false);
+   }
+   ObjectSetString(0,n,OBJPROP_TEXT,text);
+   if(dir>0)
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrLime);
+   else if(dir<0)
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrRed);
+   else
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrYellow);
+}
+
+void BuildNowLine(const string biasS,const string h1,const string m30,
+                  const double adx,const double gap)
+{
+   g_nowDir=0;
+   int bias=0;
+   if(biasS=="BUY") bias=1;
+   else if(biasS=="SELL") bias=-1;
+   MqlDateTime br; TimeToStruct(TimeCurrent(),br);
+   if(bias==0)
+   {
+      g_nowLine="NOW: WAIT  walang M5 bias  HUWAG mag-entry";
+      return;
+   }
+   if(InpRequireH1 && h1!=biasS)
+   {
+      g_nowLine="NOW: WAIT  H1="+h1+" vs M5="+biasS+"  HUWAG";
+      return;
+   }
+   if(InpRequireM30 && m30!=biasS)
+   {
+      g_nowLine="NOW: WAIT  M30="+m30+" vs M5="+biasS+"  HUWAG";
+      return;
+   }
+   if(!HourDirectionAllowed(bias,br.hour))
+   {
+      g_nowLine="NOW: WAIT  V640 hour OFF  HUWAG mag-"+biasS;
+      return;
+   }
+   if(ScalperBlocks(bias,adx,gap))
+   {
+      g_nowLine="NOW: WAIT  ADX/gap class block  HUWAG";
+      return;
+   }
+   g_nowDir=bias;
+   g_nowLine="NOW: WATCH "+biasS+"  hintay ^BUY / vSELL sa taas ng closed candle";
+}
+
 void Panel(const double close,const string biasS,const double adx,const double gap,
            const double rsi,const string h4,const string h1,const string m30)
 {
@@ -1103,13 +1187,14 @@ void Panel(const double close,const string biasS,const double adx,const double g
    else if(v640Sell) v640="V640 SELL ON";
    else v640="V640 both OFF";
 
-   Comment("JM GOLD SESSION SIGNAL v1.32  |  VISUAL ONLY - walang order\n",
+   Comment("JM GOLD SESSION SIGNAL v1.33  |  VISUAL ONLY - walang order\n",
+           g_nowLine,"\n",
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "ENTRY: DOT + BUY/SELL sa TAAS ng candle. Scroll back (January...) - andoon pa\n",
+           "SIGNAL: lime ^ BUY / red v SELL sa TAAS ng candle. Gold line = bias lang, HINDI entry.\n",
            "History from ",(g_histFrom>0?TimeToString(g_histFrom,TIME_DATE):"-"),
-           "  |  Yellow/orange o = V640 hour OFF. LAST: ",
+           "  |  yellow ^ BUY / orange v SELL = hour OFF. LAST: ",
            (g_lastSide==""?"none yet":g_lastSide+" at "+g_lastClock+" PH"),
            StringFormat("  |  dots=%d  hour-block=%d",g_signalCount,g_waitCount),"\n",
            "Flow: V6.77 M5 EMA+ADX+gap  +  small-candle break  +  M1 flow/RSI/score>=3\n",
@@ -1235,6 +1320,8 @@ int OnCalculate(const int rates_total,
       string h4s,h1s,m30s,biasS;
       double adxV=0,gapV=0,rsiV=0,slowEma=0,fastEma=0;
       ReadHtfPanel(time[rates_total-2],h4s,h1s,m30s,biasS,adxV,gapV,rsiV,slowEma,fastEma);
+      BuildNowLine(biasS,h1s,m30s,adxV,gapV);
+      DrawNowBadge(g_nowLine,g_nowDir);
       Panel(close[rates_total-2],biasS,adxV,gapV,rsiV,h4s,h1s,m30s);
       return 0;
    }
@@ -1407,6 +1494,8 @@ int OnCalculate(const int rates_total,
    double adxV=0,gapV=0,rsiV=0,slowEma=0,fastEma=0;
    ReadHtfPanel(time[i],h4s,h1s,m30s,biasS,adxV,gapV,rsiV,slowEma,fastEma);
    DrawBiasLabel(time[i],slowEma,biasS);
+   BuildNowLine(biasS,h1s,m30s,adxV,gapV);
+   DrawNowBadge(g_nowLine,g_nowDir);
    Panel(close[i],biasS,adxV,gapV,rsiV,h4s,h1s,m30s);
 
    return rates_total;

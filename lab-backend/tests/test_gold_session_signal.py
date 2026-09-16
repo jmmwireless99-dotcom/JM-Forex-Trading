@@ -41,7 +41,7 @@ def test_m5_template_is_gold_session_view():
     assert "name=BIAS" in text
     assert "name=FAST" in text
     assert "InpShowHourBlockedSetups=true" in text
-    assert "InpScanAllHistory=true" in text
+    assert "InpVisualMode=true" in text
 
 
 def test_m1_template_exists():
@@ -55,7 +55,7 @@ def test_m1_template_exists():
 
 def test_indicator_is_visual_scalper_not_ea():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.32"' in mq5
+    assert '#property version   "1.33"' in mq5
     assert "OrderSend" not in mq5
     assert "Trade.mqh" not in mq5
     assert "V640ProfitHourAllowed" in mq5
@@ -82,7 +82,12 @@ def test_indicator_is_visual_scalper_not_ea():
     assert "clrYellow" in mq5
     assert "DOT_CODE 159" in mq5
     assert "VisTop()" in mq5
-    assert "InpScanAllHistory      = true" in mq5
+    assert "InpVisualMode          = true" in mq5
+    assert "BuildNowLine" in mq5
+    assert "DrawNowBadge" in mq5
+    assert "NOW: WAIT" in mq5
+    assert '" ^ BUY"' in mq5
+    assert '" v SELL"' in mq5
     assert "g_seenRates" in mq5
     assert "fullScan" in mq5
     assert "400000" in mq5

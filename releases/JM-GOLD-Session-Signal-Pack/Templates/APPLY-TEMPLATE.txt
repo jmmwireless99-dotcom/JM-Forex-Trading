@@ -1,11 +1,11 @@
-JM GOLD SESSION VIEW v1.32
+JM GOLD SESSION VIEW v1.33
 ==========================
 
-BUY/SELL dots stay on old candles (scroll to January).
+NOW badge = WAIT or WATCH BUY/SELL.
+lime ^ BUY / red v SELL sa TAAS ng candle = entry.
 
-  JM_GOLD_Session_M5.tpl   <- gamitin
+  JM_GOLD_Session_M5.tpl
 
-1. mq5 → MQL5\Indicators\  (F7)
-2. Delete old indicator
+1. Delete old indicator
+2. F7 compile v1.33
 3. Templates → JM_GOLD_Session_M5
-4. Max bars in chart = Unlimited (Tools → Options → Charts)
