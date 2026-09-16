@@ -4,7 +4,7 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.23"
+#property version   "1.24"
 #property description "PH hour on top of each hour candle + BUY/SELL arrows. Indicator only, no auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
@@ -471,13 +471,22 @@ void DrawObjArrow(const datetime t,const double price,const int dir)
    if(ObjectFind(0,n)<0)
       ObjectCreate(0,n,OBJ_ARROW,0,t,price);
    ObjectMove(0,n,0,t,price);
-   ObjectSetInteger(0,n,OBJPROP_ARROWCODE,(dir>0?233:234));
-   ObjectSetInteger(0,n,OBJPROP_COLOR,(dir>0?clrAqua:clrMagenta));
    ObjectSetInteger(0,n,OBJPROP_WIDTH,3);
-   ObjectSetInteger(0,n,OBJPROP_ANCHOR,(dir>0?ANCHOR_TOP:ANCHOR_BOTTOM));
    ObjectSetInteger(0,n,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,n,OBJPROP_BACK,false);
    ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
+   if(dir>0)
+   {
+      ObjectSetInteger(0,n,OBJPROP_ARROWCODE,233);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrAqua);
+      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_TOP);
+   }
+   else
+   {
+      ObjectSetInteger(0,n,OBJPROP_ARROWCODE,234);
+      ObjectSetInteger(0,n,OBJPROP_COLOR,clrMagenta);
+      ObjectSetInteger(0,n,OBJPROP_ANCHOR,ANCHOR_BOTTOM);
+   }
 }
 
 void DrawH4Sr()

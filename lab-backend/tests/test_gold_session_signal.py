@@ -48,7 +48,7 @@ def test_m1_template_exists():
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.23"' in mq5
+    assert '#property version   "1.24"' in mq5
     assert 'InpEasyArrows          = true' in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
