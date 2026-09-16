@@ -1,4 +1,4 @@
-JM GOLD SESSION SIGNAL v1.21 — indicator only
+JM GOLD SESSION SIGNAL v1.22 — indicator only
 =============================================
 
 Hindi EA. Walang OrderSend. Visual validation muna sa GOLD# chart.

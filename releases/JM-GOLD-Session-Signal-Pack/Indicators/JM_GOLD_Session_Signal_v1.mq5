@@ -4,7 +4,7 @@
 //| NO ORDERS. CSV reason log for later EA conversion.               |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
-#property version   "1.21"
+#property version   "1.22"
 #property description "Yellow PH hour on top of each hour candle + cyan BUY / magenta SELL arrows. Walang auto trade."
 #property indicator_chart_window
 #property indicator_buffers 2
@@ -301,8 +301,8 @@ void StyleHourOnCandle(const string name,const datetime t,const double price,
    ObjectSetInteger(0,name,OBJPROP_COLOR,clrYellow);
    ObjectSetInteger(0,name,OBJPROP_FONTSIZE,InpHourFontSize);
    ObjectSetString(0,name,OBJPROP_FONT,"Arial");
-   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT);
-   ObjectSetInteger(0,name,OBJPROP_ANGLE,90);
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT_LOWER);
+   ObjectSetDouble(0,name,OBJPROP_ANGLE,90.0);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,name,OBJPROP_BACK,false);
@@ -372,7 +372,7 @@ void RedrawSessions(const double lo,const double hi)
    }
 }
 
-void DrawPhHourLabels(const datetime &time[],const double &high[],const double &low[],const int rates_total)
+void DrawPhHourLabels(const datetime &time[],const int rates_total)
 {
    WipeKind("HR_");
    WipeKind("HL_");
@@ -456,18 +456,10 @@ void RefreshHourLabels()
 {
    if(!InpDrawPhHours) return;
    datetime t[];
-   double hi[];
    ArraySetAsSeries(t,false);
-   ArraySetAsSeries(hi,false);
    int n=CopyTime(_Symbol,_Period,0,2500,t);
    if(n<=1) return;
-   if(CopyHigh(_Symbol,_Period,0,n,hi)!=n) return;
-   if(t[0]>t[n-1])
-   {
-      ArrayReverse(t);
-      ArrayReverse(hi);
-   }
-   DrawPhHourLabels(t,hi,hi,n);
+   DrawPhHourLabels(t,n);
 }
 
 void DrawObjArrow(const datetime t,const double price,const int dir)
@@ -583,7 +575,7 @@ void RefreshCards(const datetime &time[],const double &high[],const double &low[
       MqlDateTime tm; TimeToStruct(ph,tm);
       string sess=SessionName(tm.hour);
       bool buySide=isBuy;
-      string arrow=buySide?"BUY ▲":"SELL ▼";
+      string arrow=buySide?"BUY ^":"SELL v";
       double entry=buySide?buy[i]+InpArrowOffsetUsd:sell[i]-InpArrowOffsetUsd;
 
       int shH1=ClosedHtfShift(PERIOD_H1,time[i]);
@@ -610,11 +602,11 @@ void Panel(const double close,const string emaS,const double rsi,
    string sess=SessionName(tm.hour);
    MqlDateTime br; TimeToStruct(TimeCurrent(),br);
 
-   Comment("JM GOLD SESSION SIGNAL v1  |  VISUAL ONLY — walang order\n",
+   Comment("JM GOLD SESSION SIGNAL v1  |  VISUAL ONLY - walang order\n",
            "PH TIME  ",FormatPhClock(ph),
            StringFormat("   %04d-%02d-%02d",tm.year,tm.mon,tm.day),
            "   SESSION: ",sess,"\n",
-           "Yellow PH hour sa TAAS ng candle  |  BUY aqua ▲  SELL magenta ▼  |  Easy arrows=",
+           "Yellow PH hour sa TAAS ng candle  |  BUY aqua  SELL magenta  |  Easy arrows=",
            (InpEasyArrows?"ON":"off"),"\n",
            "H4 TREND: ",h4,"   H1 TREND: ",h1,"   M15 MOMENTUM: ",m15,"\n",
            "CHART ",EnumToString(_Period),
@@ -841,7 +833,7 @@ int OnCalculate(const int rates_total,
    if(ymd!=g_lastPhYmd || phTm.hour!=g_lastPhHour || prev_calculated==0)
    {
       RedrawSessions(lo,hi);
-      DrawPhHourLabels(time,high,low,rates_total);
+      DrawPhHourLabels(time,rates_total);
       g_lastPhYmd=ymd;
       g_lastPhHour=phTm.hour;
    }

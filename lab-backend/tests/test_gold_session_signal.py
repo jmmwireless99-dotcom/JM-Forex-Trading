@@ -48,7 +48,7 @@ def test_m1_template_exists():
 
 def test_indicator_draws_names_hours_and_easy_arrows():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.21"' in mq5
+    assert '#property version   "1.22"' in mq5
     assert 'InpEasyArrows          = true' in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
@@ -56,7 +56,8 @@ def test_indicator_draws_names_hours_and_easy_arrows():
     assert '"OVERLAP"' in mq5
     assert "StyleHourOnCandle" in mq5
     assert "HourRowY" in mq5
-    assert "OBJPROP_ANGLE,90" in mq5
+    assert "OBJPROP_ANGLE" in mq5
+    assert "ObjectSetDouble" in mq5
     assert "clrYellow" in mq5
     assert "clrAqua" in mq5
     assert "clrMagenta" in mq5
