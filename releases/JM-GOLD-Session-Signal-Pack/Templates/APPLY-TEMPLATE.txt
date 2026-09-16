@@ -1,8 +1,8 @@
-JM GOLD SESSION VIEW v1.25
+JM GOLD SESSION VIEW v1.30
 ==========================
 
 Maliit na DOT lang (hindi malaking arrow).
-Dot = confirmed signal: EMA + candle + RSI + BB bounce + H1.
+Dot = V6.77 scalper analog: M5 bias + M1 small/break + score + H1 + M30.
 
   JM_GOLD_Session_M5.tpl   <- gamitin
   JM_GOLD_Session_M1.tpl

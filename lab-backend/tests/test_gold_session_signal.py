@@ -2,14 +2,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.gold_session_signal import (
-    bb_bounce,
     classify_ph_session,
+    closed_m1_breakout,
+    flow_score,
     format_ph_clock,
     in_hour_range,
+    is_small_candle,
+    m5_bias,
     ph_from_utc,
-    reason_pack,
+    scalper_block_reason,
+    scalper_reason_pack,
+    scalper_signal_passes,
     signal_card,
-    signal_passes,
+    v640_profit_hour_allowed,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,16 +29,17 @@ def test_m5_template_is_gold_session_view():
     assert "InpDrawPhHours=true" in text
     assert "InpDrawDaily=true" in text
     assert "InpDrawSessions=true" in text
-    assert "arrow=159" in text  # small dot, BUY and SELL
-    assert "days=1" in text  # MT5 daily period separators
-    assert "InpEasyArrows=false" in text
-    assert "InpRequireRsi=true" in text
-    assert "InpRequireBb=true" in text
+    assert "arrow=159" in text
+    assert "days=1" in text
     assert "InpRequireH1=true" in text
+    assert "InpRequireM30=true" in text
+    assert "InpRequireH4=false" in text
+    assert "InpUseV640ProfitHourRouter=true" in text
     assert "background_color=0" in text
-    assert "color=65280" in text  # lime BUY
-    assert "color=255" in text  # red SELL
+    assert "color=65280" in text
+    assert "color=255" in text
     assert "name=BIAS" in text
+    assert "name=FAST" in text
     assert "InpShowBiasLine=true" in text
 
 
@@ -43,20 +49,24 @@ def test_m1_template_exists():
     assert "period=1" in text
     assert "path=JM_GOLD_Session_Signal_v1" in text
     assert "InpShowSignalCards=false" in text
-    assert "InpEasyArrows=false" in text
+    assert "InpRequireM30=true" in text
 
 
-def test_indicator_draws_names_hours_and_easy_arrows():
+def test_indicator_is_visual_scalper_not_ea():
     mq5 = (ROOT / "mt5" / "Indicators" / "JM_GOLD_Session_Signal_v1.mq5").read_text(encoding="utf-8")
-    assert '#property version   "1.28"' in mq5
-    assert "BbBounce" in mq5
+    assert '#property version   "1.30"' in mq5
+    assert "OrderSend" not in mq5
+    assert "Trade.mqh" not in mq5
+    assert "V640ProfitHourAllowed" in mq5
+    assert "ClosedM1Breakout" in mq5
+    assert "PERIOD_M30" in mq5
+    assert "InpRequireM30          = true" in mq5
+    assert "InpRequireH1           = true" in mq5
+    assert "InpRequireH4           = false" in mq5
     assert "BufBias" in mq5
+    assert "BufFast" in mq5
     assert "DrawBiasLabel" in mq5
     assert "MarkSignal" in mq5
-    assert 'InpEasyArrows          = false' in mq5
-    assert 'InpRequireRsi          = true' in mq5
-    assert 'InpRequireBb           = true' in mq5
-    assert 'InpRequireH1           = true' in mq5
     assert '"ASIAN"' in mq5
     assert '"LONDON"' in mq5
     assert '"NEW YORK"' in mq5
@@ -66,21 +76,7 @@ def test_indicator_draws_names_hours_and_easy_arrows():
     assert "clrYellow" in mq5
     assert "DOT_CODE 159" in mq5
     assert "VisTop()" in mq5
-
-
-def test_easy_arrows_ignore_rsi_bb_h1():
-    ok = signal_passes(
-        "BUY",
-        ema_side="BUY",
-        rsi_ok=False,
-        bb_ok=False,
-        candle=True,
-        h4="SELL",
-        h1="SELL",
-        m15="SELL",
-        easy_arrows=True,
-    )
-    assert ok is True
+    assert "EasyArrows" not in mq5
 
 
 def test_ph_hour_label_on_candle():
@@ -90,10 +86,10 @@ def test_ph_hour_label_on_candle():
     assert format_ph_hour_label(1) == "1AM"
     assert format_ph_hour_label(0) == "12AM"
     assert format_ph_hour_label(12) == "12PM"
-    assert session_band(13) == "asia"       # 1PM PH
-    assert session_band(21) == "overlap"    # 9PM PH
+    assert session_band(13) == "asia"
+    assert session_band(21) == "overlap"
     assert session_band(2) == "ny"
-    utc = datetime(2026, 9, 16, 13, 17, tzinfo=timezone.utc)  # 9:17 PM PH
+    utc = datetime(2026, 9, 16, 13, 17, tzinfo=timezone.utc)
     ph = ph_from_utc(utc)
     assert ph.hour == 21 and ph.minute == 17
     assert format_ph_clock(ph) == "9:17 PM"
@@ -114,82 +110,121 @@ def test_session_priority_overlap():
     assert classify_ph_session(6) == "OFF-HOURS"
 
 
-def test_h1_filter_blocks_countertrend_when_required():
-    ok = signal_passes(
-        "BUY",
-        ema_side="BUY",
-        rsi_ok=True,
-        bb_ok=True,
-        candle=True,
-        h4="SELL",
+def test_v640_hours_match_v677():
+    assert v640_profit_hour_allowed(-1, 4) is True
+    assert v640_profit_hour_allowed(1, 4) is False
+    assert v640_profit_hour_allowed(1, 5) is True
+    assert v640_profit_hour_allowed(-1, 5) is True
+    assert v640_profit_hour_allowed(-1, 11) is True
+    assert v640_profit_hour_allowed(1, 11) is False
+    assert v640_profit_hour_allowed(1, 17) is True
+    assert v640_profit_hour_allowed(-1, 17) is False
+    assert v640_profit_hour_allowed(1, 10) is False
+
+
+def test_m5_bias_needs_adx_and_ema_gap():
+    side, gap = m5_bias(2001.0, 2000.0, adx=18.0, m5atr=2.0)
+    assert side == 1
+    assert abs(gap - 0.5) < 1e-9
+    side, _ = m5_bias(1999.0, 2000.0, adx=18.0, m5atr=2.0)
+    assert side == -1
+    side, _ = m5_bias(2001.0, 2000.0, adx=10.0, m5atr=2.0)
+    assert side == 0
+
+
+def test_scalper_blocks_mid_adx_and_gap_classes():
+    assert scalper_block_reason(1, adx=28.0, gap=0.20) == "MID_ADX"
+    assert scalper_block_reason(-1, adx=22.0, gap=0.20) == "SELL_ADX_20_25"
+    assert scalper_block_reason(1, adx=18.0, gap=0.70) == "BUY_GAP_050_100"
+    assert scalper_block_reason(-1, adx=18.0, gap=0.80) == "SELL_GAP_075_100"
+    assert scalper_block_reason(1, adx=18.0, gap=0.10) == "BUY_WEAK_EMA_GAP"
+    assert scalper_block_reason(-1, adx=18.0, gap=0.20) is None
+
+
+def test_small_candle_and_closed_m1_breakout():
+    assert is_small_candle(0.30, 0.40) is True
+    assert is_small_candle(0.90, 0.40) is False
+    assert closed_m1_breakout(1, 10.0, 9.8, brk_high=10.20, brk_low=9.95, atr=2.0) is True
+    assert closed_m1_breakout(1, 10.0, 9.8, brk_high=10.01, brk_low=9.95, atr=2.0) is False
+    assert closed_m1_breakout(-1, 10.0, 9.8, brk_high=10.05, brk_low=9.60, atr=2.0) is True
+
+
+def test_flow_score_needs_three():
+    score = flow_score(-1, -1, adx=22.0, gap=0.20, rsi=44.0, body_ratio=0.25, range_atr=0.40)
+    assert score >= 3
+
+
+def _ok_kwargs(**overrides):
+    base = dict(
+        adx=18.0,
+        gap=0.20,
+        flow=-1,
+        rsi=44.0,
+        body_ratio=0.25,
+        range_atr=0.40,
+        small_ok=True,
+        breakout_ok=True,
         h1="SELL",
-        m15="BUY",
-        require_h4=False,
-        require_h1=True,
-        require_m15=False,
+        m30="SELL",
+        h4="BUY",
+        server_hour=4,
     )
+    base.update(overrides)
+    return base
+
+
+def test_h1_buy_blocks_m5_sell_like_false_signal():
+    # Previous BB SELL sold the lows while H1 had already flipped BUY.
+    ok = scalper_signal_passes(-1, **_ok_kwargs(h1="BUY"))
     assert ok is False
-
-
-def test_h4_and_m15_optional_so_entries_are_not_starved():
-    ok = signal_passes(
-        "BUY",
-        ema_side="BUY",
-        rsi_ok=True,
-        bb_ok=True,
-        candle=True,
-        h4="SELL",
-        h1="BUY",
-        m15="SELL",
-        require_h4=False,
-        require_h1=True,
-        require_m15=False,
-    )
+    ok = scalper_signal_passes(-1, **_ok_kwargs(h1="SELL"))
     assert ok is True
 
 
-def test_bb_buy_bounce():
-    assert bb_bounce("BUY", 10.4, 9.9, 10.2, 10.05, bb_upper=10.5, bb_lower=10.0) is True
-    assert bb_bounce("BUY", 10.4, 10.1, 10.2, 10.05, bb_upper=10.5, bb_lower=10.0) is False
+def test_m30_required_h4_display_only():
+    ok = scalper_signal_passes(-1, **_ok_kwargs(m30="BUY", h4="BUY"))
+    assert ok is False
+    ok = scalper_signal_passes(-1, **_ok_kwargs(m30="SELL", h4="BUY"))
+    assert ok is True
+    ok = scalper_signal_passes(-1, **_ok_kwargs(h4="BUY", require_h4=True))
+    assert ok is False
 
 
-def test_bb_rejects_dump_bar_that_spans_both_bands():
-    # Wide bear candle tags upper AND lower — sold the lows, not a rejection.
-    assert bb_bounce("SELL", 10.55, 9.95, 10.05, 10.40, bb_upper=10.50, bb_lower=10.00) is False
-    assert bb_bounce("BUY", 10.55, 9.95, 10.45, 10.10, bb_upper=10.50, bb_lower=10.00) is False
-
-
-def test_bb_sell_true_upper_rejection():
-    # Wick upper band, bear close still in the upper half, did not tag lower.
-    assert bb_bounce("SELL", 10.52, 10.28, 10.35, 10.42, bb_upper=10.50, bb_lower=10.00) is True
-    # Close at the floor of the bar = dump, reject.
-    assert bb_bounce("SELL", 10.52, 10.20, 10.22, 10.45, bb_upper=10.50, bb_lower=10.00) is False
+def test_v640_blocks_wrong_hour():
+    ok = scalper_signal_passes(-1, **_ok_kwargs(server_hour=10))
+    assert ok is False
+    ok = scalper_signal_passes(-1, **_ok_kwargs(server_hour=4))
+    assert ok is True
 
 
 def test_reason_and_card_saved_for_later_ea():
-    reason = reason_pack(
+    reason = scalper_reason_pack(
         session="NEW YORK",
-        ph_clock="9:17 PM",
-        side="BUY",
+        ph_clock="2:15 AM",
+        side="SELL",
         entry=3684.50,
-        h4="BUY",
-        h1="BUY",
-        m15="BUY",
-        ema_side="BUY",
-        rsi=58.2,
-        bb_tag="LOWER_BOUNCE",
-        candle="BULL",
+        h4="SELL",
+        h1="SELL",
+        m30="SELL",
+        m5="SELL",
+        adx=22.1,
+        gap=0.180,
+        rsi=44.2,
+        score=4,
     )
     assert "SESSION=NEW YORK" in reason
     assert "ENTRY=3684.50" in reason
+    assert "M30=SELL" in reason
+    assert "SMALL+BREAK" in reason
     card = signal_card(
-        side="BUY",
-        ph_clock="9:17 PM",
+        side="SELL",
+        ph_clock="2:15 AM",
         session="NEW YORK",
-        h1="BUY",
-        m15="BUY",
+        h1="SELL",
+        m30="SELL",
         entry=3684.50,
     )
-    assert "BUY ▲" in card
-    assert "PH TIME: 9:17 PM" in card
+    assert "SELL ▼" in card
+    assert "PH TIME: 2:15 AM" in card
+    assert "M30 TREND: SELL" in card
     assert "ENTRY: 3684.50" in card
