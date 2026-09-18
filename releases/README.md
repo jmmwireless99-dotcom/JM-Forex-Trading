@@ -37,6 +37,20 @@ Rebuild: `./scripts/build-gold-v620-pack.sh`
 
 ---
 
+## GOLD V6.77 EA (trading Expert — SL $15 @ 0.01)
+
+Kopya ng JM SCALPING V6.77 na pinaste mo. Hindi ito ang V6.1 at hindi indicator.
+Copy ang **tatlong** files sa `MQL5\Experts\` (mq5 + 2 mqh), F7, DEMO only.
+
+| File | Link |
+|------|------|
+| **V6.77 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v677.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V677-Pack.zip |
+
+Contents: `JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V6_77.mq5` + `JM_GOLD_V656_CompleteAnalyzer.mqh` + `JM_GOLD_V680_LossRootCauseAnalyzer.mqh` + setup. Rebuild: `./scripts/build-gold-v677-pack.sh`
+
+---
+
 ## GOLD Session Signal v1 (indicator only — no orders)
 
 PH session zones + EMA/RSI/BB arrows on GOLD#. Validate visually before any EA.

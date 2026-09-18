@@ -43,6 +43,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "gold_v61_zip": f"{base}/gold-v61-analyzer.zip",
         "gold_ema200_stoch_zip": f"{base}/gold-ema200-stoch.zip",
         "gold_v620_zip": f"{base}/gold-v620-tp30.zip",
+        "gold_v677_zip": f"{base}/gold-v677.zip",
         "gold_session_signal_zip": f"{base}/gold-session-signal.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
@@ -58,6 +59,7 @@ async def downloads_mt5_bridge_index() -> dict:
         "github_gold_v61_zip": f"{gh}/JM-GOLD-V61-Analyzer-Pack.zip",
         "github_gold_ema200_stoch_zip": f"{gh}/JM-GOLD-EMA200-STOCH-Pack.zip",
         "github_gold_v620_zip": f"{gh}/JM-GOLD-V620-TP30-Pack.zip",
+        "github_gold_v677_zip": f"{gh}/JM-GOLD-V677-Pack.zip",
         "github_gold_session_signal_zip": f"{gh}/JM-GOLD-Session-Signal-Pack.zip",
         "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
     }
@@ -74,6 +76,7 @@ def _release_file(name: str) -> Path:
         "gold-v61-analyzer.zip": _RELEASES / "JM-GOLD-V61-Analyzer-Pack.zip",
         "gold-ema200-stoch.zip": _RELEASES / "JM-GOLD-EMA200-STOCH-Pack.zip",
         "gold-v620-tp30.zip": _RELEASES / "JM-GOLD-V620-TP30-Pack.zip",
+        "gold-v677.zip": _RELEASES / "JM-GOLD-V677-Pack.zip",
         "gold-session-signal.zip": _RELEASES / "JM-GOLD-Session-Signal-Pack.zip",
         "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
@@ -132,6 +135,12 @@ async def download_gold_ema200_stoch_zip() -> FileResponse:
 async def download_gold_v620_tp30_zip() -> FileResponse:
     path = _release_file("gold-v620-tp30.zip")
     return FileResponse(path, filename="JM-GOLD-V620-TP30-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/gold-v677.zip")
+async def download_gold_v677_zip() -> FileResponse:
+    path = _release_file("gold-v677.zip")
+    return FileResponse(path, filename="JM-GOLD-V677-Pack.zip", media_type="application/zip")
 
 
 @router.get("/downloads/gold-session-signal.zip")
