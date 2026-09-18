@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import LabCandleChart from '../LabCandleChart.jsx'
+import EntryAnalyzerPanel from '../EntryAnalyzerPanel.jsx'
 import { PAIR_GUIDE, PAIR_PRESETS, STRATEGY_INFO } from '../content/compare.js'
 import { labTradeApi, loadLabSession, saveLabSession, ensurePairAccount, setLabSessionPair } from '../api.js'
 import { PAIR_URL_SYMBOLS, pairTradePath } from '../routing.js'
@@ -46,6 +47,8 @@ export default function TradePage({ fixedPair = null }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
+  const [analyzer, setAnalyzer] = useState(null)
+  const [analyzerError, setAnalyzerError] = useState('')
 
   useEffect(() => {
     if (lockedPair) setLabSessionPair(lockedPair)
@@ -100,12 +103,22 @@ export default function TradePage({ fixedPair = null }) {
     }
   }, [symbol])
 
+  const refreshAnalyzer = useCallback(async () => {
+    try {
+      const res = await labTradeApi.analyzer(symbol)
+      setAnalyzer(res.analyzer || null)
+      setAnalyzerError('')
+    } catch (e) {
+      setAnalyzerError(e.message || String(e))
+    }
+  }, [symbol])
+
   useEffect(() => {
     if (!session) return undefined
     let alive = true
     ;(async () => {
       try {
-        await Promise.all([refresh(), refreshTick()])
+        await Promise.all([refresh(), refreshTick(), refreshAnalyzer()])
         if (alive) setError('')
       } catch (e) {
         if (alive) setError(e.message || String(e))
@@ -117,12 +130,16 @@ export default function TradePage({ fixedPair = null }) {
     const accId = setInterval(() => {
       refresh().catch(() => {})
     }, 1500)
+    const azId = setInterval(() => {
+      refreshAnalyzer().catch(() => {})
+    }, 5000)
     return () => {
       alive = false
       clearInterval(tickId)
       clearInterval(accId)
+      clearInterval(azId)
     }
-  }, [session, refresh, refreshTick])
+  }, [session, refresh, refreshTick, refreshAnalyzer])
 
   async function createDemo() {
     setBusy(true)
@@ -398,6 +415,8 @@ export default function TradePage({ fixedPair = null }) {
         ) : null}
       </section>
 
+      <EntryAnalyzerPanel analyzer={analyzer} error={analyzerError} />
+
       <section className="lab-panel">
         <div className="lab-auto-head">
           <h2>Auto · {auto?.strategy_name || stratInfo.name || pairPreset.label}</h2>
@@ -471,12 +490,25 @@ export default function TradePage({ fixedPair = null }) {
 
       <section className="lab-panel">
         <h2>Manual trade</h2>
+        <p className="lab-muted">
+          BUY/SELL buttons lock when the analyzer says <strong>MALI</strong> for that side.
+        </p>
         <div className="lab-trade-controls">
-          <button type="button" className="lab-btn lab-buy" disabled={busy || open.length > 0} onClick={() => order('BUY')}>
-            Buy
+          <button
+            type="button"
+            className="lab-btn lab-buy"
+            disabled={busy || open.length > 0 || analyzer?.buy?.verdict === 'MALI'}
+            onClick={() => order('BUY')}
+          >
+            Buy{analyzer?.buy?.verdict === 'MALI' ? ' · MALI' : ''}
           </button>
-          <button type="button" className="lab-btn lab-sell" disabled={busy || open.length > 0} onClick={() => order('SELL')}>
-            Sell
+          <button
+            type="button"
+            className="lab-btn lab-sell"
+            disabled={busy || open.length > 0 || analyzer?.sell?.verdict === 'MALI'}
+            onClick={() => order('SELL')}
+          >
+            Sell{analyzer?.sell?.verdict === 'MALI' ? ' · MALI' : ''}
           </button>
         </div>
       </section>

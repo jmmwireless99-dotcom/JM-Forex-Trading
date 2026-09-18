@@ -14,6 +14,70 @@ Build: `./scripts/build-lab-xauusd-ea-pack.sh`
 
 # JM FX Downloads
 
+## GOLD V6.1 Analyzer Pack (best scalper + live OK/MALI panel)
+
+| File | Link |
+|------|------|
+| **GOLD V6.1 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v61-analyzer.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V61-Analyzer-Pack.zip |
+
+Contents: `JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5` + `JM_V61_LiveAnalyzer.mqh` + setup. Rebuild: `./scripts/build-gold-v61-pack.sh`
+
+---
+
+## GOLD EMA200 + Stochastic Scalper (clean 2-indicator chart)
+
+Hindi ito ang V6.1. A/B sa demo — huwag i-attach kasama ng V6.1 sa iisang chart.
+
+| File | Link |
+|------|------|
+| **EMA200+STOCH ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-ema200-stoch.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-EMA200-STOCH-Pack.zip |
+
+Contents: `JM_GOLD_EMA200_STOCH_SCALPER.mq5` (single file, F7) + setup. Lots 0.03, scale-out gold $5/$10/$15, SL $3.50. Rebuild: `./scripts/build-gold-ema200-stoch-pack.sh`
+
+---
+
+## GOLD V6.20 TP30/SL15 (H21 SELL block + strong-trend boost)
+
+Same V6.1 entries as your +$1,366 run. Two result-based adds only. Not V6.1 and not EMA200.
+
+| File | Link |
+|------|------|
+| **V6.20 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v620-tp30.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V620-TP30-Pack.zip |
+
+Rebuild: `./scripts/build-gold-v620-pack.sh`
+
+---
+
+## GOLD V6.77 EA (trading Expert — SL $15 @ 0.01)
+
+Kopya ng JM SCALPING V6.77 na pinaste mo. Hindi ito ang V6.1 at hindi indicator.
+Copy ang **tatlong** files sa `MQL5\Experts\` (mq5 + 2 mqh), F7, DEMO only.
+
+| File | Link |
+|------|------|
+| **V6.77 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-v677.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-V677-Pack.zip |
+
+Contents: `JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V6_77.mq5` + `JM_GOLD_V656_CompleteAnalyzer.mqh` + `JM_GOLD_V680_LossRootCauseAnalyzer.mqh` + setup. Rebuild: `./scripts/build-gold-v677-pack.sh`
+
+---
+
+## GOLD Session Signal v1 (indicator only — no orders)
+
+PH session zones + EMA/RSI/BB arrows on GOLD#. Validate visually before any EA.
+
+| File | Link |
+|------|------|
+| **Session Signal ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-session-signal.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/gold-entry-analyzer-6e69/releases/JM-GOLD-Session-Signal-Pack.zip |
+
+Copy `JM_GOLD_Session_Signal_v1.mq5` → `MQL5\Indicators\`, F7, then copy `Templates\*.tpl` → `MQL5\Profiles\Templates\` and load **JM_GOLD_Session_M5**. Rebuild: `./scripts/build-gold-session-signal-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |

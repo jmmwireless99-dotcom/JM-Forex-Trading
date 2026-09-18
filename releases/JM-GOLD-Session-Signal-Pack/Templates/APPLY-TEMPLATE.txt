@@ -1,0 +1,11 @@
+JM GOLD SESSION VIEW v1.33
+==========================
+
+NOW badge = WAIT or WATCH BUY/SELL.
+lime ^ BUY / red v SELL sa TAAS ng candle = entry.
+
+  JM_GOLD_Session_M5.tpl
+
+1. Delete old indicator
+2. F7 compile v1.33
+3. Templates → JM_GOLD_Session_M5

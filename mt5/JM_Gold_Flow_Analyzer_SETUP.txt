@@ -1,0 +1,48 @@
+JM GOLD V6.1 + live entry analyzer
+==================================
+
+Ito ang BEST strategy mo (V6.1-FINAL-H16-H17-BLOCK) + OK/MALI panel.
+Hindi binago ang entry, TP, SL, lots, o hour routers.
+
+FILES
+-----
+  mt5/Experts/JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V4_2.mq5  (standalone — F7 this only)
+
+INSTALL
+-------
+1. MT5 → File → Open Data Folder
+2. Copy the .mq5 → MQL5\Experts\   (one file — analyzer is inside, F7 should be 0 errors)
+3. MetaEditor → Compile the .mq5 (F7)
+4. I-detach ang ibang gold EA sa GOLD# chart
+5. Attach V4_2 / V6.1 sa GOLD#  (M1 data kailangan — “Every tick” tester)
+6. Inputs: lots 0.01, routers ON, InpMaxRiskUsd=4.00
+7. InpShowPanel = true
+8. I-retest SAME dates first, then demo
+
+PANEL (Comment sa chart)
+------------------------
+BUY  OK / WAIT / MALI + reason
+SELL OK / WAIT / MALI + reason
+
+Typical MALI reasons (from YOUR gates, not a new filter):
+  V6.1 H16/H17 hard block
+  strict-hour (BUY only H23)
+  hour router reject
+  SAFE-AB (Asia/Europe SELL only)
+  no M5 flow / M1 disagrees
+  no small candle
+  score < need
+  RSI outside zone
+  no breakout yet
+
+BACKTEST (your report)
+----------------------
+  +830 on 10k · PF 1.20 · 1455 trades
+  SELL 1348 (45.5%) · BUY 107 (45.8%)
+  BUY is rare because strict hours allow BUY only at H23
+
+HUWAG
+-----
+- Dalawang EA sa iisang chart
+- Optimize / palitan TP-SL sa unang demo weeks
+- Real account

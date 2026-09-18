@@ -1,0 +1,13 @@
+JM-GOLD-V677-Pack
+Built: 2026-09-18T14:51:40Z
+EA: JM_GOLD_SMALL_CANDLE_FLOW_SCALPER_V6_77.mq5
+EA version: 6.77
+Build tag: V6.77-BEST-MASTER-SL15
+Magic: 26091077
+Includes (keep next to EA):
+  JM_GOLD_V656_CompleteAnalyzer.mqh
+  JM_GOLD_V680_LossRootCauseAnalyzer.mqh
+Symbol: GOLD#
+Lots: 0.01
+SL: $15 @ 0.01 (scales with lot)
+NOT V6.1 — do not overwrite V4_2.mq5
