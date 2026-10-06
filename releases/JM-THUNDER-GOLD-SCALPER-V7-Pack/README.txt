@@ -1,11 +1,11 @@
-JM THUNDER GOLD SCALPER V7
+JM THUNDER GOLD SCALPER V7.1
 =========================================
 
 Bagong EA. Hindi V6.1 / V6.77.
 File: JM_THUNDER_GOLD_SCALPER_V7.mq5
 F7 this only. Demo muna.
 
-V7 — BILIS
+V7.1 — BILIS
 --------------------
   FastEntry ON  = bawat tick bina-basa ang chart / ina-update ang pending
   FastTrail ON  = trailing sumusunod sa EXTREME (pinakataas/baba ng pitik)
@@ -29,7 +29,7 @@ DALAWANG FLOW
 
 DEFAULTS
 --------
-  Version  7
+  Version  7.1
   Magic    30250007
   Trail    start $0.50 / dist $0.70 / step every tick
   FastEntry / FastTrail / TrailReplacesSL = ON

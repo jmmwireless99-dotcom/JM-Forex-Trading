@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title JM Thunder GOLD Scalper V7 - copy to Desktop + MT5 Experts
+title JM Thunder GOLD Scalper V7.1 - copy to Desktop + MT5 Experts
 
 set "EA=JM_THUNDER_GOLD_SCALPER_V7.mq5"
 set "SETUP=SETUP.txt"

@@ -27,12 +27,10 @@ SETUP = ROOT / "mt5" / "JM_THUNDER_GOLD_SCALPER_V7_SETUP.txt"
 ZIP = ROOT / "releases" / "JM-THUNDER-GOLD-SCALPER-V7-Pack.zip"
 
 
-def test_ea_is_v7_fast_trail():
+def test_ea_is_v71_fast_trail():
     mq5 = EA.read_text(encoding="utf-8")
-    assert '#property version   "7.00"' in mq5
-    assert "JM Thunder GOLD Scalper V7" in mq5
-    assert "V7.1" not in mq5
-    assert "V7.01" not in mq5
+    assert '#property version   "7.10"' in mq5
+    assert "JM Thunder GOLD Scalper V7.1" in mq5
     assert "InpFastTrail        = true" in mq5
     assert "InpFastEntry        = true" in mq5
     assert "InpTrailReplacesSL  = true" in mq5
@@ -61,7 +59,7 @@ def test_manual_and_setup_docs():
     mq5 = EA.read_text(encoding="utf-8")
     assert "IsManualPosition" in mq5
     setup = SETUP.read_text(encoding="utf-8")
-    assert "JM THUNDER GOLD SCALPER V7" in setup
+    assert "V7.1" in setup
     assert "$0.50" in setup
     assert "$0.70" in setup
     assert "pitik" in setup.lower() or "fast" in setup.lower() or "extreme" in setup.lower()
@@ -157,5 +155,5 @@ def test_pack_zip_has_desktop_copy():
     assert "Experts/JM_THUNDER_GOLD_SCALPER_V7.mq5" in names
     assert "COPY-TO-DESKTOP.bat" in names
     assert "Desktop/JM_THUNDER_GOLD_SCALPER_V7.mq5" in names
-    assert '#property version   "7.00"' in ea
+    assert '#property version   "7.10"' in ea
     assert "InpFastTrail        = true" in ea

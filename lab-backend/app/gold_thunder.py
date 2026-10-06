@@ -1,4 +1,4 @@
-"""JM Thunder GOLD Scalper V7 helpers (mirrors JM_THUNDER_GOLD_SCALPER_V7.mq5)."""
+"""JM Thunder GOLD Scalper V7.1 helpers (mirrors JM_THUNDER_GOLD_SCALPER_V7.mq5)."""
 
 from __future__ import annotations
 
