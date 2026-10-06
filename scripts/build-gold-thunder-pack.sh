@@ -10,6 +10,7 @@ mkdir -p "$SRC/Experts"
 cp "$ROOT/mt5/Experts/JM_THUNDER_GOLD_SCALPER.mq5" "$SRC/Experts/"
 cp "$ROOT/mt5/JM_THUNDER_GOLD_SCALPER_SETUP.txt" "$SRC/SETUP.txt"
 cp "$ROOT/mt5/JM_THUNDER_GOLD_SCALPER_SETUP.txt" "$SRC/README.txt"
+cp "$ROOT/scripts/copy-thunder-to-vantage-experts.bat" "$SRC/COPY-TO-VANTAGE-MT5.bat"
 
 cat > "$SRC/VERSION.txt" <<EOF
 JM-THUNDER-GOLD-SCALPER-Pack

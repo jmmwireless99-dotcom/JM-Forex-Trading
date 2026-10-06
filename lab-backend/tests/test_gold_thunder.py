@@ -159,6 +159,7 @@ def test_pack_zip_is_single_file_ea():
         ea = zf.read("Experts/JM_THUNDER_GOLD_SCALPER.mq5").decode("utf-8")
     assert "Experts/JM_THUNDER_GOLD_SCALPER.mq5" in names
     assert "SETUP.txt" in names
+    assert "COPY-TO-VANTAGE-MT5.bat" in names
     assert not any(n.endswith(".mqh") for n in names)
     assert "V2.0.3" in setup
     assert '#property version   "2.03"' in ea

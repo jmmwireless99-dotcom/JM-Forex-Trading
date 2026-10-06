@@ -51,16 +51,23 @@ DEFAULTS
   Trail dist    $0.70
   Session GMT   08:00-21:00
 
-INSTALL
--------
-1. MT5 -> File -> Open Data Folder
-2. Copy JM_THUNDER_GOLD_SCALPER.mq5 -> MQL5\Experts\
-3. MetaEditor -> F7 (0 errors)
-4. Tanggalin ang ibang gold EA sa GOLD# chart (isang EA lang)
-5. Drag Thunder sa GOLD# chart
-6. Inputs: Manual Entry Trail = ON, Pause Auto When Manual = ON, Keep SL/TP = ON
-7. Algo Trading ON (green)
-8. DEMO / Strategy Tester muna. Every tick. M15 history.
+INSTALL — VANTAGE MT5 (Windows)
+-------------------------------
+Pinakamadali: i-double click COPY-TO-VANTAGE-MT5.bat
+  -> kokopyahin ang EA sa MQL5\Experts ng Vantage terminal.
+
+Manual:
+1. Vantage MT5 -> File -> Open Data Folder
+2. Punta sa MQL5\Experts\
+3. Copy JM_THUNDER_GOLD_SCALPER.mq5 doon
+4. MetaEditor -> F7 (0 errors)
+5. Tanggalin ang ibang gold EA sa chart (isang EA lang)
+6. Drag Thunder sa XAUUSD / XAUUSDm chart (Vantage symbol, hindi GOLD#)
+7. Inputs: Manual Entry Trail = ON, Pause Auto When Manual = ON, Keep SL/TP = ON
+8. Algo Trading ON (green)
+9. DEMO muna. Every tick. M15 history.
+
+Kung Vantage MT4 iyan: HINDI tatakbo ang .mq5. Kailangan Vantage MT5.
 
 PANEL
 -----
