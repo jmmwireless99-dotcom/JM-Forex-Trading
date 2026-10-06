@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build JM-THUNDER-GOLD-SCALPER-V7-Pack.zip — V7.1 + Desktop copy BAT
+# Build JM-THUNDER-GOLD-SCALPER-V7-Pack.zip — V7 + Desktop copy BAT
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,8 +21,8 @@ cat > "$SRC/VERSION.txt" <<EOF
 JM-THUNDER-GOLD-SCALPER-V7-Pack
 Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EA: JM_THUNDER_GOLD_SCALPER_V7.mq5
-EA version: 7.1.0
-Build tag: THUNDER-V7.1-FAST-TRAIL
+EA version: 7.0.0
+Build tag: THUNDER-V7-FAST-TRAIL
 Magic auto: 30250007
 Magic manual: 0
 Trail start: \$0.50 @ 0.01
