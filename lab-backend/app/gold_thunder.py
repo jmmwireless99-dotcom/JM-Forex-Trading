@@ -1,156 +1,217 @@
-"""JM Thunder GOLD Scalper V1.0.0 helpers (mirrors JM_THUNDER_GOLD_SCALPER.mq5)."""
+"""JM Thunder GOLD Scalper V2.0.3 helpers (mirrors JM_THUNDER_GOLD_SCALPER.mq5)."""
 
 from __future__ import annotations
 
+MANUAL_PENDING_TYPES = frozenset(
+    {
+        "BUY_STOP",
+        "SELL_STOP",
+        "BUY_LIMIT",
+        "SELL_LIMIT",
+        "BUY_STOP_LIMIT",
+        "SELL_STOP_LIMIT",
+    }
+)
 
-def v640_hour_allowed(direction: int, hour: int, *, enabled: bool = True) -> bool:
+DEF_TRAIL_START_USD = 0.50
+DEF_TRAIL_DISTANCE_USD = 0.70
+DEF_TRAIL_STEP_USD = 0.10
+DEF_TRAIL_START_PTS = 50
+DEF_TRAIL_DISTANCE_PTS = 70
+DEF_TRAIL_STEP_PTS = 10
+EA_MAGIC = 30250003
+MANUAL_MAGIC = 0
+
+
+def usd_to_points(
+    usd: float,
+    *,
+    tick_size: float = 0.01,
+    tick_value: float = 1.0,
+    point: float = 0.01,
+    ref_lot: float = 0.01,
+) -> int:
+    if usd <= 0 or tick_size <= 0 or tick_value <= 0 or point <= 0 or ref_lot <= 0:
+        return 0
+    return int(round(usd * tick_size / (tick_value * ref_lot) / point))
+
+
+def trail_pts_from_usd(usd: float, fallback_pts: int, **kwargs) -> int:
+    pts = usd_to_points(usd, **kwargs)
+    if pts > 0:
+        return pts
+    pf = kwargs.get("point_factor", 1)
+    return fallback_pts * pf
+
+
+def default_trail_points() -> tuple[int, int, int]:
+    start = trail_pts_from_usd(DEF_TRAIL_START_USD, DEF_TRAIL_START_PTS)
+    dist = trail_pts_from_usd(DEF_TRAIL_DISTANCE_USD, DEF_TRAIL_DISTANCE_PTS)
+    step = trail_pts_from_usd(DEF_TRAIL_STEP_USD, DEF_TRAIL_STEP_PTS)
+    return start, dist, step
+
+
+def in_session(gmt_hour: int, start: int = 8, end: int = 21, *, enabled: bool = True) -> bool:
     if not enabled:
         return True
-    hour %= 24
-    if hour == 4 and direction < 0:
-        return True
-    if hour == 5:
-        return True
-    if hour == 8:
-        return True
-    if hour == 11 and direction < 0:
-        return True
-    if hour == 12 and direction < 0:
-        return True
-    if hour == 17 and direction > 0:
-        return True
-    if hour == 19 and direction > 0:
-        return True
-    if hour == 21 and direction < 0:
-        return True
-    if hour == 22 and direction > 0:
-        return True
+    hour = gmt_hour % 24
+    if start <= end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def is_manual_pending(
+    magic: int,
+    symbol: str,
+    order_type: str,
+    *,
+    chart_symbol: str = "GOLD#",
+    manage_manual: bool = True,
+) -> bool:
+    if not manage_manual:
+        return False
+    if symbol != chart_symbol:
+        return False
+    if magic != MANUAL_MAGIC:
+        return False
+    return order_type in MANUAL_PENDING_TYPES
+
+
+def is_manual_position(
+    magic: int,
+    symbol: str,
+    *,
+    chart_symbol: str = "GOLD#",
+    manage_manual: bool = True,
+) -> bool:
+    return manage_manual and magic == MANUAL_MAGIC and symbol == chart_symbol
+
+
+def has_manual_exposure(
+    positions: list[dict],
+    orders: list[dict],
+    *,
+    chart_symbol: str = "GOLD#",
+    manage_manual: bool = True,
+) -> bool:
+    for p in positions:
+        if is_manual_position(
+            int(p.get("magic", -1)),
+            str(p.get("symbol", "")),
+            chart_symbol=chart_symbol,
+            manage_manual=manage_manual,
+        ):
+            return True
+    for o in orders:
+        if is_manual_pending(
+            int(o.get("magic", -1)),
+            str(o.get("symbol", "")),
+            str(o.get("type", "")),
+            chart_symbol=chart_symbol,
+            manage_manual=manage_manual,
+        ):
+            return True
     return False
 
 
-def pht_hour(server_hour: int, broker_utc: int = 3) -> int:
-    return (server_hour + (8 - broker_utc) + 24) % 24
-
-
-def m5_bias(
-    fast: float,
-    slow: float,
-    adx: float,
-    m5atr: float,
+def pause_auto_when_manual(
     *,
-    min_adx: float = 16.0,
-    use_chop: bool = True,
-    min_gap: float = 0.06,
-    weak_adx: float = 20.0,
-) -> tuple[int, float]:
-    if m5atr <= 0:
-        return 0, 0.0
-    gap = abs(fast - slow) / m5atr
-    if adx < min_adx:
-        return 0, gap
-    if use_chop and gap < min_gap and adx < weak_adx:
-        return 0, gap
-    if fast > slow:
-        return 1, gap
-    if fast < slow:
-        return -1, gap
-    return 0, gap
-
-
-def is_small_candle(
-    body_ratio: float,
-    range_atr: float,
-    *,
-    body_max: float = 0.45,
-    range_min: float = 0.15,
-    range_max: float = 0.80,
+    manage_manual: bool = True,
+    pause: bool = True,
+    has_manual: bool = False,
 ) -> bool:
-    return range_min <= range_atr <= range_max and body_ratio <= body_max
+    return bool(manage_manual and pause and has_manual)
 
 
-def thunder_swing_break(
+def swing_unbroken(high: bool, values: list[float], strength: int = 5) -> float | None:
+    """Newest bar is index 0 (MT5 shift 0). First unbroken swing high/low."""
+    n = strength
+    if len(values) <= n + 1:
+        return None
+    lookback = len(values) - 1
+    for i in range(n + 1, lookback + 1):
+        if i + n >= len(values):
+            continue
+        v = values[i]
+        ok = True
+        for k in range(1, n + 1):
+            left = values[i - k]
+            right = values[i + k]
+            if high and (left >= v or right > v):
+                ok = False
+                break
+            if not high and (left <= v or right < v):
+                ok = False
+                break
+        if not ok:
+            continue
+        broken = False
+        for j in range(i):
+            if high and values[j] > v:
+                broken = True
+                break
+            if not high and values[j] < v:
+                broken = True
+                break
+        if broken:
+            continue
+        return v
+    return None
+
+
+def stop_entry(
     direction: int,
-    last_high: float,
-    last_low: float,
-    last_open: float,
-    last_close: float,
-    prior_highs: list[float],
-    prior_lows: list[float],
+    swing: float,
+    market: float,
     *,
-    buffer: float = 0.0,
-) -> bool:
-    if direction == 0 or not prior_highs or not prior_lows:
-        return False
-    if direction > 0:
-        swing = max(prior_highs)
-        return last_high > swing + buffer and last_close > last_open
-    swing = min(prior_lows)
-    return last_low < swing - buffer and last_close < last_open
-
-
-def flow_score(
-    bias: int,
-    flow: int,
-    adx: float,
-    gap: float,
-    rsi: float,
-    body_ratio: float,
-    range_atr: float,
-    *,
-    weak_adx: float = 20.0,
-    min_gap: float = 0.06,
-) -> int:
-    score = 0
-    if flow == bias:
-        score += 1
-    if adx >= weak_adx:
-        score += 1
-    if gap >= min_gap:
-        score += 1
-    if 0.25 <= range_atr <= 0.65:
-        score += 1
-    if bias > 0 and 48.0 <= rsi <= 64.0:
-        score += 1
-    if bias < 0 and 36.0 <= rsi <= 52.0:
-        score += 1
-    if 0.12 <= body_ratio <= 0.40:
-        score += 1
-    return score
-
-
-def nfp_blocked(
-    day_of_week: int,
-    day: int,
-    hour: int,
-    *,
-    enabled: bool = True,
-    start_hour: int = 14,
-    end_hour: int = 17,
-) -> bool:
-    if not enabled:
-        return False
-    if day_of_week != 5:
-        return False
-    if day > 7:
-        return False
-    return start_hour <= hour < end_hour
-
-
-def select_tp_usd(
-    adx: float,
-    gap: float,
-    lots: float,
-    *,
-    base: float = 30.0,
-    strong: float = 45.0,
-    adx_need: float = 32.0,
-    gap_need: float = 0.55,
-    ref_lot: float = 0.01,
-    dynamic: bool = True,
+    buffer: float = 0.50,
+    min_gap: float = 0.20,
+    max_dist: float = 50.0,
 ) -> float:
-    tp = base
-    if dynamic and adx >= adx_need and gap >= gap_need:
-        tp = strong
-    if ref_lot <= 0:
-        return tp
-    return tp * (lots / ref_lot)
+    if swing <= 0 or market <= 0:
+        return 0.0
+    if direction > 0:
+        entry = swing + buffer
+        gap = entry - market
+    else:
+        entry = swing - buffer
+        gap = market - entry
+    if gap < min_gap or gap > max_dist:
+        return 0.0
+    return entry
+
+
+def apply_trail(
+    buy: bool,
+    bid: float,
+    ask: float,
+    open_price: float,
+    cur_sl: float,
+    *,
+    trail_start_pts: int,
+    trail_dist_pts: int,
+    trail_step_pts: int,
+    point: float = 0.01,
+    stop_level: float = 0.0,
+) -> float:
+    profit_pts = (bid - open_price) / point if buy else (open_price - ask) / point
+    if profit_pts < trail_start_pts:
+        return cur_sl
+    dist = max(trail_dist_pts * point, stop_level + point)
+    if buy:
+        cand = bid - dist
+        if cand > bid - stop_level - point:
+            return cur_sl
+        if cur_sl > 0 and cand <= cur_sl:
+            return cur_sl
+        if cur_sl > 0 and cand < cur_sl + trail_step_pts * point:
+            return cur_sl
+        return cand
+    cand = ask + dist
+    if cand < ask + stop_level + point:
+        return cur_sl
+    if cur_sl > 0 and cand >= cur_sl:
+        return cur_sl
+    if cur_sl > 0 and cand > cur_sl - trail_step_pts * point:
+        return cur_sl
+    return cand

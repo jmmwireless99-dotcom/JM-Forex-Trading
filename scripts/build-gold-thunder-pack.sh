@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build JM-THUNDER-GOLD-SCALPER-Pack.zip — Thunder V1.0.0 single-file EA
+# Build JM-THUNDER-GOLD-SCALPER-Pack.zip — Thunder V2.0.3 + manual trail
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,14 +15,16 @@ cat > "$SRC/VERSION.txt" <<EOF
 JM-THUNDER-GOLD-SCALPER-Pack
 Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EA: JM_THUNDER_GOLD_SCALPER.mq5
-EA version: 1.0.0
-Build tag: THUNDER-V1.0.0-NOGRID
-Magic: 26100610
-Symbol: GOLD#
-Lots: 0.01
-SL: \$15 @ 0.01 (scales with lot)
-TP: \$30 base / \$45 strong
-NO grid / NO martingale / one trade
+EA version: 2.0.3
+Build tag: THUNDER-V2.0.3-MANUAL-TRAIL
+Magic auto: 30250003
+Magic manual: 0
+Symbol: GOLD# / XAUUSD
+Trail start: \$0.50 @ 0.01 lot
+Trail distance: \$0.70 (70 pts original Thunder)
+Trail step: \$0.10
+Manual: BUY/SELL STOP + LIMIT, keep user SL/TP, auto-trail after fill
+NO grid / NO martingale
 NOT V6.1 and NOT V6.77
 EOF
 

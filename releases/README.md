@@ -1,8 +1,8 @@
 # JM FX & Lab Downloads
 
-## JM Thunder GOLD Scalper V1.0.0 (new EA — no grid)
+## JM Thunder GOLD Scalper V2.0.3 (new EA — no grid)
 
-Single-file GOLD# scalper. M5 swing break + M1 small-candle trigger. Hard SL $15 / TP $30 @ 0.01. Demo only. Hindi V6.1.
+Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. After your BUY/SELL STOP or LIMIT fills, EA trails from **$0.50 @ 0.01** using original Thunder pullback **$0.70**. Keeps your SL/TP. Demo only. Hindi V6.1 / V6.77.
 
 | File | Link |
 |------|------|
