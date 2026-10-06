@@ -1,15 +1,25 @@
 # JM FX & Lab Downloads
 
-## JM Thunder GOLD Scalper V2.0.3 (new EA — no grid)
+## JM Thunder GOLD Scalper V7.0 (new EA — no grid)
 
-Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. Auto Thunder stays on. After your BUY/SELL STOP or LIMIT fills, EA trails from **$0.50 @ 0.01** using original Thunder pullback **$0.70**. Keeps your SL/TP. Demo only. Hindi V6.1 / V6.77.
+Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. Auto Thunder stays on. Trail **$0.50 / $0.70**. Demo only.
+
+| File | Link |
+|------|------|
+| **Thunder V7 ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-thunder-v7.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/jm-thunder-gold-scalper-6e69/releases/JM-THUNDER-GOLD-SCALPER-V7-Pack.zip |
+| EA file | `JM_THUNDER_GOLD_SCALPER_V7.mq5` |
+
+**Sa Desktop mo:** extract zip → double-click `COPY-TO-DESKTOP.bat` (lalagay sa `Desktop\JM-THUNDER-GOLD-SCALPER-V7\` + MT5 Experts). Rebuild: `./scripts/build-gold-thunder-v7-pack.sh`
+
+---
+
+## JM Thunder GOLD Scalper V2.0.3 (earlier pack)
 
 | File | Link |
 |------|------|
 | **Thunder ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-thunder.zip |
-| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/jm-thunder-gold-scalper-6e69/releases/JM-THUNDER-GOLD-SCALPER-Pack.zip |
-
-Copy `JM_THUNDER_GOLD_SCALPER.mq5` → `MQL5\Experts\`, F7, attach to GOLD# alone. Rebuild: `./scripts/build-gold-thunder-pack.sh`
+| GitHub | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/jm-thunder-gold-scalper-6e69/releases/JM-THUNDER-GOLD-SCALPER-Pack.zip |
 
 ---
 

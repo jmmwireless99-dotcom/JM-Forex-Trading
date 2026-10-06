@@ -1,4 +1,4 @@
-"""JM Thunder GOLD Scalper V2.0.3 helpers (mirrors JM_THUNDER_GOLD_SCALPER.mq5)."""
+"""JM Thunder GOLD Scalper V7.0 helpers (mirrors JM_THUNDER_GOLD_SCALPER_V7.mq5)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ DEF_TRAIL_STEP_USD = 0.10
 DEF_TRAIL_START_PTS = 50
 DEF_TRAIL_DISTANCE_PTS = 70
 DEF_TRAIL_STEP_PTS = 10
-EA_MAGIC = 30250003
+EA_MAGIC = 30250007
 MANUAL_MAGIC = 0
 
 
