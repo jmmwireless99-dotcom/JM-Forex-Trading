@@ -40,6 +40,8 @@ async def downloads_mt5_bridge_index() -> dict:
         "complete_zip": f"{base}/jmfx-complete.zip",
         "mt4_real_ea_v2_zip": f"{base}/mt4-real-ea-v2.zip",
         "ea_v2_zip": f"{base}/mt5-ea-v2.zip",
+        "gold_thunder_zip": f"{base}/gold-thunder.zip",
+        "gold_thunder_v7_zip": f"{base}/gold-thunder-v7.zip",
         "zip": f"{base}/mt5-bridge.zip",
         "bat": f"{base}/start-jm-mt5-agent.bat",
         "agent_py": f"{base}/jm_mt5_pc_agent.py",
@@ -51,6 +53,8 @@ async def downloads_mt5_bridge_index() -> dict:
         "github_complete_zip": f"{gh}/JM-FX-Complete-Pack.zip",
         "github_mt4_real_ea_v2_zip": f"{gh}/JM-FX-MT4-Real-EA-v2.zip",
         "github_ea_v2_zip": f"{gh}/JM-FX-MT5-EA-v2.zip",
+        "github_gold_thunder_zip": f"{gh}/JM-THUNDER-GOLD-SCALPER-Pack.zip",
+        "github_gold_thunder_v7_zip": f"{gh}/JM-THUNDER-GOLD-SCALPER-V7-Pack.zip",
         "github_zip": f"{gh}/JM-FX-MT5-Bridge-Pack.zip",
     }
 
@@ -63,6 +67,8 @@ def _release_file(name: str) -> Path:
     mapping = {
         "jmfx-complete.zip": _RELEASES / "JM-FX-Complete-Pack.zip",
         "mt5-ea-v2.zip": _RELEASES / "JM-FX-MT5-EA-v2.zip",
+        "gold-thunder.zip": _RELEASES / "JM-THUNDER-GOLD-SCALPER-Pack.zip",
+        "gold-thunder-v7.zip": _RELEASES / "JM-THUNDER-GOLD-SCALPER-V7-Pack.zip",
         "mt4-real-ea-v2.zip": _RELEASES / "JM-FX-MT4-Real-EA-v2.zip",
         "mt5-bridge.zip": _RELEASES / "JM-FX-MT5-Bridge-Pack.zip",
         "start-jm-mt5-agent.bat": _RELEASES / "JM-FX-Complete-Pack/start-jm-mt5-agent.bat",
@@ -102,6 +108,18 @@ async def download_mt4_real_ea_v2_zip() -> FileResponse:
 async def download_mt5_ea_v2_zip() -> FileResponse:
     path = _release_file("mt5-ea-v2.zip")
     return FileResponse(path, filename="JM-FX-MT5-EA-v2.zip", media_type="application/zip")
+
+
+@router.get("/downloads/gold-thunder.zip")
+async def download_gold_thunder_zip() -> FileResponse:
+    path = _release_file("gold-thunder.zip")
+    return FileResponse(path, filename="JM-THUNDER-GOLD-SCALPER-Pack.zip", media_type="application/zip")
+
+
+@router.get("/downloads/gold-thunder-v7.zip")
+async def download_gold_thunder_v7_zip() -> FileResponse:
+    path = _release_file("gold-thunder-v7.zip")
+    return FileResponse(path, filename="JM-THUNDER-GOLD-SCALPER-V7-Pack.zip", media_type="application/zip")
 
 
 @router.get("/downloads/mt5-bridge.zip")
