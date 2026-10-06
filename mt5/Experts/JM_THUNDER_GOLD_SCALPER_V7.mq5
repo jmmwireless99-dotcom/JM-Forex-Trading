@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//|                          JM Thunder GOLD Scalper V7.0.mq5        |
+//|                          JM Thunder GOLD Scalper V7.1.mq5        |
 //|                         Structure. Momentum. Precision. (XAUUSD) |
-//| V7.01: fast tick entry + snappy extreme trail (pitik follow)     |
+//| V7.1: fast tick entry + snappy extreme trail (pitik follow)     |
 //+------------------------------------------------------------------+
-#property copyright "JM Thunder GOLD Scalper V7.0"
-#property version   "7.01"
+#property copyright "JM Thunder GOLD Scalper V7.1"
+#property version   "7.10"
 #property description "XAUUSD M15 structure-breakout scalper + manual pending trail manager."
 #property description "Stop orders at swing highs/lows. Your SL/TP on manual stops/limits."
 #property description "Fast trail follows price spikes; once trailing, SL = trail only."
@@ -20,7 +20,7 @@ enum ENUM_BROKER_TYPE
 
 input group "=== CORE ==="
 input long             InpMagic            = 30250007;
-input string           InpComment          = "JM ThunderGold V7.0";
+input string           InpComment          = "JM ThunderGold V7.1";
 
 input group "=== BROKER TYPE ==="
 input ENUM_BROKER_TYPE InpBroker           = BROKER_DEFAULT;
@@ -351,7 +351,7 @@ int OnInit()
    if(HudEnabled())
       DrawHUD();
 
-   PrintFormat("JM Thunder GOLD Scalper V7.01 | FastEntry=%s FastTrail=%s TrailReplacesSL=%s | Start=$%.2f Dist=$%.2f Step=%d pts",
+   PrintFormat("JM Thunder GOLD Scalper V7.1 | FastEntry=%s FastTrail=%s TrailReplacesSL=%s | Start=$%.2f Dist=$%.2f Step=%d pts",
                InpFastEntry ? "ON" : "OFF",
                InpFastTrail ? "ON" : "OFF",
                InpTrailReplacesSL ? "ON" : "OFF",
@@ -1578,10 +1578,10 @@ void DrawHUD()
 
    HRect("bg", 0, 0, 520, 470, CLR_BG, CLR_GOLD);
    HText("logo", 16, 12, BOLT, 22, CLR_GOLD, true);
-   HText("title", 50, 14, "JM THUNDER GOLD SCALPER V7.0", 12, CLR_GOLD, true);
+   HText("title", 50, 14, "JM THUNDER GOLD SCALPER V7.1", 12, CLR_GOLD, true);
    HText("sub", 50, 36, "STRUCTURE. MOMENTUM. PRECISION.", 7, CLR_GOLD_DIM, true);
    HRect("badge", 428, 12, 78, 34, CLR_BOX, CLR_GOLD_DIM);
-   HText("badge_t", 467, 20, "JM " + BOLT + " V7.01", 7, CLR_GOLD, true, ANCHOR_UPPER);
+   HText("badge_t", 467, 20, "JM " + BOLT + " V7.1", 7, CLR_GOLD, true, ANCHOR_UPPER);
    HRect("hline", 10, 56, 500, 1, CLR_GOLD_DIM, CLR_GOLD_DIM);
 
    HRect("acc", 10, 66, 370, 128, CLR_BOX, CLR_GOLD_DIM);

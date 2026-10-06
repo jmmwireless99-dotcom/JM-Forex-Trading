@@ -1,6 +1,6 @@
 # JM FX & Lab Downloads
 
-## JM Thunder GOLD Scalper V7.0 (new EA — no grid)
+## JM Thunder GOLD Scalper V7.1 (new EA — no grid)
 
 Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. Auto Thunder stays on. Trail **$0.50 / $0.70**. Demo only.
 

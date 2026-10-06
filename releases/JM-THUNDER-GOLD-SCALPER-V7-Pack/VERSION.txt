@@ -1,8 +1,8 @@
 JM-THUNDER-GOLD-SCALPER-V7-Pack
-Built: 2026-10-06T15:43:02Z
+Built: 2026-10-06T15:48:21Z
 EA: JM_THUNDER_GOLD_SCALPER_V7.mq5
-EA version: 7.0.1
-Build tag: THUNDER-V7.01-FAST-TRAIL
+EA version: 7.1.0
+Build tag: THUNDER-V7.1-FAST-TRAIL
 Magic auto: 30250007
 Magic manual: 0
 Trail start: $0.50 @ 0.01
