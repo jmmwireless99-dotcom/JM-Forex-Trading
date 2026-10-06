@@ -1,5 +1,18 @@
 # JM FX & Lab Downloads
 
+## JM Thunder GOLD Scalper V1.0.0 (new EA — no grid)
+
+Single-file GOLD# scalper. M5 swing break + M1 small-candle trigger. Hard SL $15 / TP $30 @ 0.01. Demo only. Hindi V6.1.
+
+| File | Link |
+|------|------|
+| **Thunder ZIP** | https://jmtechsolution.cloud/fx/api/downloads/gold-thunder.zip |
+| GitHub (this branch) | https://github.com/jmmwireless99-dotcom/JM-Forex-Trading/raw/cursor/jm-thunder-gold-scalper-6e69/releases/JM-THUNDER-GOLD-SCALPER-Pack.zip |
+
+Copy `JM_THUNDER_GOLD_SCALPER.mq5` → `MQL5\Experts\`, F7, attach to GOLD# alone. Rebuild: `./scripts/build-gold-thunder-pack.sh`
+
+---
+
 ## Lab XAUUSD MT5 EA (standalone — matches /lab/XAUUSD)
 
 | File | Link |
