@@ -14,12 +14,12 @@ RULES
 
 DALAWANG FLOW
 -------------
-  A) AUTO THUNDER
+  A) AUTO THUNDER  — palaging ON
      M15 unbroken swing high/low -> BUY STOP / SELL STOP
      EMA20/200 trend, RSI, candle, volume
      EA SL/TP + trailing
 
-  B) MANUAL ENTRY (ikaw)
+  B) MANUAL ENTRY TRAIL — dagdag lang, hindi pumapalit sa auto
      1. Chart GOLD# / XAUUSD, Thunder naka-attach, Algo Trading ON
      2. Maglagay ng BUY STOP, SELL STOP, BUY LIMIT, o SELL LIMIT
      3. Lagyan ng SL at TP na gusto mo (hindi papalitan ng EA)
@@ -29,7 +29,7 @@ DALAWANG FLOW
         - Distance: original Thunder pullback $0.70 (70 pts)
         - Step: $0.10 (10 pts)
         - Susundan ang galaw; pag nag-pullback ng $0.70, SL hit
-     5. Habang may manual pending o open position, pause ang auto Thunder stops
+     5. Auto Thunder TULOY pa rin — hindi naka-pause. Manual trail lang ang dagdag.
 
 TRAILING (parehong auto at manual fill)
 ---------------------------------------
@@ -63,7 +63,7 @@ Manual:
 4. MetaEditor -> F7 (0 errors)
 5. Tanggalin ang ibang gold EA sa chart (isang EA lang)
 6. Drag Thunder sa XAUUSD / XAUUSDm chart (Vantage symbol, hindi GOLD#)
-7. Inputs: Manual Entry Trail = ON, Pause Auto When Manual = ON, Keep SL/TP = ON
+7. Inputs: Manual Entry Trail = ON, Keep SL/TP = ON (auto Thunder stays ON)
 8. Algo Trading ON (green)
 9. DEMO muna. Every tick. M15 history.
 
@@ -72,10 +72,9 @@ Kung Vantage MT4 iyan: HINDI tatakbo ang .mq5. Kailangan Vantage MT5.
 PANEL
 -----
   TRAIL $0.50 / $0.70 = start / pullback distance
-  MANUAL READY        = pwedeng mag-pending ikaw
-  MANUAL TRAILING     = may fill / pending mo, auto pause, trail ON
+  MANUAL READY        = pwedeng mag-pending ikaw; auto Thunder TULOY
+  MANUAL TRAILING     = may fill mo, trail ON; auto Thunder TULOY
   MANUAL SL/TP KEEP   = hindi overwrite ang stops mo
-  SYSTEM MANUAL TRAIL = auto Thunder naka-pause
 
 HUWAG
 -----

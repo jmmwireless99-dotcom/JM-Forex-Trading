@@ -2,7 +2,7 @@
 
 ## JM Thunder GOLD Scalper V2.0.3 (new EA — no grid)
 
-Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. After your BUY/SELL STOP or LIMIT fills, EA trails from **$0.50 @ 0.01** using original Thunder pullback **$0.70**. Keeps your SL/TP. Demo only. Hindi V6.1 / V6.77.
+Single-file GOLD# / XAUUSD M15 structure scalper + **manual stop/limit trail**. Auto Thunder stays on. After your BUY/SELL STOP or LIMIT fills, EA trails from **$0.50 @ 0.01** using original Thunder pullback **$0.70**. Keeps your SL/TP. Demo only. Hindi V6.1 / V6.77.
 
 | File | Link |
 |------|------|

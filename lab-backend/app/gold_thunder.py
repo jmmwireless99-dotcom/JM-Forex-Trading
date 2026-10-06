@@ -117,10 +117,11 @@ def has_manual_exposure(
 def pause_auto_when_manual(
     *,
     manage_manual: bool = True,
-    pause: bool = True,
+    pause: bool = False,
     has_manual: bool = False,
 ) -> bool:
-    return bool(manage_manual and pause and has_manual)
+    """Auto Thunder stays on. Manual trail is extra; never pause auto."""
+    return False
 
 
 def swing_unbroken(high: bool, values: list[float], strength: int = 5) -> float | None:

@@ -39,7 +39,7 @@ def test_ea_is_v203_structure_plus_manual_trail():
     assert "InpTrailDistanceUsd = 0.70" in mq5
     assert "InpTrailStepUsd     = 0.10" in mq5
     assert "InpManageManual     = true" in mq5
-    assert "InpPauseAutoWhenManual = true" in mq5
+    assert "InpPauseAutoWhenManual" not in mq5
     assert "InpManualKeepStops  = true" in mq5
     assert "ORDER_TYPE_BUY_LIMIT" in mq5
     assert "ORDER_TYPE_SELL_LIMIT" in mq5
@@ -76,6 +76,7 @@ def test_manual_fill_keeps_user_stops_and_trails():
     assert "BUY STOP" in setup
     assert "SELL STOP" in setup
     assert "LIMIT" in setup
+    assert "hindi naka-pause" in setup.lower() or "tuloy" in setup.lower()
 
 
 def test_usd_trail_points_match_gold_001_lot():
@@ -127,9 +128,9 @@ def test_manual_pending_and_pause_auto():
     assert has_manual_exposure([], [{"magic": 0, "symbol": "GOLD#", "type": "BUY_STOP"}]) is True
     assert has_manual_exposure([{"magic": 0, "symbol": "GOLD#"}], []) is True
     assert has_manual_exposure([{"magic": EA_MAGIC, "symbol": "GOLD#"}], []) is False
-    assert pause_auto_when_manual(has_manual=True) is True
+    assert pause_auto_when_manual(has_manual=True) is False
     assert pause_auto_when_manual(has_manual=False) is False
-    assert pause_auto_when_manual(pause=False, has_manual=True) is False
+    assert pause_auto_when_manual(pause=True, has_manual=True) is False
 
 
 def test_m15_unbroken_swing_and_session():

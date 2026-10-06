@@ -67,7 +67,6 @@ input int              InpADXPeriod        = 14;
 
 input group "=== MANUAL ENTRY TRAIL ==="
 input bool             InpManageManual     = true;              // Trail YOUR buy/sell stop + limit fills
-input bool             InpPauseAutoWhenManual = true;           // Pause EA stops while you have a manual order/position
 input bool             InpManualKeepStops  = true;              // Keep your SL/TP; EA only trails SL in profit
 
 input group "=== NEWS GUARD ==="
@@ -645,10 +644,7 @@ bool ProtectionBlock()
          DeleteAllPendings();
       return false;
      }
-   if(InpPauseAutoWhenManual && HasManualExposure())
-      g_status = "MANUAL TRAIL";
-   else
-      g_status = "RUNNING";
+   g_status = "RUNNING";
    return false;
   }
 
@@ -811,11 +807,6 @@ void EvaluateSignal()
    g_trend = GetTrend();
    if(HasPosition())
       return;
-   if(InpPauseAutoWhenManual && HasManualExposure())
-     {
-      DeleteAllPendings();
-      return;
-     }
 
    bool allowBuy  = !InpTrendFilter || g_trend > 0 || (g_trend == 0 && InpNeutralBothSides);
    bool allowSell = !InpTrendFilter || g_trend < 0 || (g_trend == 0 && InpNeutralBothSides);
@@ -1483,7 +1474,7 @@ void DrawHUD()
 
    string trendTxt = g_trend > 0 ? "BULLISH" : (g_trend < 0 ? "BEARISH" : "NEUTRAL");
    color  trendClr = g_trend > 0 ? CLR_GREEN : (g_trend < 0 ? CLR_RED : CLR_TEXT);
-   bool   manualOn = InpPauseAutoWhenManual && HasManualExposure();
+   bool   manualOn = InpManageManual && HasManualExposure();
 
    int    closed  = g_wins + g_losses;
    string winRate = closed > 0 ? DoubleToString(100.0 * g_wins / closed, 1) + "%" : "---";
