@@ -1,54 +1,47 @@
-JM THUNDER GOLD SCALPER V7.0
-============================
+JM THUNDER GOLD SCALPER V7.0 (build 7.01)
+=========================================
 
-Bagong EA (M15 structure + manual trail). Hindi V6.1 / V6.77 / V2.0.3 file name.
-Isang file: JM_THUNDER_GOLD_SCALPER_V7.mq5
-F7 this only. Demo / tester muna.
+Bagong EA. Hindi V6.1 / V6.77.
+File: JM_THUNDER_GOLD_SCALPER_V7.mq5
+F7 this only. Demo muna.
+
+BAGO SA 7.01 — BILIS
+--------------------
+  FastEntry ON  = bawat tick bina-basa ang chart / ina-update ang pending
+  FastTrail ON  = trailing sumusunod sa EXTREME (pinakataas/baba ng pitik)
+  Trail step 0  = walang antay-antay; agad i-modify ang SL
+  TrailReplacesSL = kapag naka-trail na, SL = trailing stop na
+                    (lumang malayong SL hindi na gamit)
+  Halimbawa BUY: price pumitik 2010 tapos bumaba —
+                 SL mananatili ~2009.30 (2010 - $0.70) para harangin
+                 ang dulo ng move.
 
 RULES
 -----
-  NO grid
-  NO martingale
-  NO averaging / hedge
-  Auto Thunder = ON palagi (hindi naka-pause)
-  Manual = ikaw mag-lagay ng BUY/SELL STOP o LIMIT + sariling SL/TP
-  Pag na-fill: EA trail lang ang SL (simula +$0.50, distance $0.70)
+  NO grid / NO martingale / NO averaging
+  Auto Thunder = ON palagi
+  Manual STOP/LIMIT = trail after fill ($0.50 start / $0.70 distance)
 
 DALAWANG FLOW
 -------------
-  A) AUTO THUNDER — palaging ON
-     M15 unbroken swing -> BUY STOP / SELL STOP
-     EMA20/200, RSI, candle, volume
-     EA SL/TP + trailing
-
-  B) MANUAL ENTRY TRAIL — dagdag lang
-     1. Attach V7 sa chart, Algo Trading ON
-     2. Maglagay ng BUY/SELL STOP o LIMIT + SL/TP mo
-     3. Pag na-fill: trail mula +$0.50 @ 0.01, distance $0.70
-     4. Hindi papalitan ang SL/TP mo
-     5. Auto Thunder TULOY pa rin
+  A) AUTO — M15 swing BUY/SELL STOP + trail
+  B) MANUAL — ikaw mag-pending + SL/TP; pag fill, fast trail
 
 DEFAULTS
 --------
-  File     JM_THUNDER_GOLD_SCALPER_V7.mq5
-  Version  7.00
+  Version  7.01
   Magic    30250007
-  Manual   magic 0
-  Trail    start $0.50 / dist $0.70 / step $0.10
-  Symbol   GOLD# o Vantage XAUUSD / XAUUSDm
+  Trail    start $0.50 / dist $0.70 / step every tick
+  FastEntry / FastTrail / TrailReplacesSL = ON
 
-INSTALL — DESKTOP + VANTAGE
----------------------------
-1. I-double click COPY-TO-DESKTOP.bat
-   -> lalagay ang EA sa Desktop\JM-THUNDER-GOLD-SCALPER-V7\
-   -> at sa MQL5\Experts ng Vantage/MT5 kung nahanap
-2. O manual: copy JM_THUNDER_GOLD_SCALPER_V7.mq5 -> MQL5\Experts\
-3. MetaEditor F7 (0 errors)
-4. Isang EA lang sa chart. Attach V7. Algo Trading ON.
-5. DEMO muna.
+INSTALL — DESKTOP
+-----------------
+1. Double-click COPY-TO-DESKTOP.bat
+2. MetaEditor F7
+3. Attach V7 sa gold chart, Algo Trading ON
+4. DEMO muna
 
 HUWAG
 -----
 - Dalawang gold EA sa iisang chart
-- Live hangga't hindi tapos demo
-- Palitan ang V6.1 / V6.77 files
+- Live bago matapos ang demo

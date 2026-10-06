@@ -1,13 +1,13 @@
 //+------------------------------------------------------------------+
-//|                                JM Thunder GOLD Scalper V7.0.mq5 |
+//|                          JM Thunder GOLD Scalper V7.0.mq5        |
 //|                         Structure. Momentum. Precision. (XAUUSD) |
-//| V7.0: M15 structure + manual STOP/LIMIT trail $0.50 / $0.70 — auto Thunder stays ON |
+//| V7.01: fast tick entry + snappy extreme trail (pitik follow)     |
 //+------------------------------------------------------------------+
 #property copyright "JM Thunder GOLD Scalper V7.0"
-#property version   "7.00"
+#property version   "7.01"
 #property description "XAUUSD M15 structure-breakout scalper + manual pending trail manager."
 #property description "Stop orders at swing highs/lows. Your SL/TP on manual stops/limits."
-#property description "After fill, EA trails from $0.50 (0.01 lot) using Thunder pullback distance."
+#property description "Fast trail follows price spikes; once trailing, SL = trail only."
 #property description "NO grid. NO martingale. NO averaging. News: allow WebRequest https://nfs.faireconomy.media"
 
 #include <Trade/Trade.mqh>
@@ -34,12 +34,14 @@ input group "=== SL / TP / TRAILING (0 points = USD / EA default) ==="
 input int              InpSLPoints         = 0;
 input int              InpTPPoints         = 0;
 input int              InpTrailStart       = 0;                 // 0 = use USD start ($0.50)
-input int              InpTrailStep        = 0;                 // 0 = use USD step ($0.10)
+input int              InpTrailStep        = 0;                 // 0 = use USD step (fast trail = 0)
 input int              InpTrailDistance    = 0;                 // 0 = use USD distance ($0.70 original)
 input bool             InpUseTrailing      = true;
 input double           InpTrailStartUsd    = 0.50;              // Trail starts after +$0.50 gold @ 0.01
-input double           InpTrailDistanceUsd = 0.70;              // Original Thunder pullback (70 pts)
-input double           InpTrailStepUsd     = 0.10;              // Original Thunder step (10 pts)
+input double           InpTrailDistanceUsd = 0.70;              // Pullback distance (lock end of move)
+input double           InpTrailStepUsd     = 0.0;               // 0 = every tick / every spike (snappy)
+input bool             InpFastTrail        = true;              // Follow pitik: trail from extreme every tick
+input bool             InpTrailReplacesSL  = true;              // Once trailing, SL = trail only (old SL unused)
 input double           InpBreakevenUsd     = 1.0;
 input int              InpBreakevenLockPts = 10;
 input double           InpRefLot           = 0.01;
@@ -67,7 +69,8 @@ input int              InpADXPeriod        = 14;
 
 input group "=== MANUAL ENTRY TRAIL ==="
 input bool             InpManageManual     = true;              // Trail YOUR buy/sell stop + limit fills
-input bool             InpManualKeepStops  = true;              // Keep your SL/TP; EA only trails SL in profit
+input bool             InpManualKeepStops  = true;              // Keep your SL/TP until trail starts
+input bool             InpFastEntry        = true;              // Refresh pending entry every tick (mabilis)
 
 input group "=== NEWS GUARD ==="
 input bool             InpNewsGuard        = false;
@@ -133,7 +136,7 @@ input bool             InpAnalyzer         = true;
 
 #define DEF_TP_POINTS        3000
 #define DEF_TRAIL_START_PTS  50
-#define DEF_TRAIL_STEP_PTS   10
+#define DEF_TRAIL_STEP_PTS   1
 #define DEF_TRAIL_DISTANCE_PTS 70
 
 #define NEWS_URL             "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
@@ -189,6 +192,9 @@ ulong    g_reanchorPos = 0;
 int      g_reanchorTpPts = 0;
 ulong    g_posId = 0;
 int      g_posSlPts = 0;
+ulong    g_trailPosId[];
+double   g_trailExtreme[];
+bool     g_trailArmed[];
 
 NewsEvent g_news[];
 datetime g_newsFetched  = 0;
@@ -216,6 +222,62 @@ int TrailPtsFromUsd(const double usd, const int fallbackPts)
    return fallbackPts * g_pf;
   }
 
+int TrailExtremeFind(const ulong posId)
+  {
+   for(int i = ArraySize(g_trailPosId) - 1; i >= 0; i--)
+      if(g_trailPosId[i] == posId)
+         return i;
+   return -1;
+  }
+
+int TrailExtremeEnsure(const ulong posId, const bool buy, const double price)
+  {
+   int idx = TrailExtremeFind(posId);
+   if(idx >= 0)
+      return idx;
+   int n = ArraySize(g_trailPosId);
+   ArrayResize(g_trailPosId, n + 1);
+   ArrayResize(g_trailExtreme, n + 1);
+   ArrayResize(g_trailArmed, n + 1);
+   g_trailPosId[n] = posId;
+   g_trailExtreme[n] = price;
+   g_trailArmed[n] = false;
+   return n;
+  }
+
+void TrailExtremeClear(const ulong posId)
+  {
+   int idx = TrailExtremeFind(posId);
+   if(idx < 0)
+      return;
+   int last = ArraySize(g_trailPosId) - 1;
+   if(idx != last)
+     {
+      g_trailPosId[idx] = g_trailPosId[last];
+      g_trailExtreme[idx] = g_trailExtreme[last];
+      g_trailArmed[idx] = g_trailArmed[last];
+     }
+   ArrayResize(g_trailPosId, last);
+   ArrayResize(g_trailExtreme, last);
+   ArrayResize(g_trailArmed, last);
+  }
+
+double UpdateTrailExtreme(const ulong posId, const bool buy, const double bid, const double ask)
+  {
+   double px = buy ? bid : ask;
+   int idx = TrailExtremeEnsure(posId, buy, px);
+   if(buy)
+      g_trailExtreme[idx] = MathMax(g_trailExtreme[idx], bid);
+   else
+     {
+      if(g_trailExtreme[idx] <= 0)
+         g_trailExtreme[idx] = ask;
+      else
+         g_trailExtreme[idx] = MathMin(g_trailExtreme[idx], ask);
+     }
+   return g_trailExtreme[idx];
+  }
+
 int OnInit()
   {
    g_isTester = (bool)MQLInfoInteger(MQL_TESTER);
@@ -225,7 +287,12 @@ int OnInit()
    g_slPts        = InpSLPoints > 0 ? InpSLPoints * g_pf : UsdToPoints(InpSLUsd);
    g_tpPts        = (InpTPPoints      > 0 ? InpTPPoints      : DEF_TP_POINTS) * g_pf;
    g_trailStart   = InpTrailStart    > 0 ? InpTrailStart    * g_pf : TrailPtsFromUsd(InpTrailStartUsd, DEF_TRAIL_START_PTS);
-   g_trailStep    = InpTrailStep     > 0 ? InpTrailStep     * g_pf : TrailPtsFromUsd(InpTrailStepUsd, DEF_TRAIL_STEP_PTS);
+   if(InpTrailStep > 0)
+      g_trailStep = InpTrailStep * g_pf;
+   else if(InpTrailStepUsd > 0)
+      g_trailStep = TrailPtsFromUsd(InpTrailStepUsd, DEF_TRAIL_STEP_PTS);
+   else
+      g_trailStep = InpFastTrail ? 1 * g_pf : DEF_TRAIL_STEP_PTS * g_pf;
    g_trailDist    = InpTrailDistance > 0 ? InpTrailDistance * g_pf : TrailPtsFromUsd(InpTrailDistanceUsd, DEF_TRAIL_DISTANCE_PTS);
    g_bufferPts    = InpEntryBuffer      * g_pf;
    g_maxEntryPts  = InpMaxEntryDistance * g_pf;
@@ -284,13 +351,13 @@ int OnInit()
    if(HudEnabled())
       DrawHUD();
 
-   PrintFormat("JM Thunder GOLD Scalper V7.0 | ManualTrail=%s | TrailStart=$%.2f (%d pts) Dist=$%.2f (%d pts) Step=$%.2f (%d pts)",
-               InpManageManual ? "ON" : "OFF",
-               InpTrailStartUsd, g_trailStart,
-               InpTrailDistanceUsd, g_trailDist,
-               InpTrailStepUsd, g_trailStep);
-   PrintFormat("Place YOUR buy/sell STOP or LIMIT with your SL/TP. After fill, EA trails from $%.2f using original Thunder distance.",
-               InpTrailStartUsd);
+   PrintFormat("JM Thunder GOLD Scalper V7.01 | FastEntry=%s FastTrail=%s TrailReplacesSL=%s | Start=$%.2f Dist=$%.2f Step=%d pts",
+               InpFastEntry ? "ON" : "OFF",
+               InpFastTrail ? "ON" : "OFF",
+               InpTrailReplacesSL ? "ON" : "OFF",
+               InpTrailStartUsd, InpTrailDistanceUsd, g_trailStep);
+   PrintFormat("Place YOUR buy/sell STOP or LIMIT with your SL/TP. After +$%.2f, trail locks the move end ($%.2f pullback).",
+               InpTrailStartUsd, InpTrailDistanceUsd);
    return INIT_SUCCEEDED;
   }
 
@@ -330,13 +397,14 @@ void OnTick()
    UpdateGuards();
    bool blocked = ProtectionBlock();
 
+   // Trail FIRST every tick — follow pitik immediately
    if(!MarketBlocked())
       ManagePositions();
 
    if(!blocked && !MarketBlocked())
      {
       ManagePendingExpiry();
-      if(newBar)
+      if(InpFastEntry || newBar)
          EvaluateSignal();
      }
 
@@ -410,6 +478,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
       AnalyzerOnExit(trans.deal, dealPrice, net);
       if(InpShowPnLLabels && (g_isVisual || !g_isTester))
          DrawClosedLabel(trans.deal, (datetime)HistoryDealGetInteger(trans.deal, DEAL_TIME), dealPrice, net);
+      TrailExtremeClear((ulong)HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID));
      }
 
    RecalcStats();
@@ -1144,35 +1213,54 @@ void ManagePendingExpiry()
 
 void ApplyTrail(const bool buy, const double bid, const double ask, const double stopLevel,
                 const double pt, const int trStart, const int trDist, const int trStep,
-                double &newSL)
+                const double extreme, const double openPrice, double &newSL, bool &armed)
   {
    if(!InpUseTrailing)
       return;
-   double profitPts = buy ? (bid - PositionGetDouble(POSITION_PRICE_OPEN)) / pt
-                          : (PositionGetDouble(POSITION_PRICE_OPEN) - ask) / pt;
+   double mark = InpFastTrail ? extreme : (buy ? bid : ask);
+   if(mark <= 0)
+      mark = buy ? bid : ask;
+   double profitPts = buy ? (mark - openPrice) / pt : (openPrice - mark) / pt;
    if(profitPts < trStart)
       return;
-   // Start at +$0.50 with original Thunder 70-pt / $0.70 distance: SL may sit below BE at first.
+
+   armed = true;
    double dist = MathMax(trDist * pt, stopLevel + pt);
+   int stepPts = (InpFastTrail || trStep <= 0) ? 1 : trStep;
+
    if(buy)
      {
-      double cand = NormalizePrice(bid - dist);
+      double cand = NormalizePrice(mark - dist);
+      // Never loosen trail on pullback. If cand is invalid vs live bid, leave SL
+      // (price already in stop zone — server will hit the prior trail SL).
       if(cand > bid - stopLevel - pt)
          return;
+      if(InpTrailReplacesSL)
+        {
+         if(newSL <= 0 || cand > newSL)
+            newSL = cand;
+         return;
+        }
       if(newSL > 0 && cand <= newSL)
          return;
-      if(newSL > 0 && cand < newSL + trStep * pt)
+      if(newSL > 0 && cand < newSL + stepPts * pt)
          return;
       newSL = cand;
      }
    else
      {
-      double cand = NormalizePrice(ask + dist);
+      double cand = NormalizePrice(mark + dist);
       if(cand < ask + stopLevel + pt)
          return;
+      if(InpTrailReplacesSL)
+        {
+         if(newSL <= 0 || cand < newSL)
+            newSL = cand;
+         return;
+        }
       if(newSL > 0 && cand >= newSL)
          return;
-      if(newSL > 0 && cand > newSL - trStep * pt)
+      if(newSL > 0 && cand > newSL - stepPts * pt)
          return;
       newSL = cand;
      }
@@ -1207,6 +1295,10 @@ void ManagePositions()
          trStep  = MathMax(1, (int)MathRound(slPts * InpTrailStepR));
         }
 
+      double extreme = UpdateTrailExtreme(posId, buy, bid, ask);
+      int    tIdx    = TrailExtremeFind(posId);
+      bool   armed   = (tIdx >= 0 && g_trailArmed[tIdx]);
+
       double baseSL = NormalizePrice(buy ? open - slPts * pt : open + slPts * pt);
       double baseTP = NormalizePrice(buy ? open + g_tpPts * pt : open - g_tpPts * pt);
 
@@ -1219,14 +1311,15 @@ void ManagePositions()
          g_reanchorTpPts = 0;
         }
 
-      if(!manual || !InpManualKeepStops)
+      // Keep initial SL/TP until trail arms; after that trail owns SL
+      if(!armed && (!manual || !InpManualKeepStops))
         {
          if(newSL == 0) newSL = baseSL;
          if(newTP == 0) newTP = baseTP;
         }
 
       double profitPts = buy ? (bid - open) / pt : (open - ask) / pt;
-      if(!manual && InpBreakevenUsd > 0 && profitPts >= InpBreakevenUsd / pt)
+      if(!armed && !manual && InpBreakevenUsd > 0 && profitPts >= InpBreakevenUsd / pt)
         {
          double lock = InpBreakevenLockPts * g_pf * pt;
          if(buy)
@@ -1243,7 +1336,9 @@ void ManagePositions()
            }
         }
 
-      ApplyTrail(buy, bid, ask, stopLevel, pt, trStart, trDist, trStep, newSL);
+      ApplyTrail(buy, bid, ask, stopLevel, pt, trStart, trDist, trStep, extreme, open, newSL, armed);
+      if(tIdx >= 0)
+         g_trailArmed[tIdx] = armed;
 
       if(newSL != curSL || newTP != curTP)
         {
@@ -1486,7 +1581,7 @@ void DrawHUD()
    HText("title", 50, 14, "JM THUNDER GOLD SCALPER V7.0", 12, CLR_GOLD, true);
    HText("sub", 50, 36, "STRUCTURE. MOMENTUM. PRECISION.", 7, CLR_GOLD_DIM, true);
    HRect("badge", 428, 12, 78, 34, CLR_BOX, CLR_GOLD_DIM);
-   HText("badge_t", 467, 20, "JM " + BOLT + " V7.0", 7, CLR_GOLD, true, ANCHOR_UPPER);
+   HText("badge_t", 467, 20, "JM " + BOLT + " V7.01", 7, CLR_GOLD, true, ANCHOR_UPPER);
    HRect("hline", 10, 56, 500, 1, CLR_GOLD_DIM, CLR_GOLD_DIM);
 
    HRect("acc", 10, 66, 370, 128, CLR_BOX, CLR_GOLD_DIM);
@@ -1499,7 +1594,7 @@ void DrawHUD()
           SpreadPoints() <= g_maxSpreadPts ? CLR_GREEN : CLR_RED);
    HField("trd", 145, 140, "TREND", trendTxt, trendClr);
    HField("rsk", 265, 140, "TRAIL",
-          StringFormat("$%.2f / $%.2f", InpTrailStartUsd, InpTrailDistanceUsd), CLR_TEXT);
+          StringFormat("$%.2f / $%.2f%s", InpTrailStartUsd, InpTrailDistanceUsd, InpFastTrail ? " F" : ""), CLR_TEXT);
 
    HRect("exe", 390, 66, 120, 334, CLR_BOX, CLR_GOLD_DIM);
    HText("exe_t", 400, 76, "EXECUTION", 8, CLR_GOLD, true);

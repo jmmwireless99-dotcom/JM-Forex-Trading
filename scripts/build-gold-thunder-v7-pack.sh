@@ -21,15 +21,18 @@ cat > "$SRC/VERSION.txt" <<EOF
 JM-THUNDER-GOLD-SCALPER-V7-Pack
 Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EA: JM_THUNDER_GOLD_SCALPER_V7.mq5
-EA version: 7.0.0
-Build tag: THUNDER-V7.0-MANUAL-TRAIL
+EA version: 7.0.1
+Build tag: THUNDER-V7.01-FAST-TRAIL
 Magic auto: 30250007
 Magic manual: 0
 Trail start: \$0.50 @ 0.01
 Trail distance: \$0.70
-Trail step: \$0.10
+Trail step: every tick (fast / extreme pitik follow)
+FastEntry: ON
+FastTrail: ON
+TrailReplacesSL: ON (once trailing, SL = trail only)
 Auto Thunder: ALWAYS ON
-Manual: STOP/LIMIT trail after fill, keep user SL/TP
+Manual: STOP/LIMIT trail after fill, keep user SL/TP until trail arms
 NO grid / NO martingale
 Put on Desktop: run COPY-TO-DESKTOP.bat
 EOF

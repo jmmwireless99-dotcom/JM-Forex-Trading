@@ -1,4 +1,4 @@
-"""JM Thunder GOLD Scalper V7.0 helpers (mirrors JM_THUNDER_GOLD_SCALPER_V7.mq5)."""
+"""JM Thunder GOLD Scalper V7 helpers (mirrors JM_THUNDER_GOLD_SCALPER_V7.mq5)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ MANUAL_PENDING_TYPES = frozenset(
 
 DEF_TRAIL_START_USD = 0.50
 DEF_TRAIL_DISTANCE_USD = 0.70
-DEF_TRAIL_STEP_USD = 0.10
+DEF_TRAIL_STEP_USD = 0.0
 DEF_TRAIL_START_PTS = 50
 DEF_TRAIL_DISTANCE_PTS = 70
-DEF_TRAIL_STEP_PTS = 10
+DEF_TRAIL_STEP_PTS = 1
 EA_MAGIC = 30250007
 MANUAL_MAGIC = 0
 
@@ -47,7 +47,7 @@ def trail_pts_from_usd(usd: float, fallback_pts: int, **kwargs) -> int:
 def default_trail_points() -> tuple[int, int, int]:
     start = trail_pts_from_usd(DEF_TRAIL_START_USD, DEF_TRAIL_START_PTS)
     dist = trail_pts_from_usd(DEF_TRAIL_DISTANCE_USD, DEF_TRAIL_DISTANCE_PTS)
-    step = trail_pts_from_usd(DEF_TRAIL_STEP_USD, DEF_TRAIL_STEP_PTS)
+    step = DEF_TRAIL_STEP_PTS  # fast trail default
     return start, dist, step
 
 
@@ -191,28 +191,51 @@ def apply_trail(
     *,
     trail_start_pts: int,
     trail_dist_pts: int,
-    trail_step_pts: int,
+    trail_step_pts: int = 1,
     point: float = 0.01,
     stop_level: float = 0.0,
+    extreme: float | None = None,
+    fast_trail: bool = True,
+    trail_replaces_sl: bool = True,
 ) -> float:
-    profit_pts = (bid - open_price) / point if buy else (open_price - ask) / point
+    mark = extreme if (fast_trail and extreme is not None and extreme > 0) else (bid if buy else ask)
+    profit_pts = (mark - open_price) / point if buy else (open_price - mark) / point
     if profit_pts < trail_start_pts:
         return cur_sl
     dist = max(trail_dist_pts * point, stop_level + point)
+    step_pts = 1 if (fast_trail or trail_step_pts <= 0) else trail_step_pts
     if buy:
-        cand = bid - dist
-        if cand > bid - stop_level - point:
+        cand = mark - dist
+        max_sl = bid - stop_level - point
+        if cand > max_sl:
+            return cur_sl
+        if trail_replaces_sl:
+            if cur_sl <= 0 or cand > cur_sl:
+                return cand
             return cur_sl
         if cur_sl > 0 and cand <= cur_sl:
             return cur_sl
-        if cur_sl > 0 and cand < cur_sl + trail_step_pts * point:
+        if cur_sl > 0 and cand < cur_sl + step_pts * point:
             return cur_sl
         return cand
-    cand = ask + dist
-    if cand < ask + stop_level + point:
+    cand = mark + dist
+    min_sl = ask + stop_level + point
+    if cand < min_sl:
+        return cur_sl
+    if trail_replaces_sl:
+        if cur_sl <= 0 or cand < cur_sl:
+            return cand
         return cur_sl
     if cur_sl > 0 and cand >= cur_sl:
         return cur_sl
-    if cur_sl > 0 and cand > cur_sl - trail_step_pts * point:
+    if cur_sl > 0 and cand > cur_sl - step_pts * point:
         return cur_sl
     return cand
+
+
+def update_extreme(buy: bool, extreme: float, bid: float, ask: float) -> float:
+    if buy:
+        return max(extreme, bid) if extreme > 0 else bid
+    if extreme <= 0:
+        return ask
+    return min(extreme, ask)
