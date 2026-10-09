@@ -1,5 +1,16 @@
 # JM FX Downloads
 
+## JM MTF Volume Profile Scalper (standalone MT5 EA)
+
+| File | Path in repo |
+|------|----------------|
+| **ZIP** | `releases/JM-MTF-Volume-Scalper-EA.zip` |
+| Source | `mt5/Experts/JM_MTF_Volume_Profile_Scalper.mq5` |
+
+Build: `./scripts/build-mtf-volume-scalper-pack.sh`
+
+---
+
 ## MT4 Real EA v2 — No PC Agent (direct cloud URL)
 
 | File | Link |
