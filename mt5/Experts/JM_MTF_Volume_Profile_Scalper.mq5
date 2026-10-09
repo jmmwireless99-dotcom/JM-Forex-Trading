@@ -1,6 +1,6 @@
 #property strict
-#property version "1.30"
-#property description "JM MTF Volume Profile Scalper - H1 M15 M1 + chart VP/OB"
+#property version "1.31"
+#property description "JM MTF VP Scalper - attach ANY chart TF; H1/M15/M1 logic + overlays"
 
 #include <Trade/Trade.mqh>
 CTrade trade;
@@ -45,10 +45,13 @@ input bool ShowH1SupplyDemand = true;
 input int HistogramMaxMinutes = 480;
 input int H1SwingLookback = 48;
 input int OrderBlockLookback = 24;
+input bool ShowOnAllChartTimeframes = true;
 
 // ================= GLOBALS =================
 int fastHandle, slowHandle, atrHandle;
 datetime lastM1Bar = 0;
+datetime lastChartBar = 0;
+datetime lastM15Bar = 0;
 datetime lastSignalTime = 0;
 datetime lastTradedSignal = 0;
 
@@ -66,6 +69,42 @@ double g_profileStep = 0;
 double g_profileVolumes[];
 
 // ================= UTILITIES =================
+void StyleChartObject(const string name)
+{
+   if(!ShowOnAllChartTimeframes)
+      return;
+   ObjectSetInteger(0, name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+}
+
+datetime VisualEndTime()
+{
+   int ps = PeriodSeconds(_Period);
+   if(ps <= 0)
+      ps = PeriodSeconds(PERIOD_M1);
+   return TimeCurrent() + (datetime)(ps * 48);
+}
+
+int EffectiveHistogramMinutes()
+{
+   int chartMin = (int)PeriodSeconds(_Period) / 60;
+   if(chartMin < 1)
+      chartMin = 1;
+   int scale = MathMax(1, chartMin / 15);
+   return HistogramMaxMinutes * scale;
+}
+
+void RefreshAllVisuals()
+{
+   if(!CalculateVolumeProfile())
+      return;
+   int trend = GetTrend();
+   DrawZone();
+   DrawChartVisuals(trend);
+   ChartRedraw(0);
+}
+
 void DeleteObjectsWithPrefix(string prefix)
 {
    int total = ObjectsTotal(0, 0, -1);
@@ -88,6 +127,7 @@ void DrawLabel(string name, datetime t, double price, string text, color clr)
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
    ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
    ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+   StyleChartObject(name);
 }
 
 void DrawZoneRect(string name, datetime t1, datetime t2,
@@ -102,6 +142,7 @@ void DrawZoneRect(string name, datetime t1, datetime t2,
    ObjectSetInteger(0, name, OBJPROP_FILL, true);
    ObjectSetInteger(0, name, OBJPROP_BACK, true);
    ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+   StyleChartObject(name);
 
    DrawLabel(name + "_LBL", t2, (hi + lo) / 2.0, label, clr);
 }
@@ -350,7 +391,7 @@ void DrawVolumeHistogram()
    if(tAnchor <= 0)
       tAnchor = iTime(_Symbol, PERIOD_M15, 1);
 
-   int spanSec = HistogramMaxMinutes * 60;
+   int spanSec = EffectiveHistogramMinutes() * 60;
 
    for(int i = 0; i < ProfileBins; i++)
    {
@@ -378,6 +419,7 @@ void DrawVolumeHistogram()
       ObjectSetInteger(0, name, OBJPROP_FILL, true);
       ObjectSetInteger(0, name, OBJPROP_BACK, true);
       ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+      StyleChartObject(name);
    }
 }
 
@@ -393,7 +435,7 @@ void DrawH1SupplyDemand(int trend)
       atr = _Point * 100;
 
    datetime t1 = iTime(_Symbol, PERIOD_H1, H1SwingLookback);
-   datetime t2 = TimeCurrent() + PeriodSeconds(PERIOD_H1) * 6;
+   datetime t2 = VisualEndTime();
 
    for(int i = 2; i < H1SwingLookback - 2; i++)
    {
@@ -431,7 +473,7 @@ void DrawOrderBlocks(int trend)
 
    DeleteObjectsWithPrefix("JM_OB_");
 
-   datetime tEnd = TimeCurrent() + PeriodSeconds(PERIOD_M15) * 8;
+   datetime tEnd = VisualEndTime();
    double obH = 0, obL = 0;
    datetime obT = 0;
 
@@ -469,6 +511,7 @@ void DrawLine(string name, double price, color clr,
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    ObjectSetInteger(0, name, OBJPROP_STYLE, style);
    ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+   StyleChartObject(name);
 }
 
 void DrawZone()
@@ -477,7 +520,7 @@ void DrawZone()
       _Symbol, PERIOD_M15, ProfileBars
    );
 
-   datetime finish = TimeCurrent() + 86400;
+   datetime finish = VisualEndTime();
 
    string name = "JM_VOLUME_ZONE";
 
@@ -493,6 +536,7 @@ void DrawZone()
    ObjectSetInteger(0, name, OBJPROP_COLOR, clrMediumPurple);
    ObjectSetInteger(0, name, OBJPROP_FILL, true);
    ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   StyleChartObject(name);
 
    DrawLine("JM_POC", poc, clrOrange, STYLE_DASH);
    DrawLabel("JM_POC_LBL", finish, poc, "POC / M15 SUPPLY ZONE", clrOrange);
@@ -516,6 +560,7 @@ void DrawArrow(string name, datetime time,
    );
 
    ObjectSetInteger(0, name, OBJPROP_WIDTH, 3);
+   StyleChartObject(name);
 }
 
 // ================= M15 SIGNAL =================
@@ -845,8 +890,17 @@ int OnInit()
    trade.SetTypeFillingBySymbol(_Symbol);
 
    lastM1Bar = iTime(_Symbol, PERIOD_M1, 0);
+   lastChartBar = iTime(_Symbol, _Period, 0);
+   lastM15Bar = iTime(_Symbol, PERIOD_M15, 0);
 
-   Print("JM MTF Volume Profile Scalper v1.30 loaded (VP histogram + OB zones)");
+   RefreshAllVisuals();
+
+   Print(
+      "JM MTF VP Scalper v1.31 — chart ",
+      EnumToString(_Period),
+      "; logic H1/M15/M1; overlays on all TFs="
+      , ShowOnAllChartTimeframes ? "yes" : "no"
+   );
 
    return INIT_SUCCEEDED;
 }
@@ -854,27 +908,23 @@ int OnInit()
 // ================= MAIN LOOP =================
 void OnTick()
 {
-   if(!IsNewBar(PERIOD_M1, lastM1Bar))
+   bool m1New = IsNewBar(PERIOD_M1, lastM1Bar);
+   bool chartNew = IsNewBar(_Period, lastChartBar);
+   bool m15New = IsNewBar(PERIOD_M15, lastM15Bar);
+
+   if(m1New || chartNew || m15New)
+      RefreshAllVisuals();
+
+   if(!m1New)
       return;
 
-   if(CalculateVolumeProfile())
+   datetime closedM15 = iTime(_Symbol, PERIOD_M15, 1);
+   datetime signalClosedAt = closedM15 + 900;
+
+   if(signalClosedAt > lastSignalTime &&
+      TimeCurrent() >= signalClosedAt)
    {
-      int trend = GetTrend();
-      DrawZone();
-      DrawChartVisuals(trend);
-
-      // Detect the latest closed M15 signal
-      // only after its close.
-      datetime closedM15 =
-         iTime(_Symbol, PERIOD_M15, 1);
-
-      datetime signalClosedAt = closedM15 + 900;
-
-      if(signalClosedAt > lastSignalTime &&
-         TimeCurrent() >= signalClosedAt)
-      {
-         DetectM15Signal();
-      }
+      DetectM15Signal();
    }
 
    if(signalDirection == 0)
@@ -882,6 +932,15 @@ void OnTick()
 
    if(ConfirmM1())
       ExecuteTrade();
+}
+
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam)
+{
+   if(id == CHARTEVENT_CHART_CHANGE)
+      RefreshAllVisuals();
 }
 
 // ================= CLEANUP =================
