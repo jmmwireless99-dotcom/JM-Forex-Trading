@@ -1,4 +1,4 @@
-JM MTF Volume Profile Scalper v1.20
+JM MTF Volume Profile Scalper v1.30
 ====================================
 
 Multi-timeframe gold scalper: H1 trend → M15 volume POC zone + small candle → M1 BOS entry.
@@ -15,8 +15,14 @@ INSTALL (MT5)
 1. Copy Experts/JM_MTF_Volume_Profile_Scalper.mq5 → MQL5/Experts/
 2. MetaEditor → Compile (F7)
 3. Attach to XAUUSD / GOLD# chart (M1 chart — EA reads H1/M15 internally)
-4. EnableAutoTrading = false → signals + lines only (Experts log)
-5. EnableAutoTrading = true + Algo Trading ON → live orders
+4. Chart: volume histogram (left), M15 POC zone, H1 supply/demand, order blocks
+5. EnableAutoTrading = false → signals + lines only (Experts log)
+6. EnableAutoTrading = true + Algo Trading ON → live orders
+
+CHART INPUTS (v1.30)
+--------------------
+ShowVolumeHistogram, ShowOrderBlocks, ShowH1SupplyDemand
+HistogramMaxMinutes — how far VP bars extend horizontally
 
 RECOMMENDED (gold)
 ------------------

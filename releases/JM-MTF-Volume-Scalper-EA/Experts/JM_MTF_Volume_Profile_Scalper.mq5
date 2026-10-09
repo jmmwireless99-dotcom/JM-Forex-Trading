@@ -1,6 +1,6 @@
 #property strict
-#property version "1.20"
-#property description "JM MTF Volume Profile Scalper - H1 M15 M1"
+#property version "1.30"
+#property description "JM MTF Volume Profile Scalper - H1 M15 M1 + chart VP/OB"
 
 #include <Trade/Trade.mqh>
 CTrade trade;
@@ -38,6 +38,14 @@ input int SLBufferPoints = 100;
 input int MinSLPoints = 100;
 input int MaxSLPoints = 5000;
 
+input group "Chart display (like JM MTF diagram)"
+input bool ShowVolumeHistogram = true;
+input bool ShowOrderBlocks = true;
+input bool ShowH1SupplyDemand = true;
+input int HistogramMaxMinutes = 480;
+input int H1SwingLookback = 48;
+input int OrderBlockLookback = 24;
+
 // ================= GLOBALS =================
 int fastHandle, slowHandle, atrHandle;
 datetime lastM1Bar = 0;
@@ -52,7 +60,52 @@ double signalLow = 0;
 
 int signalDirection = 0;
 
+double g_profileLow = 0;
+double g_profileHigh = 0;
+double g_profileStep = 0;
+double g_profileVolumes[];
+
 // ================= UTILITIES =================
+void DeleteObjectsWithPrefix(string prefix)
+{
+   int total = ObjectsTotal(0, 0, -1);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i, 0, -1);
+      if(StringFind(name, prefix) == 0)
+         ObjectDelete(0, name);
+   }
+}
+
+void DrawLabel(string name, datetime t, double price, string text, color clr)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_TEXT, 0, t, price);
+
+   ObjectMove(0, name, 0, t, price);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+}
+
+void DrawZoneRect(string name, datetime t1, datetime t2,
+                  double hi, double lo, color clr, string label)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
+
+   ObjectMove(0, name, 0, t1, hi);
+   ObjectMove(0, name, 1, t2, lo);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FILL, true);
+   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+
+   DrawLabel(name + "_LBL", t2, (hi + lo) / 2.0, label, clr);
+}
+
 double NormalizePrice(double price)
 {
    return NormalizeDouble(price, _Digits);
@@ -180,7 +233,229 @@ bool CalculateVolumeProfile()
    zoneLow = NormalizePrice(poc - width);
    zoneHigh = NormalizePrice(poc + width);
 
+   g_profileLow = lowest;
+   g_profileHigh = highest;
+   g_profileStep = step;
+   ArrayResize(g_profileVolumes, ProfileBins);
+   for(int k = 0; k < ProfileBins; k++)
+      g_profileVolumes[k] = volumes[k];
+
    return true;
+}
+
+bool IsSwingHigh(ENUM_TIMEFRAMES tf, int shift, int wing)
+{
+   double h = iHigh(_Symbol, tf, shift);
+   for(int j = 1; j <= wing; j++)
+   {
+      if(iHigh(_Symbol, tf, shift + j) >= h)
+         return false;
+      if(iHigh(_Symbol, tf, shift - j) <= 0)
+         return false;
+      if(iHigh(_Symbol, tf, shift - j) >= h)
+         return false;
+   }
+   return true;
+}
+
+bool IsSwingLow(ENUM_TIMEFRAMES tf, int shift, int wing)
+{
+   double lo = iLow(_Symbol, tf, shift);
+   for(int j = 1; j <= wing; j++)
+   {
+      if(iLow(_Symbol, tf, shift + j) <= lo)
+         return false;
+      if(iLow(_Symbol, tf, shift - j) <= 0)
+         return false;
+      if(iLow(_Symbol, tf, shift - j) <= lo)
+         return false;
+   }
+   return true;
+}
+
+bool FindOrderBlock(ENUM_TIMEFRAMES tf, int bias, int lookback,
+                    double &obHigh, double &obLow, datetime &obTime)
+{
+   MqlRates bars[];
+   ArraySetAsSeries(bars, true);
+   int n = CopyRates(_Symbol, tf, 1, lookback, bars);
+   if(n < 6)
+      return false;
+
+   int start = MathMin(n - 2, lookback - 2);
+   for(int i = 2; i < start; i++)
+   {
+      if(bias > 0)
+      {
+         if(bars[i].close < bars[i].open &&
+            bars[i - 1].close > bars[i - 1].open &&
+            bars[i - 1].close > bars[i].high)
+         {
+            obHigh = bars[i].high;
+            obLow = bars[i].low;
+            obTime = bars[i].time;
+            return true;
+         }
+      }
+      else if(bias < 0)
+      {
+         if(bars[i].close > bars[i].open &&
+            bars[i - 1].close < bars[i - 1].open &&
+            bars[i - 1].close < bars[i].low)
+         {
+            obHigh = bars[i].high;
+            obLow = bars[i].low;
+            obTime = bars[i].time;
+            return true;
+         }
+      }
+   }
+
+   // Fallback: last opposite candle (SMC-style)
+   for(int i = 1; i < n - 1; i++)
+   {
+      if(bias > 0 && bars[i].close < bars[i].open)
+      {
+         obHigh = bars[i].high;
+         obLow = bars[i].low;
+         obTime = bars[i].time;
+         return true;
+      }
+      if(bias < 0 && bars[i].close > bars[i].open)
+      {
+         obHigh = bars[i].high;
+         obLow = bars[i].low;
+         obTime = bars[i].time;
+         return true;
+      }
+   }
+   return false;
+}
+
+void DrawVolumeHistogram()
+{
+   if(!ShowVolumeHistogram || ArraySize(g_profileVolumes) < ProfileBins)
+      return;
+
+   DeleteObjectsWithPrefix("JM_VP_");
+
+   double maxVol = 0;
+   for(int i = 0; i < ProfileBins; i++)
+      maxVol = MathMax(maxVol, g_profileVolumes[i]);
+
+   if(maxVol <= 0 || g_profileStep <= 0)
+      return;
+
+   datetime tAnchor = iTime(_Symbol, PERIOD_M15, ProfileBars);
+   if(tAnchor <= 0)
+      tAnchor = iTime(_Symbol, PERIOD_M15, 1);
+
+   int spanSec = HistogramMaxMinutes * 60;
+
+   for(int i = 0; i < ProfileBins; i++)
+   {
+      double lo = g_profileLow + i * g_profileStep;
+      double hi = lo + g_profileStep;
+      int widthSec = (int)(spanSec * (g_profileVolumes[i] / maxVol));
+      if(widthSec < PeriodSeconds(PERIOD_M15) / 4)
+         continue;
+
+      datetime t2 = tAnchor + widthSec;
+      string name = "JM_VP_" + IntegerToString(i);
+
+      color barClr = clrDodgerBlue;
+      if(MathAbs((lo + hi) / 2.0 - poc) <= g_profileStep * 1.5)
+         barClr = clrOrange;
+      else if((lo + hi) / 2.0 > poc)
+         barClr = clrCornflowerBlue;
+
+      if(ObjectFind(0, name) < 0)
+         ObjectCreate(0, name, OBJ_RECTANGLE, 0, tAnchor, hi, t2, lo);
+
+      ObjectMove(0, name, 0, tAnchor, hi);
+      ObjectMove(0, name, 1, t2, lo);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, barClr);
+      ObjectSetInteger(0, name, OBJPROP_FILL, true);
+      ObjectSetInteger(0, name, OBJPROP_BACK, true);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+   }
+}
+
+void DrawH1SupplyDemand(int trend)
+{
+   if(!ShowH1SupplyDemand || trend == 0)
+      return;
+
+   DeleteObjectsWithPrefix("JM_H1Z_");
+
+   double atr = GetATR();
+   if(atr <= 0)
+      atr = _Point * 100;
+
+   datetime t1 = iTime(_Symbol, PERIOD_H1, H1SwingLookback);
+   datetime t2 = TimeCurrent() + PeriodSeconds(PERIOD_H1) * 6;
+
+   for(int i = 2; i < H1SwingLookback - 2; i++)
+   {
+      if(trend < 0 && IsSwingHigh(PERIOD_H1, i, 2))
+      {
+         double sh = iHigh(_Symbol, PERIOD_H1, i);
+         double zHi = sh + atr * 0.08;
+         double zLo = sh - atr * 0.22;
+         DrawZoneRect("JM_H1Z_SUPPLY", t1, t2, zHi, zLo,
+                      clrMediumPurple, "H1 SUPPLY ZONE");
+         {
+            double slow[];
+            ArraySetAsSeries(slow, true);
+            if(CopyBuffer(slowHandle, 0, 1, 1, slow) == 1)
+               DrawLine("JM_H1_EMA200", slow[0], clrWhite, STYLE_DOT);
+         }
+         return;
+      }
+      if(trend > 0 && IsSwingLow(PERIOD_H1, i, 2))
+      {
+         double sl = iLow(_Symbol, PERIOD_H1, i);
+         double zLo = sl - atr * 0.08;
+         double zHi = sl + atr * 0.22;
+         DrawZoneRect("JM_H1Z_DEMAND", t1, t2, zHi, zLo,
+                      clrSeaGreen, "H1 DEMAND ZONE");
+         return;
+      }
+   }
+}
+
+void DrawOrderBlocks(int trend)
+{
+   if(!ShowOrderBlocks || trend == 0)
+      return;
+
+   DeleteObjectsWithPrefix("JM_OB_");
+
+   datetime tEnd = TimeCurrent() + PeriodSeconds(PERIOD_M15) * 8;
+   double obH = 0, obL = 0;
+   datetime obT = 0;
+
+   if(FindOrderBlock(PERIOD_M15, trend, OrderBlockLookback, obH, obL, obT))
+   {
+      DrawZoneRect("JM_OB_M15", obT, tEnd, obH, obL,
+                   trend < 0 ? clrIndianRed : clrMediumSeaGreen,
+                   trend < 0 ? "M15 SELL OB" : "M15 BUY OB");
+   }
+
+   if(FindOrderBlock(PERIOD_H1, trend, MathMax(12, OrderBlockLookback / 2),
+                      obH, obL, obT))
+   {
+      DrawZoneRect("JM_OB_H1", obT, tEnd, obH, obL,
+                   trend < 0 ? clrFireBrick : clrDarkGreen,
+                   trend < 0 ? "H1 SELL OB" : "H1 BUY OB");
+   }
+}
+
+void DrawChartVisuals(int trend)
+{
+   DrawVolumeHistogram();
+   DrawH1SupplyDemand(trend);
+   DrawOrderBlocks(trend);
 }
 
 // ================= CHART DRAWING =================
@@ -220,6 +495,7 @@ void DrawZone()
    ObjectSetInteger(0, name, OBJPROP_BACK, true);
 
    DrawLine("JM_POC", poc, clrOrange, STYLE_DASH);
+   DrawLabel("JM_POC_LBL", finish, poc, "POC / M15 SUPPLY ZONE", clrOrange);
 }
 
 void DrawArrow(string name, datetime time,
@@ -570,7 +846,7 @@ int OnInit()
 
    lastM1Bar = iTime(_Symbol, PERIOD_M1, 0);
 
-   Print("JM MTF Volume Profile Scalper v1.20 loaded");
+   Print("JM MTF Volume Profile Scalper v1.30 loaded (VP histogram + OB zones)");
 
    return INIT_SUCCEEDED;
 }
@@ -583,7 +859,9 @@ void OnTick()
 
    if(CalculateVolumeProfile())
    {
+      int trend = GetTrend();
       DrawZone();
+      DrawChartVisuals(trend);
 
       // Detect the latest closed M15 signal
       // only after its close.
@@ -617,6 +895,13 @@ void OnDeinit(const int reason)
 
    if(atrHandle != INVALID_HANDLE)
       IndicatorRelease(atrHandle);
+
+   DeleteObjectsWithPrefix("JM_VP_");
+   DeleteObjectsWithPrefix("JM_OB_");
+   DeleteObjectsWithPrefix("JM_H1Z_");
+   ObjectDelete(0, "JM_VOLUME_ZONE");
+   ObjectDelete(0, "JM_POC");
+   ObjectDelete(0, "JM_POC_LBL");
 
    Print("JM MTF Volume Profile Scalper stopped");
 }
