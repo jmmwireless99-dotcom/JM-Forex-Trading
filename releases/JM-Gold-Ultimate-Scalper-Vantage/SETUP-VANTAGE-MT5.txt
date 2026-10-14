@@ -1,0 +1,37 @@
+JM Gold Ultimate Scalper v0.0.2 — Vantage MT5
+=============================================
+
+Broker: Vantage Markets (MT5)
+EA:     Experts/JM_Gold_Ultimate_Scalper.mq5
+
+INSTALL (Windows — Vantage MT5)
+-------------------------------
+1. Open Vantage MT5
+2. File → Open Data Folder
+3. Go to: MQL5\Experts\
+4. Copy this file into that folder:
+      Experts\JM_Gold_Ultimate_Scalper.mq5
+5. MetaEditor → Compile (F7) — no errors
+6. Market Watch → show your gold symbol
+   (XAUUSD / GOLD / XAUUSDm — use exact Vantage name)
+7. Open that gold chart → drag EA onto chart
+8. Inputs:
+   - Allow Algo Trading = ON
+   - ShowLevelsDisplay = true  (TP/SL lines on candles)
+   - VisualTP_USD = visual TP only (not broker TP; trailing exits)
+   - Confirm PendingDistance for your quote (15.0 may be $15)
+9. Toolbar AutoTrading ON → smiley face on chart
+
+CHART DISPLAY
+-------------
+- Gold dashed lines = pending BuyStop / SellStop + SL + visual TP
+- Blue solid lines  = open position ENTRY
+- Red               = SL
+- Lime              = visual TP (display only)
+- Arrow on entry candle when in trade / pending side
+
+After a net-loss exit the cycle stops.
+Set RestartCycle=true once to re-arm, then set it back to false.
+
+Repo source (same file):
+  mt5/Experts/JM_Gold_Ultimate_Scalper.mq5

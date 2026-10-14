@@ -2,11 +2,12 @@
 //| JM_Gold_Ultimate_Scalper.mq5                                     |
 //| JM GOLD ULTIMATE SCALPER V0.0.2                                  |
 //| Dynamic Follow-Price Pending Orders + Profit Trailing           |
+//| Chart TP/SL display (Thunder Gold style)                         |
 //| Platform: MetaTrader 5 (MQL5)                                    |
 //+------------------------------------------------------------------+
 #property copyright "JM Tech Solution"
 #property version   "0.002"
-#property description "Gold scalper: follow-price Buy/Sell stops + USD trailing"
+#property description "Gold scalper: follow-price stops + USD trailing + TP/SL chart display"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -25,7 +26,19 @@ input ulong  MagicNumber         = 100001;
 input int    DeviationPoints     = 30;
 input bool   RestartCycle        = false;  // true = clear loss-stop and re-arm (then set false)
 
-// No fixed TP.
+input group "Chart display (Thunder style)"
+input bool   ShowLevelsDisplay   = true;
+input double VisualTP_USD        = 0.25;   // Visual TP only (not sent as order TP)
+input color  ClrEntry            = clrDodgerBlue;
+input color  ClrSL               = clrTomato;
+input color  ClrTP               = clrLime;
+input color  ClrPending          = clrGold;
+input int    LineWidth           = 2;
+input bool   ShowCandleMarkers   = true;
+
+#define OBJ_PREFIX "JM_GUS_"
+
+// No fixed broker TP — VisualTP_USD is chart display only.
 // One active position maximum.
 // After net-loss exit: cycle stops until RestartCycle or manual GV clear.
 // After net-profit exit: re-arm pendings.
@@ -175,10 +188,12 @@ void DeleteOurPending()
 
 bool FindPending(ENUM_ORDER_TYPE type,
                  ulong &ticket,
-                 double &price)
+                 double &price,
+                 double &sl)
 {
    ticket = 0;
    price = 0.0;
+   sl = 0.0;
 
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
@@ -194,6 +209,7 @@ bool FindPending(ENUM_ORDER_TYPE type,
       {
          ticket = id;
          price = OrderGetDouble(ORDER_PRICE_OPEN);
+         sl = OrderGetDouble(ORDER_SL);
          return true;
       }
    }
@@ -223,7 +239,6 @@ double PositionDealsNetProfit(ulong positionId)
 
    if(!HistorySelectByPosition(positionId))
    {
-      // Fallback: load recent history then filter by position id.
       datetime to = TimeCurrent() + 1;
       datetime from = to - 86400 * 30;
       if(!HistorySelect(from, to))
@@ -251,8 +266,7 @@ double PositionDealsNetProfit(ulong positionId)
    return net;
 }
 
-// Convert desired monetary SL into price.
-// Uses OrderCalcProfit to account for contract specifications.
+// Convert desired monetary SL/TP into price.
 bool PriceForMoney(ENUM_ORDER_TYPE orderType,
                    double openPrice,
                    double closeReference,
@@ -347,6 +361,265 @@ void PrintInitDiagnostics()
       PendingDistance);
 }
 
+//---------------- CHART DISPLAY (Thunder style) ----------------//
+void DeleteDisplayObjects()
+{
+   int total = ObjectsTotal(0, -1, -1);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i, -1, -1);
+      if(StringFind(name, OBJ_PREFIX) == 0)
+         ObjectDelete(0, name);
+   }
+}
+
+void UpsertTrend(const string id,
+                 const datetime t1,
+                 const double p1,
+                 const datetime t2,
+                 const double p2,
+                 const color clr,
+                 const ENUM_LINE_STYLE style)
+{
+   string name = OBJ_PREFIX + id;
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_TREND, 0, t1, p1, t2, p2);
+      ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, true);
+      ObjectSetInteger(0, name, OBJPROP_RAY_LEFT, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, LineWidth);
+   }
+   else
+   {
+      ObjectMove(0, name, 0, t1, p1);
+      ObjectMove(0, name, 1, t2, p2);
+   }
+
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, style);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, LineWidth);
+}
+
+void UpsertLabel(const string id,
+                 const datetime t,
+                 const double price,
+                 const string text,
+                 const color clr)
+{
+   string name = OBJ_PREFIX + id;
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_TEXT, 0, t, price);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+      ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+   }
+   else
+   {
+      ObjectMove(0, name, 0, t, price);
+   }
+
+   ObjectSetString(0, name, OBJPROP_TEXT, "  " + text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
+
+void UpsertArrow(const string id,
+                 const datetime t,
+                 const double price,
+                 const bool isBuy,
+                 const color clr)
+{
+   if(!ShowCandleMarkers)
+      return;
+
+   string name = OBJ_PREFIX + id;
+   ENUM_OBJECT type = isBuy ? OBJ_ARROW_BUY : OBJ_ARROW_SELL;
+
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, type, 0, t, price);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+   }
+   else
+   {
+      ObjectMove(0, name, 0, t, price);
+   }
+
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
+
+void HideObject(const string id)
+{
+   string name = OBJ_PREFIX + id;
+   if(ObjectFind(0, name) >= 0)
+      ObjectDelete(0, name);
+}
+
+void DrawSideLevels(const string side,
+                    const datetime t0,
+                    const double entry,
+                    const double sl,
+                    const double tp,
+                    const color entryClr,
+                    const ENUM_LINE_STYLE style,
+                    const bool isBuy)
+{
+   datetime t1 = t0;
+   datetime t2 = t0 + PeriodSeconds() * 8;
+   if(t2 <= t1)
+      t2 = t1 + 60;
+
+   // Label sits near the right of the visible segment (Thunder-style).
+   datetime tLabel = t2;
+
+   UpsertTrend(side + "_ENTRY", t1, entry, t2, entry, entryClr, style);
+   UpsertLabel(side + "_ENTRY_L", tLabel, entry,
+               StringFormat("%s ENTRY %s", side, DoubleToString(entry, _Digits)),
+               entryClr);
+
+   if(sl > 0.0)
+   {
+      UpsertTrend(side + "_SL", t1, sl, t2, sl, ClrSL, style);
+      UpsertLabel(side + "_SL_L", tLabel, sl,
+                  StringFormat("%s SL %s", side, DoubleToString(sl, _Digits)),
+                  ClrSL);
+   }
+   else
+   {
+      HideObject(side + "_SL");
+      HideObject(side + "_SL_L");
+   }
+
+   if(tp > 0.0)
+   {
+      UpsertTrend(side + "_TP", t1, tp, t2, tp, ClrTP, style);
+      UpsertLabel(side + "_TP_L", tLabel, tp,
+                  StringFormat("%s TP %s (vis $%.2f)", side,
+                               DoubleToString(tp, _Digits), VisualTP_USD),
+                  ClrTP);
+   }
+   else
+   {
+      HideObject(side + "_TP");
+      HideObject(side + "_TP_L");
+   }
+
+   UpsertArrow(side + "_ARR", t0, entry, isBuy, entryClr);
+}
+
+void ClearSide(const string side)
+{
+   HideObject(side + "_ENTRY");
+   HideObject(side + "_ENTRY_L");
+   HideObject(side + "_SL");
+   HideObject(side + "_SL_L");
+   HideObject(side + "_TP");
+   HideObject(side + "_TP_L");
+   HideObject(side + "_ARR");
+}
+
+void UpdateStatusComment()
+{
+   string state = CycleStopped ? "STOPPED (loss)" :
+                  (IsOurPosition() ? "IN POSITION" :
+                   (PositionSeen ? "FILL SYNC" : "ARMED"));
+
+   Comment(
+      "JM GOLD ULTIMATE SCALPER v0.0.2\n",
+      "Symbol: ", _Symbol, "\n",
+      "State: ", state, "\n",
+      "Peak: ", DoubleToString(PeakProfit, 2),
+      " | Trail start $", DoubleToString(TrailingStart_USD, 2),
+      " | Visual TP $", DoubleToString(VisualTP_USD, 2), "\n",
+      "SL/TP lines: ", (ShowLevelsDisplay ? "ON" : "OFF"),
+      " (TP is visual only — trailing manages exit)"
+   );
+}
+
+void UpdateChartDisplay()
+{
+   UpdateStatusComment();
+
+   if(!ShowLevelsDisplay)
+   {
+      DeleteDisplayObjects();
+      return;
+   }
+
+   double volume = VolumeForOrder();
+   if(volume <= 0.0)
+      volume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+
+   ulong posTicket = OurPositionTicket();
+   if(posTicket != 0 && PositionSelectByTicket(posTicket))
+   {
+      ClearSide("BUY");
+      ClearSide("SELL");
+
+      ENUM_POSITION_TYPE ptype =
+         (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double entry = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl = PositionGetDouble(POSITION_SL);
+      datetime t0 = (datetime)PositionGetInteger(POSITION_TIME);
+      ENUM_ORDER_TYPE dir =
+         (ptype == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+
+      double tp = 0.0;
+      if(VisualTP_USD > 0.0)
+         PriceForMoney(dir, entry, entry, VisualTP_USD, volume, tp);
+
+      string side = (ptype == POSITION_TYPE_BUY) ? "POSBUY" : "POSSELL";
+      string other = (ptype == POSITION_TYPE_BUY) ? "POSSELL" : "POSBUY";
+      ClearSide(other);
+      ClearSide("BUY");
+      ClearSide("SELL");
+
+      DrawSideLevels(side, t0, entry, sl, tp, ClrEntry, STYLE_SOLID,
+                     ptype == POSITION_TYPE_BUY);
+      ChartRedraw(0);
+      return;
+   }
+
+   ClearSide("POSBUY");
+   ClearSide("POSSELL");
+
+   ulong buyTicket, sellTicket;
+   double buyPrice, sellPrice, buySL, sellSL;
+
+   bool hasBuy = FindPending(ORDER_TYPE_BUY_STOP, buyTicket, buyPrice, buySL);
+   bool hasSell = FindPending(ORDER_TYPE_SELL_STOP, sellTicket, sellPrice, sellSL);
+
+   datetime t0 = iTime(_Symbol, PERIOD_CURRENT, 0);
+   if(t0 == 0)
+      t0 = TimeCurrent();
+
+   if(hasBuy)
+   {
+      double tp = 0.0;
+      if(VisualTP_USD > 0.0)
+         PriceForMoney(ORDER_TYPE_BUY, buyPrice, buyPrice, VisualTP_USD, volume, tp);
+      DrawSideLevels("BUY", t0, buyPrice, buySL, tp, ClrPending, STYLE_DASH, true);
+   }
+   else
+      ClearSide("BUY");
+
+   if(hasSell)
+   {
+      double tp = 0.0;
+      if(VisualTP_USD > 0.0)
+         PriceForMoney(ORDER_TYPE_SELL, sellPrice, sellPrice, VisualTP_USD, volume, tp);
+      DrawSideLevels("SELL", t0, sellPrice, sellSL, tp, ClrPending, STYLE_DASH, false);
+   }
+   else
+      ClearSide("SELL");
+
+   ChartRedraw(0);
+}
+
 //---------------- PENDING GRID ----------------//
 void MaintainPendingOrders()
 {
@@ -395,13 +668,13 @@ void MaintainPendingOrders()
    double sellPrice = NormalizePrice(tick.bid - distance);
 
    ulong buyTicket, sellTicket;
-   double oldBuy, oldSell;
+   double oldBuy, oldSell, oldBuySL, oldSellSL;
 
    bool hasBuy = FindPending(
-      ORDER_TYPE_BUY_STOP, buyTicket, oldBuy);
+      ORDER_TYPE_BUY_STOP, buyTicket, oldBuy, oldBuySL);
 
    bool hasSell = FindPending(
-      ORDER_TYPE_SELL_STOP, sellTicket, oldSell);
+      ORDER_TYPE_SELL_STOP, sellTicket, oldSell, oldSellSL);
 
    double buySL = 0.0;
    double sellSL = 0.0;
@@ -581,6 +854,7 @@ void OnTradeTransaction(
       PositionSeen = true;
       PeakProfit = 0.0;
       DeleteOurPending();
+      UpdateChartDisplay();
       return;
    }
 
@@ -608,6 +882,7 @@ void OnTradeTransaction(
       PositionSeen = false;
       TrackedPosition = 0;
       PeakProfit = 0.0;
+      UpdateChartDisplay();
    }
 }
 
@@ -620,7 +895,8 @@ int OnInit()
       TrailingStart_USD <= 0.0 ||
       TrailingLock_USD < 0.0 ||
       TrailingGap_USD <= 0.0 ||
-      UpdateSeconds < 1)
+      UpdateSeconds < 1 ||
+      VisualTP_USD < 0.0)
       return INIT_PARAMETERS_INCORRECT;
 
    trade.SetExpertMagicNumber(MagicNumber);
@@ -629,7 +905,6 @@ int OnInit()
 
    LoadCycleStopped();
 
-   // Fresh attach: trust live positions only (clears stale PositionSeen after restart).
    PositionSeen = IsOurPosition();
    TrackedPosition = OurPositionTicket();
    PeakProfit = 0.0;
@@ -637,11 +912,13 @@ int OnInit()
    EventSetTimer(UpdateSeconds);
 
    Print("JM GOLD ULTIMATE SCALPER V0.0.2 STARTED");
-   PrintFormat("CycleStopped=%s | PositionSeen=%s | RestartCycle=%s",
+   PrintFormat("CycleStopped=%s | PositionSeen=%s | RestartCycle=%s | ShowLevels=%s",
                CycleStopped ? "true" : "false",
                PositionSeen ? "true" : "false",
-               RestartCycle ? "true" : "false");
+               RestartCycle ? "true" : "false",
+               ShowLevelsDisplay ? "true" : "false");
    PrintInitDiagnostics();
+   UpdateChartDisplay();
 
    return INIT_SUCCEEDED;
 }
@@ -650,16 +927,18 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    SaveCycleStopped();
+   DeleteDisplayObjects();
+   Comment("");
 }
 
 void OnTick()
 {
    ManageTrailing();
+   UpdateChartDisplay();
 }
 
 void OnTimer()
 {
-   // Allow toggle RestartCycle without full chart recreate in some builds.
    if(RestartCycle && CycleStopped)
    {
       CycleStopped = false;
@@ -670,5 +949,6 @@ void OnTimer()
    SyncPositionSeen();
    ManageTrailing();
    MaintainPendingOrders();
+   UpdateChartDisplay();
 }
 //+------------------------------------------------------------------+
